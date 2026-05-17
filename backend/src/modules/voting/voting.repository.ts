@@ -1,4 +1,4 @@
-import { prisma } from '../../config/database';
+import { prisma } from '../../configs/database';
 
 export const votingRepository = {
   // ── Token operations ────────────────────────────────────────────────────────

@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { env } from '../config/env';
+import { env } from '../configs/env';
 
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 16;   // 128-bit IV

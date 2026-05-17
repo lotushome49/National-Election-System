@@ -4,13 +4,13 @@ import { voterRepository } from '../voter/voter.repository';
 import { electionRepository } from '../election/election.repository';
 import { candidateRepository } from '../candidate/candidate.repository';
 import { sha256, generateSecureToken, hmac } from '../../utils/crypto';
-import { env } from '../../config/env';
+import { env } from '../../configs/env';
 import {
   BadRequestError, NotFoundError,
   ForbiddenError, ConflictError,
 } from '../../errors/AppError';
 import { auditService } from '../audit/audit.service';
-import { socketEmit } from '../../config/socket';
+import { socketEmit } from '../../configs/socket';
 import type { CastVoteDto } from './voting.schema';
 
 export const votingService = {

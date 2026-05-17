@@ -1,4 +1,4 @@
-import { prisma } from '../../config/database';
+import { prisma } from '../../configs/database';
 import type { ReportQuery } from './observer.schema';
 
 export const observerRepository = {

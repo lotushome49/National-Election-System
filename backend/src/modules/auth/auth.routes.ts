@@ -7,6 +7,9 @@ import {
   loginSchema,
   biometricLoginSchema,
   refreshTokenSchema,
+  mfaChallengeSchema,
+  mfaEnrollmentVerifySchema,
+  mfaDisableSchema,
 } from './auth.schema';
 
 const router = Router();
@@ -20,8 +23,17 @@ router.post('/login/biometric', authLimiter, validate(biometricLoginSchema), aut
 // POST /api/v1/auth/refresh
 router.post('/refresh', validate(refreshTokenSchema), authController.refresh);
 
+// POST /api/v1/auth/mfa/challenge
+router.post('/mfa/challenge', authLimiter, validate(mfaChallengeSchema), authController.completeMfaChallenge);
+
 // POST /api/v1/auth/logout  (requires valid access token)
 router.post('/logout', authenticate, authController.logout);
+
+// MFA self-service
+router.get('/mfa/status', authenticate, authController.mfaStatus);
+router.post('/mfa/enroll', authenticate, authController.beginMfaEnrollment);
+router.post('/mfa/verify-enrollment', authenticate, validate(mfaEnrollmentVerifySchema), authController.verifyMfaEnrollment);
+router.post('/mfa/disable', authenticate, validate(mfaDisableSchema), authController.disableMfa);
 
 // GET  /api/v1/auth/me
 router.get('/me', authenticate, authController.me);

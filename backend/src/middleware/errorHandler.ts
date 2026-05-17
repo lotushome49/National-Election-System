@@ -2,8 +2,8 @@ import { Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
 import { Prisma } from '@prisma/client';
 import { AppError } from '../errors/AppError';
-import { logger } from '../config/logger';
-import { env } from '../config/env';
+import { logger } from '../configs/logger';
+import { env } from '../configs/env';
 
 export function errorHandler(
   err: Error,

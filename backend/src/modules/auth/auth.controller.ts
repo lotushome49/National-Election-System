@@ -20,7 +20,7 @@ export const authController = {
 
   refresh: async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const result = await authService.refresh(req.body, req.ip ?? '');
+      const result = await authService.refresh(req.body);
       sendSuccess(res, result, 'Token refreshed');
     } catch (err) { next(err); }
   },
@@ -29,6 +29,41 @@ export const authController = {
     try {
       await authService.logout(req.user!.sub, req.ip ?? '');
       sendSuccess(res, null, 'Logged out successfully');
+    } catch (err) { next(err); }
+  },
+
+  mfaStatus: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const result = await authService.getMfaStatus(req.user!.sub);
+      sendSuccess(res, result, 'MFA status loaded');
+    } catch (err) { next(err); }
+  },
+
+  beginMfaEnrollment: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const result = await authService.beginMfaEnrollment(req.user!.sub);
+      sendSuccess(res, result, 'MFA enrollment initialized');
+    } catch (err) { next(err); }
+  },
+
+  verifyMfaEnrollment: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const result = await authService.verifyMfaEnrollment(req.user!.sub, req.body, req.ip ?? '');
+      sendSuccess(res, result, 'MFA enabled');
+    } catch (err) { next(err); }
+  },
+
+  completeMfaChallenge: async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await authService.completeMfaChallenge(req.body, req.ip ?? '');
+      sendSuccess(res, result, 'MFA challenge complete');
+    } catch (err) { next(err); }
+  },
+
+  disableMfa: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const result = await authService.disableMfa(req.user!.sub, req.body, req.ip ?? '');
+      sendSuccess(res, result, 'MFA disabled');
     } catch (err) { next(err); }
   },
 

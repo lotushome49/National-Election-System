@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
-import { env } from '../config/env';
+import { env } from '../configs/env';
 import { ForbiddenError } from '../errors/AppError';
 
 const CSRF_HEADER = 'x-csrf-token';

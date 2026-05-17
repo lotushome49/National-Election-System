@@ -11,6 +11,9 @@ import auditRoutes        from '../modules/audit/audit.routes';
 import observerRoutes     from '../modules/observer/observer.routes';
 import resultRoutes       from '../modules/result/result.routes';
 import notificationRoutes from '../modules/notification/notification.routes';
+import regionRoutes       from '../modules/region/region.routes';
+import districtRoutes     from '../modules/district/district.routes';
+import pollingStationRoutes from '../modules/pollingStation/pollingStation.routes';
 
 const router = Router();
 
@@ -32,5 +35,8 @@ router.use('/audit',         auditRoutes);
 router.use('/observer',      observerRoutes);
 router.use('/results',       resultRoutes);
 router.use('/notifications', notificationRoutes);
+router.use('/regions',       regionRoutes);
+router.use('/districts',     districtRoutes);
+router.use('/polling-stations', pollingStationRoutes);
 
 export default router;

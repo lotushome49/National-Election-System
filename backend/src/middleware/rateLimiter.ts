@@ -1,5 +1,5 @@
 import rateLimit from 'express-rate-limit';
-import { env } from '../config/env';
+import { env } from '../configs/env';
 
 const windowMs = parseInt(env.RATE_LIMIT_WINDOW_MS, 10);
 

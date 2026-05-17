@@ -4,7 +4,7 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import compression from 'compression';
 
-import { env } from './config/env';
+import { env } from './configs/env';
 import { globalLimiter } from './middleware/rateLimiter';
 import { requestLogger } from './middleware/requestLogger';
 import { csrfProtection } from './middleware/csrf';

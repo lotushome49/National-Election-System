@@ -1,4 +1,4 @@
-import { prisma } from '../../config/database';
+import { prisma } from '../../configs/database';
 
 export const authRepository = {
   /** Find user by username, including role for permission checks */
@@ -40,6 +40,14 @@ export const authRepository = {
         lastLoginAt:    new Date(),
         lastLoginIp:    ip,
       },
+    }),
+
+  /** Persist MFA state for a user */
+  updateMfaState: (id: string, mfaEnabled: boolean, mfaSecret: string | null) =>
+    prisma.user.update({
+      where: { id },
+      data: { mfaEnabled, mfaSecret },
+      include: { role: { include: { permissions: true } } },
     }),
 
   /** Store hashed refresh token */

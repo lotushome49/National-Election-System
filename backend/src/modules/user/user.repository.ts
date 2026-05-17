@@ -1,4 +1,4 @@
-import { prisma } from '../../config/database';
+import { prisma } from '../../configs/database';
 import type { CreateUserDto, UpdateUserDto, UserQuery } from './user.schema';
 
 const userSelect = {

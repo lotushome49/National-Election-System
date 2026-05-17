@@ -1,650 +1,349 @@
 # NEHS Implementation Plan
-## Step-by-Step Feature Implementation Roadmap
 
-**Project:** National Election Handling System (NEHS)
-**Version:** 2.1.0 (Aligned to current repo)
-**Created:** 2026-05-17
+## Phase 0 First, Then One-by-One Delivery
 
----
-
-## ?? IMPLEMENTATION SCOPE
-
-This roadmap is aligned to the existing repository structure in `backend/src` and `frontend/src`.
-It preserves the current module conventions and builds new subsystems where needed.
-
-1. Regional Data Scoping
-2. Biometric System Enhancement (mock)
-3. Real-time Socket.IO enhancements
-4. Multi-Factor Authentication (MFA)
-5. Password Reset & Recovery
-6. Session Management
-7. Region / District / Polling Station CRUD
-8. Observer Evidence Upload
-9. Reporting & Analytics
-10. Testing Infrastructure
-11. Frontend CRUD Interfaces
+Project: National Election Handling System (NEHS)
+Version: 3.0.0 (Repo-aligned)
+Updated: 2026-05-17
 
 ---
 
-## ?? FEATURE 1: REGIONAL DATA SCOPING
+## 1) Execution Rules
 
-### Overview
-Implement hierarchical geographic scoping so regional and district users only access permitted data.
+This roadmap is intentionally sequential.
 
-### Backend Implementation
-
-#### Step 1.1: Enhance RBAC and Scope Middleware
-**Files to modify:**
-- `backend/src/middleware/rbac.ts`
-- `backend/src/types/index.ts`
-
-**Tasks:**
-- Keep `scopeGuard` in `rbac.ts` and ensure it validates `regionId` / `districtId`.
-- Add typed request scope properties in `AuthRequest` if not present.
-- Ensure user JWT payload includes `regionId` / `districtId` for scoped users.
-
-#### Step 1.2: Apply scope filtering in repositories
-**Files to modify:**
-- `backend/src/modules/voter/voter.repository.ts`
-- `backend/src/modules/candidate/candidate.repository.ts`
-- `backend/src/modules/result/result.repository.ts`
-- `backend/src/modules/observer/observer.repository.ts`
-- `backend/src/modules/election/election.repository.ts` (if present)
-
-**Tasks:**
-- Add optional `scope` parameter to `findAll` or list methods.
-- Inject `regionId` / `districtId` conditions into Prisma query filters.
-- Make count and summary queries respect user scope.
-
-#### Step 1.3: Propagate scope through services and controllers
-**Files to modify:**
-- `backend/src/modules/voter/voter.service.ts`
-- `backend/src/modules/candidate/candidate.service.ts`
-- `backend/src/modules/result/result.service.ts`
-- `backend/src/modules/observer/observer.service.ts`
-- `backend/src/modules/auth/auth.service.ts`
-
-**Tasks:**
-- Pass scoped criteria from controllers to services.
-- Validate create/update payloads against user assignment.
-- Enforce scope on read operations in service layer.
-
-#### Step 1.4: Route registration
-**Files to modify:**
-- `backend/src/modules/*/*.routes.ts`
-- `backend/src/routes/index.ts`
-
-**Tasks:**
-- Ensure routes requiring geographic access use `authenticate` and `scopeGuard`.
-- Register any new scoped endpoints in `routes/index.ts`.
-
-### Frontend Implementation
-
-#### Step 1.5: Regional scope awareness
-**Files to create/modify:**
-- `frontend/src/lib/api.ts` or existing fetch utilities
-- `frontend/src/auth.ts`
-- `frontend/src/hooks/useRegionalScope.ts`
-
-**Tasks:**
-- Read current user scope from auth state.
-- Pass `regionId` / `districtId` to backend list requests.
-- Display current scope in UI and restrict selection options.
-
-### Testing
-- Unit tests for `scopeGuard` logic.
-- Integration tests for scoped list endpoints.
-- Manual role-based verification for regional/district admin views.
-
-**Estimated Time:** 4-6 days
+1. Complete Phase 0 first.
+2. Do not start the next phase until the current phase exit criteria are met.
+3. After each phase, run a gate review: build, lint, smoke test, and API sanity checks.
+4. Keep changes inside the existing architecture in `backend/src` and `frontend/src`.
+5. Prefer enhancement of existing modules before creating new modules.
 
 ---
 
-## ?? FEATURE 2: BIOMETRIC SYSTEM ENHANCEMENT (MOCK DATA)
+## 2) Phase 0 - Architecture Baseline (Mandatory)
 
-### Overview
-Add biometric mock data handling for voter enrollment and simulated biometric matching.
+### Objective
 
-### Backend Implementation
+Eliminate ambiguity between legacy/current code paths and establish one stable implementation baseline.
 
-#### Step 2.1: Add biometric fields and schema updates
-**Files to modify:**
-- `backend/src/modules/voter/voter.schema.ts`
-- `backend/src/modules/voter/voter.service.ts`
-- `backend/src/modules/voter/voter.repository.ts`
+### Scope
 
-**Tasks:**
-- Add biometric template / quality fields to voter schema validation.
-- Add optional biometric metadata to voter create/update flows.
-- Store mock biometric template data in Prisma if needed.
+#### 0.1 Confirm canonical code paths
 
-#### Step 2.2: Create biometric helper module
-**Files to create:**
-- `backend/src/modules/voter/biometric.service.ts`
-- `backend/src/modules/voter/biometric.util.ts`
+- Backend canonical path: `backend/src/**` only.
+- Frontend canonical path: `frontend/src/**` only.
+- Mark legacy/non-canonical files as deprecated in docs.
 
-**Tasks:**
-- Generate deterministic mock templates for test voters.
-- Implement mock match scoring and duplicate detection.
-- Provide quality score simulation and retry guidance.
+#### 0.2 Frontend structure decision
 
-#### Step 2.3: Expand auth flow for biometric login simulation
-**Files to modify:**
-- `backend/src/modules/auth/auth.service.ts`
-- `backend/src/modules/auth/auth.controller.ts`
+- Keep the current thin `frontend/src/App.tsx` wrapper and continue evolving the feature-oriented structure under `frontend/src/pages`, `components`, `hooks`, `services`, `utils`, `types`, and `constants`.
+- Introduce lightweight internal feature folders incrementally (no router rewrite now).
+- Defer full page-router migration until after core security features.
 
-**Tasks:**
-- Add optional biometric login simulation in auth flow.
-- Return confidence and failure reason metadata for UI.
-- Audit biometric login attempts.
+#### 0.3 Testing stack decision
 
-### Frontend Implementation
+- Backend: Jest + Supertest (as planned).
+- Frontend: Vitest + Testing Library (aligned with Vite).
+- E2E: Playwright optional after API stabilization.
 
-#### Step 2.4: Biometric UI improvements
-**Files to create/modify:**
-- `frontend/src/components/BiometricCapture.tsx`
-- `frontend/src/components/BiometricStatus.tsx`
-- `frontend/src/hooks/useBiometric.ts`
+#### 0.4 Dependency and security baseline
 
-**Tasks:**
-- Add a mock biometric capture experience.
-- Show quality score and retry action.
-- Display match confidence when biometric login is used.
+- Lock initial package additions needed for upcoming phases.
+- Validate CORS, CSRF, JWT, rate limiter defaults are preserved.
 
-### Testing
-- Unit tests for biometric helper logic.
-- Validation tests for biometric fields.
-- Integration tests for biometric login simulation.
+#### 0.5 Delivery controls
 
-**Estimated Time:** 4-6 days
+- Add phase checklist to track done/in-progress/not-started.
+- Define Definition of Done for all next phases.
+
+### Exit Criteria (Must all pass)
+
+- Single canonical backend/frontend paths documented.
+- Frontend test strategy changed to Vitest (not Jest).
+- Phase sequence approved and dependencies mapped.
+- Build and lint pass on both backend and frontend.
+
+### Estimate
+
+1-2 days
 
 ---
 
-## ?? FEATURE 3: REAL-TIME FEATURES ENHANCEMENT
+## 3) Phase 1 - Regional Data Scoping Hardening
 
-### Overview
-Use the existing Socket.IO stack for authenticated events and room-based broadcasts.
+### Objective
 
-### Backend Implementation
+Enforce region/district access boundaries consistently across middleware, repositories, services, and controllers.
 
-#### Step 3.1: Socket authentication and middleware
-**Files to modify/create:**
-- `backend/src/config/socket.ts`
-- `backend/src/middleware/socketAuth.ts`
+### Key Work
 
-**Tasks:**
-- Authenticate socket connections using JWT tokens.
-- Populate socket context with userId, role, regionId, districtId.
-- Reject unauthorized socket connections cleanly.
+- Keep and harden `scopeGuard` in `backend/src/middleware/rbac.ts`.
+- Ensure all list/summary repository queries support scope filters.
+- Ensure service layer applies scope for read/write operations.
+- Ensure all relevant routes apply `authenticate` + permission + scope checks.
+- Add UI scope awareness in current frontend structure (no router migration required).
 
-#### Step 3.2: Room-based broadcasts
-**Files to modify/create:**
-- `backend/src/config/socket.ts`
-- `backend/src/modules/voting/voting.service.ts`
-- `backend/src/modules/result/result.service.ts`
+### Exit Criteria
 
-**Tasks:**
-- Join sockets to region/district rooms according to scope.
-- Publish voter turnout and result updates to scoped rooms.
-- Provide election-phase notifications only to authorized rooms.
+- Scoped users cannot read/write data outside assignment.
+- All scoped list/count/summary endpoints are tested.
 
-### Frontend Implementation
+### Estimate
 
-#### Step 3.3: Socket client enhancements
-**Files to create/modify:**
-- `frontend/src/hooks/useSocket.ts`
-- `frontend/src/lib/socketClient.ts`
-
-**Tasks:**
-- Connect with JWT authentication.
-- Handle reconnects and connection state.
-- Subscribe to scoped events for live dashboards.
-
-### Testing
-- Socket authentication tests.
-- Room broadcast and event routing tests.
-
-**Estimated Time:** 1 week
+4-6 days
 
 ---
 
-## ?? FEATURE 4: MULTI-FACTOR AUTHENTICATION (MFA)
+## 4) Phase 2 - Geographic CRUD (Region/District/Polling Station)
 
-### Overview
-Add TOTP-based MFA support for admin-level access.
+### Objective
 
-### Backend Implementation
+Add administration APIs and UI flows for geographic hierarchy management.
 
-#### Step 4.1: MFA module
-**Files to create:**
-- `backend/src/modules/mfa/mfa.controller.ts`
-- `backend/src/modules/mfa/mfa.service.ts`
-- `backend/src/modules/mfa/mfa.routes.ts`
-- `backend/src/modules/mfa/mfa.schema.ts`
+### Key Work
 
-**Tasks:**
-- Generate TOTP secrets and QR codes with a lightweight library.
-- Verify codes in login flows.
-- Store MFA status and backup codes in user records.
+- Implement modules for region, district, polling station under `backend/src/modules`.
+- Enforce parent-child relationship validation.
+- Add activation state and unique code validation.
+- Expose CRUD UI views within existing app navigation structure.
 
-#### Step 4.2: Update auth flow
-**Files to modify:**
-- `backend/src/modules/auth/auth.service.ts`
-- `backend/src/modules/auth/auth.schema.ts`
+### Exit Criteria
 
-**Tasks:**
-- Require MFA verification for configured users.
-- Add middleware for MFA-protected routes.
-- Include MFA claim in JWT tokens when needed.
+- Full CRUD works with RBAC and scope enforcement.
+- Relationship validation covered by integration tests.
 
-### Frontend Implementation
+### Estimate
 
-#### Step 4.3: MFA UI
-**Files to create/modify:**
-- `frontend/src/components/MFASetup.tsx`
-- `frontend/src/components/MFAVerification.tsx`
-
-**Tasks:**
-- Add enrollment flow with QR code.
-- Add TOTP code input and validation feedback.
-- Add backup code management UI.
-
-### Testing
-- TOTP generation and verification tests.
-- MFA enrollment flow tests.
-
-**Estimated Time:** 1 week
+1 week
 
 ---
 
-## ?? FEATURE 5: PASSWORD RESET & RECOVERY
+## 5) Phase 3 - MFA (TOTP)
 
-### Overview
-Implement secure reset flows using tokenized email links and password strength checks.
+### Objective
 
-### Backend Implementation
+Add MFA for admin-level accounts with secure enrollment and verification.
 
-#### Step 5.1: Password reset module
-**Files to create:**
-- `backend/src/modules/passwordReset/passwordReset.controller.ts`
-- `backend/src/modules/passwordReset/passwordReset.service.ts`
-- `backend/src/modules/passwordReset/passwordReset.routes.ts`
-- `backend/src/modules/passwordReset/passwordReset.schema.ts`
+### Key Work
 
-**Tasks:**
-- Generate secure, expiring reset tokens.
-- Validate reset request tokens and update passwords.
-- Add password strength validation.
+- Add `mfa` module in backend.
+- Integrate MFA challenge into login flow.
+- Add QR setup + verification UI.
+- Add backup code support.
 
-#### Step 5.2: Mock email delivery
-**Files to create:**
-- `backend/src/modules/passwordReset/mockEmail.service.ts`
-- `backend/src/modules/passwordReset/emailTemplates.ts`
+### Exit Criteria
 
-**Tasks:**
-- Log email content to console or file for development.
-- Provide a reset link template.
-- Use a mock transport rather than real SMTP.
+- MFA-enabled admin cannot complete login without valid second factor.
+- Enrollment, verify, disable, recovery paths tested.
 
-### Frontend Implementation
+### Estimate
 
-#### Step 5.3: Reset UI
-**Files to create:**
-- `frontend/src/pages/ForgotPassword.tsx`
-- `frontend/src/pages/ResetPassword.tsx`
-- `frontend/src/components/PasswordStrength.tsx`
-
-**Tasks:**
-- Create forgot password form.
-- Create reset password entry form.
-- Display strength suggestions.
-
-### Testing
-- Token generation/validation tests.
-- Reset flow endpoint tests.
-
-**Estimated Time:** 4-5 days
+1 week
 
 ---
 
-## ?? FEATURE 6: SESSION MANAGEMENT
+## 6) Phase 4 - Session Management
 
-### Overview
-Track active sessions and allow admins/users to review and terminate them.
+### Objective
 
-### Backend Implementation
+Track active sessions and support revocation.
 
-#### Step 6.1: Add session tracking model
-**Files to modify/create:**
-- `backend/prisma/schema.prisma`
-- `backend/src/modules/session/session.controller.ts`
-- `backend/src/modules/session/session.service.ts`
-- `backend/src/modules/session/session.routes.ts`
+### Key Work
 
-**Tasks:**
-- Add `UserSession` model to Prisma schema.
-- Create session records on login.
-- Update session activity on authenticated requests.
-- Add endpoints to list and revoke sessions.
+- Add `UserSession` model in Prisma.
+- Record sessions on login/refresh.
+- Validate active session in auth middleware.
+- Add list/revoke session APIs and UI.
 
-#### Step 6.2: Auth middleware integration
-**Files to modify:**
-- `backend/src/modules/auth/auth.service.ts`
-- `backend/src/middleware/authenticate.ts`
+### Exit Criteria
 
-**Tasks:**
-- Validate active session on each request.
-- Support session revocation in JWT validation.
+- Revoked session tokens are blocked.
+- Users/admin can view and terminate active sessions.
 
-### Frontend Implementation
+### Estimate
 
-#### Step 6.3: Session UI
-**Files to create:**
-- `frontend/src/pages/ActiveSessions.tsx`
-- `frontend/src/components/SessionCard.tsx`
-
-**Tasks:**
-- Display active device sessions.
-- Allow session termination.
-- Show last activity and IP/device context.
-
-### Testing
-- Session creation and revocation tests.
-- Middleware validation tests.
-
-**Estimated Time:** 1 week
+1 week
 
 ---
 
-## ?? FEATURE 7: REGION / DISTRICT / POLLING STATION CRUD
+## 7) Phase 5 - Password Reset and Recovery
 
-### Overview
-Add geographic management for election administration.
+### Objective
 
-### Backend Implementation
+Provide secure reset flow with token expiry and strength enforcement.
 
-#### Step 7.1: Geographic modules
-**Files to create:**
-- `backend/src/modules/region/region.controller.ts`
-- `backend/src/modules/region/region.service.ts`
-- `backend/src/modules/region/region.repository.ts`
-- `backend/src/modules/region/region.routes.ts`
-- `backend/src/modules/region/region.schema.ts`
-- `backend/src/modules/district/district.controller.ts`
-- `backend/src/modules/district/district.service.ts`
-- `backend/src/modules/district/district.repository.ts`
-- `backend/src/modules/district/district.routes.ts`
-- `backend/src/modules/district/district.schema.ts`
-- `backend/src/modules/pollingStation/pollingStation.controller.ts`
-- `backend/src/modules/pollingStation/pollingStation.service.ts`
-- `backend/src/modules/pollingStation/pollingStation.repository.ts`
-- `backend/src/modules/pollingStation/pollingStation.routes.ts`
-- `backend/src/modules/pollingStation/pollingStation.schema.ts`
+### Key Work
 
-**Tasks:**
-- Implement CRUD for regions, districts, polling stations.
-- Enforce region/district relationships.
-- Add activation status and unique code validation.
-- Register new routes in `backend/src/routes/index.ts`.
+- Add password reset module and token lifecycle.
+- Implement mock email delivery for development.
+- Add forgot/reset UI forms and strength meter.
 
-### Frontend Implementation
+### Exit Criteria
 
-#### Step 7.2: Geographic management UI
-**Files to create:**
-- `frontend/src/pages/RegionManagement.tsx`
-- `frontend/src/pages/DistrictManagement.tsx`
-- `frontend/src/pages/PollingStationManagement.tsx`
-- `frontend/src/components/RegionForm.tsx`
-- `frontend/src/components/DistrictForm.tsx`
-- `frontend/src/components/PollingStationForm.tsx`
+- Reset tokens are single-use and expiring.
+- Password policy validated server-side and client-side.
 
-**Tasks:**
-- Add region/district/polling station management views.
-- Use list and form patterns consistent with existing UI.
-- Show relationships and scope-aware filtering.
+### Estimate
 
-### Testing
-- CRUD endpoint tests.
-- Relationship validation tests.
-
-**Estimated Time:** 1 week
+4-5 days
 
 ---
 
-## ?? FEATURE 8: OBSERVER EVIDENCE UPLOAD
+## 8) Phase 6 - Observer Evidence Upload
 
-### Overview
-Allow observers to upload evidence files using local mock storage.
+### Objective
 
-### Backend Implementation
+Enable observer evidence upload with metadata and controlled lifecycle.
 
-#### Step 8.1: File upload support
-**Files to create/modify:**
-- `backend/src/middleware/fileUpload.ts`
-- `backend/src/modules/evidence/evidence.controller.ts`
-- `backend/src/modules/evidence/evidence.routes.ts`
-- `backend/src/modules/evidence/evidence.service.ts`
-- `backend/src/modules/evidence/evidence.schema.ts`
+### Key Work
 
-**Dependencies to add:**
-- `multer`
-- `@types/multer`
+- Add upload middleware and evidence module.
+- Store files in local `uploads/` for dev.
+- Link evidence metadata to observer reports.
+- Build upload and preview UI.
 
-**Tasks:**
-- Enable multipart upload and server-side validation.
-- Store files in a local `uploads/` directory for development.
-- Save evidence metadata to the database.
+### Exit Criteria
 
-#### Step 8.2: Evidence lifecycle
-**Files to modify:**
-- `backend/src/modules/observer/observer.service.ts`
-- `backend/src/modules/observer/observer.schema.ts`
+- File validation, storage, retrieval, and deletion paths pass tests.
+- RBAC and ownership rules enforced.
 
-**Tasks:**
-- Link evidence items to observer reports.
-- Add endpoints for listing, retrieving, and deleting evidence.
+### Estimate
 
-### Frontend Implementation
-
-#### Step 8.3: Evidence upload UI
-**Files to create:**
-- `frontend/src/components/FileUpload.tsx`
-- `frontend/src/components/EvidenceGallery.tsx`
-- `frontend/src/hooks/useFileUpload.ts`
-
-**Tasks:**
-- Build drag-and-drop and progress UI.
-- Offer preview thumbnails where possible.
-- Show evidence metadata in a gallery view.
-
-### Testing
-- Upload validation tests.
-- Evidence association tests.
-
-**Estimated Time:** 5 days
+5 days
 
 ---
 
-## ?? FEATURE 9: REPORTING & ANALYTICS
+## 9) Phase 7 - Reporting and Analytics
 
-### Overview
-Provide dashboards, export endpoints, and scoped reports.
+### Objective
 
-### Backend Implementation
+Deliver scoped reporting APIs with export support and dashboard visualizations.
 
-#### Step 9.1: Reporting module
-**Files to create:**
-- `backend/src/modules/reports/reports.controller.ts`
-- `backend/src/modules/reports/reports.service.ts`
-- `backend/src/modules/reports/reports.routes.ts`
-- `backend/src/modules/reports/reports.schema.ts`
+### Key Work
 
-**Tasks:**
-- Implement turnout and regional comparison endpoints.
-- Build summary endpoints for voter demographics and results.
-- Add scope filtering to reports.
+- Add reports module.
+- Implement turnout, demographic, and regional comparison endpoints.
+- Add CSV export; PDF export optional.
+- Build dashboard charts in current frontend app.
 
-#### Step 9.2: Export utilities
-**Files to create:**
-- `backend/src/utils/csvGenerator.ts`
-- `backend/src/utils/pdfGenerator.ts`
+### Exit Criteria
 
-**Dependencies to add (optional):**
-- `csv-writer`
-- `pdfkit`
+- Report calculations verified against seeded data.
+- Exports generated correctly and scoped per user permissions.
 
-**Tasks:**
-- Produce CSV exports for report endpoints.
-- Provide basic PDF export if needed.
+### Estimate
 
-### Frontend Implementation
-
-#### Step 9.3: Analytics UI
-**Files to create:**
-- `frontend/src/pages/AnalyticsDashboard.tsx`
-- `frontend/src/components/charts/VoterTurnoutChart.tsx`
-- `frontend/src/components/charts/DemographicChart.tsx`
-- `frontend/src/components/charts/RegionalComparison.tsx`
-
-**Dependencies to add (optional):**
-- `recharts` or `react-chartjs-2`
-
-**Tasks:**
-- Add dashboard charts and export buttons.
-- Display scoped reports according to user role.
-
-### Testing
-- Report calculation tests.
-- Export endpoint tests.
-
-**Estimated Time:** 1 week
+1 week
 
 ---
 
-## ?? FEATURE 10: TESTING INFRASTRUCTURE
+## 10) Phase 8 - Real-time Enhancements
 
-### Overview
-Add testing support for backend and frontend.
+### Objective
 
-### Backend Testing
+Enhance existing Socket.IO system with scoped rooms and robust client reconnect behavior.
 
-#### Step 10.1: Unit and integration test setup
-**Files to create:**
-- `backend/jest.config.js`
-- `backend/src/tests/setup.ts`
-- `backend/src/tests/helpers/testDb.ts`
-- `backend/src/tests/helpers/mockData.ts`
+### Key Work
 
-**Dependencies to add:**
-- `jest`
-- `ts-jest`
-- `supertest`
-- `@types/jest`
-- `@types/supertest`
+- Enhance existing socket auth/context in `backend/src/config/socket.ts`.
+- Add district room join logic and scoped broadcast utilities.
+- Add client reconnection and event subscription hardening.
 
-**Tasks:**
-- Configure Jest and TS support.
-- Set up test database handling.
-- Add helper utilities for Prisma and HTTP tests.
+### Exit Criteria
 
-#### Step 10.2: Core service tests
-**Files to create:**
-- `backend/src/modules/auth/auth.service.test.ts`
-- `backend/src/modules/user/user.service.test.ts`
-- `backend/src/modules/voter/voter.service.test.ts`
-- `backend/src/modules/election/election.service.test.ts`
+- Only authorized users receive scoped events.
+- Reconnect and token-refresh behavior stable.
 
-**Tasks:**
-- Cover authentication, user, voter, election flows.
-- Mock database and external dependencies.
+### Estimate
 
-### Frontend Testing
-
-#### Step 10.3: React test setup
-**Files to create:**
-- `frontend/jest.config.js`
-- `frontend/src/tests/setup.ts`
-- `frontend/src/tests/helpers/renderWithProviders.tsx`
-
-**Dependencies to add:**
-- `@testing-library/react`
-- `@testing-library/jest-dom`
-- `@testing-library/user-event`
-- `jest-environment-jsdom`
-
-**Tasks:**
-- Configure component testing.
-- Add render helpers for router/auth context.
-
-### E2E Testing
-
-#### Step 10.4: Playwright setup (optional)
-**Files to create:**
-- `e2e/playwright.config.ts`
-- `e2e/tests/auth.spec.ts`
-- `e2e/tests/voting.spec.ts`
-
-**Dependencies to add:**
-- `@playwright/test`
-
-**Tasks:**
-- Cover critical user journeys.
-- Test end-to-end login, voting, and admin workflows.
-
-**Estimated Time:** 1-2 weeks
+4-5 days
 
 ---
 
-## ?? FEATURE 11: COMPLETE FRONTEND CRUD INTERFACES
+## 11) Phase 9 - Biometric Mock Enhancement
 
-### Overview
-Build frontend administration pages and forms consistent with current app structure.
+### Objective
 
-### Implementation
+Extend existing biometric capability with deterministic mock scoring and UX feedback.
 
-#### Step 11.1: User management
-**Files to create:**
-- `frontend/src/pages/UserManagement.tsx`
-- `frontend/src/components/forms/UserForm.tsx`
-- `frontend/src/components/UserTable.tsx`
-- `frontend/src/hooks/useUserManagement.ts`
+### Key Work
 
-#### Step 11.2: Election management
-**Files to create:**
-- `frontend/src/pages/ElectionManagement.tsx`
-- `frontend/src/components/forms/ElectionForm.tsx`
-- `frontend/src/components/ElectionCalendar.tsx`
-- `frontend/src/hooks/useElectionManagement.ts`
+- Add biometric helper utilities in voter module.
+- Extend mock matching score and duplicate detection logic.
+- Improve frontend biometric capture status and retry feedback.
 
-#### Step 11.3: Candidate management
-**Files to create:**
-- `frontend/src/pages/CandidateManagement.tsx`
-- `frontend/src/components/forms/CandidateForm.tsx`
-- `frontend/src/components/CandidateCard.tsx`
-- `frontend/src/hooks/useCandidateManagement.ts`
+### Exit Criteria
 
-#### Step 11.4: Shared UI components
-**Files to create:**
-- `frontend/src/components/DataTable.tsx`
-- `frontend/src/components/SearchFilter.tsx`
-- `frontend/src/components/BulkActions.tsx`
-- `frontend/src/components/StatusBadge.tsx`
+- Deterministic scoring and duplicate checks are test-covered.
+- Login/register biometric UX is clear and measurable.
 
-**Tasks:**
-- Add consistent CRUD forms and tables.
-- Use centralized API utilities and auth-aware calls.
-- Ensure responsiveness and accessibility.
+### Estimate
 
-### Testing
-- Component integration tests.
-- Form validation tests.
-
-**Estimated Time:** 1.5 weeks
+4-6 days
 
 ---
 
-## ? Notes
-- This plan is designed to fit the existing repository layout in `backend/src` and `frontend/src`.
-- New modules should follow the current `modules/<name>/<name>.*.ts` convention.
-- Add routes in `backend/src/routes/index.ts` for each new backend module.
-- Keep frontend work modular to preserve the current component-based app structure.
+## 12) Phase 10 - Testing Infrastructure Expansion
+
+### Objective
+
+Complete test coverage foundation for backend/frontend and optional E2E.
+
+### Key Work
+
+- Backend: Jest + Supertest setup and core module tests.
+- Frontend: Vitest + Testing Library setup and component tests.
+- Optional Playwright for critical journeys.
+
+### Exit Criteria
+
+- Baseline CI test commands pass locally.
+- Critical auth/voting/result workflows covered.
+
+### Estimate
+
+1-2 weeks
+
+---
+
+## 13) Phase 11 - Frontend CRUD Completion
+
+### Objective
+
+Incrementally complete admin CRUD interfaces in the current frontend architecture.
+
+### Key Work
+
+- Add user/election/candidate management flows.
+- Add shared table/form/filter components.
+- Keep UI responsive and accessible.
+
+### Exit Criteria
+
+- CRUD flows functional end-to-end.
+- Validation, pagination, and role-based visibility verified.
+
+### Estimate
+
+1-1.5 weeks
+
+---
+
+## 14) Definition of Done (All Phases)
+
+- Type-safe DTO validation in API boundaries.
+- RBAC and scope validation enforced.
+- Audit events added for sensitive actions.
+- Unit/integration tests added for new behavior.
+- Build and lint pass with no new TypeScript errors.
+- API route registration and docs updated.
+
+---
+
+## 15) Immediate Next Action
+
+Phases 0 through 3 are complete. Start Phase 4 now:
+
+1. Add a `UserSession` persistence model and migration in Prisma.
+2. Record and rotate active sessions during login and refresh.
+3. Add session listing and revocation APIs plus a frontend management view.

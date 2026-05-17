@@ -3,29 +3,55 @@ import { resultRepository } from './result.repository';
 import { electionRepository } from '../election/election.repository';
 import { NotFoundError, BadRequestError } from '../../errors/AppError';
 import { buildPaginationMeta } from '../../utils/response';
+import { applyUserScope, assertUserScopeAccess } from '../../utils/scope';
 import { auditService } from '../audit/audit.service';
-import { socketEmit } from '../../config/socket';
+import { socketEmit } from '../../configs/socket';
+import type { JwtPayload } from '../../types';
 import type { ResultQuery, ComputeResultDto } from './result.schema';
 
 export const resultService = {
-  async list(q: ResultQuery) {
-    const { data, total } = await resultRepository.findAll(q);
-    return { data, meta: buildPaginationMeta(total, q.page, q.limit) };
+  async list(q: ResultQuery, requester?: JwtPayload) {
+    const scopedQuery = applyUserScope(q, requester);
+    const { data, total } = await resultRepository.findAll(scopedQuery);
+    return {
+      data,
+      meta: buildPaginationMeta(total, scopedQuery.page, scopedQuery.limit),
+    };
   },
 
-  async compute(dto: ComputeResultDto, actorId: string, ip: string) {
+  async compute(
+    dto: ComputeResultDto,
+    actorId: string,
+    ip: string,
+    requester?: JwtPayload,
+  ) {
     const election = await electionRepository.findById(dto.electionId);
     if (!election) throw new NotFoundError('Election');
+
+    assertUserScopeAccess(
+      requester,
+      { regionId: election.isNational ? undefined : undefined },
+      'results',
+    );
 
     const allowedStatuses = ['VOTING_CLOSED', 'COUNTING', 'RESULTS_DECLARED'];
     if (!allowedStatuses.includes(election.status)) {
       throw new BadRequestError('Results can only be computed after voting has closed');
     }
 
+    const scopeFilters = applyUserScope(
+      {
+        regionId: undefined as string | undefined,
+        districtId: undefined as string | undefined,
+        pollingStationId: undefined as string | undefined,
+      },
+      requester,
+    );
+
     // Aggregate ballot counts grouped by candidate + region
     const [aggregates, totalBallots] = await Promise.all([
-      resultRepository.aggregateBallots(dto.electionId),
-      resultRepository.totalBallots(dto.electionId),
+      resultRepository.aggregateBallotsForScope(dto.electionId, scopeFilters),
+      resultRepository.totalBallotsForScope(dto.electionId, scopeFilters),
     ]);
 
     if (totalBallots === 0) {

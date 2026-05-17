@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
-import { prisma } from '../../config/database';
-import { socketEmit } from '../../config/socket';
-import { logger } from '../../config/logger';
+import { prisma } from '../../configs/database';
+import { socketEmit } from '../../configs/socket';
+import { logger } from '../../configs/logger';
 import { buildPaginationMeta } from '../../utils/response';
 import { NotFoundError } from '../../errors/AppError';
 import type { SendNotificationDto, BroadcastDto, NotificationQuery } from './notification.schema';

@@ -3,7 +3,7 @@ import { electionRepository } from './election.repository';
 import { NotFoundError, BadRequestError } from '../../errors/AppError';
 import { buildPaginationMeta } from '../../utils/response';
 import { auditService } from '../audit/audit.service';
-import { socketEmit } from '../../config/socket';
+import { socketEmit } from '../../configs/socket';
 import type { CreateElectionDto, UpdateElectionDto, TransitionDto, ElectionQuery } from './election.schema';
 
 // Valid state machine transitions

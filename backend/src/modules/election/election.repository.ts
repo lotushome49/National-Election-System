@@ -1,4 +1,4 @@
-import { prisma } from '../../config/database';
+import { prisma } from '../../configs/database';
 import type { ElectionQuery } from './election.schema';
 
 export const electionRepository = {

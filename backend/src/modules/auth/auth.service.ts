@@ -1,20 +1,72 @@
 import bcrypt from 'bcryptjs';
 import { authRepository } from './auth.repository';
-import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../../utils/jwt';
-import { sha256, generateSecureToken } from '../../utils/crypto';
+import {
+  signAccessToken,
+  signRefreshToken,
+  signMfaChallengeToken,
+  verifyRefreshToken,
+  verifyMfaChallengeToken,
+} from '../../utils/jwt';
+import { sha256, encrypt, decrypt } from '../../utils/crypto';
 import {
   UnauthorizedError,
   ForbiddenError,
   NotFoundError,
+  BadRequestError,
 } from '../../errors/AppError';
 import { auditService } from '../audit/audit.service';
-import type { LoginDto, BiometricLoginDto, RefreshTokenDto } from './auth.schema';
+import {
+  buildOtpAuthUrl,
+  buildQrCodeUrl,
+  createMfaStateCipher,
+  generateMfaSecret,
+  generateRecoveryCodes,
+  normalizeRecoveryCode,
+  parseMfaStateCipher,
+  type StoredMfaState,
+  verifyTotpCode,
+} from '../../utils/mfa';
+import type {
+  LoginDto,
+  BiometricLoginDto,
+  RefreshTokenDto,
+  MfaChallengeDto,
+  MfaEnrollmentVerifyDto,
+  MfaDisableDto,
+} from './auth.schema';
 
 const MAX_FAILED_ATTEMPTS = 5;
-const LOCK_DURATION_MS    = 30 * 60 * 1000; // 30 minutes
+const LOCK_DURATION_MS = 30 * 60 * 1000;
+const MFA_ELIGIBLE_ROLES = new Set(['SUPER_ADMIN', 'ADMIN', 'REGIONAL_ADMIN', 'DISTRICT_ADMIN']);
+
+function serializeUser(user: any) {
+  return {
+    id: user.id,
+    fullName: user.fullName,
+    username: user.username,
+    email: user.email,
+    role: user.role.code,
+    regionId: user.assignedRegionId ?? null,
+    districtId: user.assignedDistrictId ?? null,
+    assignedRegion: user.assignedRegionId ?? null,
+    assignedDistrict: user.assignedDistrictId ?? null,
+    mfaEnabled: Boolean(user.mfaEnabled),
+  };
+}
+
+function isMfaEligibleRole(roleCode: string): boolean {
+  return MFA_ELIGIBLE_ROLES.has(roleCode);
+}
+
+function getStoredMfaState(user: any): StoredMfaState {
+  if (!user.mfaEnabled || !user.mfaSecret) {
+    throw new BadRequestError('MFA is not enabled for this account');
+  }
+
+  return parseMfaStateCipher(user.mfaSecret);
+}
 
 export const authService = {
-  // ─── Staff / Admin login ────────────────────────────────────────────────────
   async login(dto: LoginDto, ip: string) {
     const user = await authRepository.findByUsername(dto.username);
 
@@ -22,7 +74,6 @@ export const authService = {
       throw new UnauthorizedError('Invalid credentials');
     }
 
-    // Account status checks
     if (user.status === 'SUSPENDED') {
       throw new ForbiddenError('Account suspended. Contact administrator.');
     }
@@ -32,7 +83,6 @@ export const authService = {
       throw new ForbiddenError(`Account locked. Try again in ${minutesLeft} minute(s).`);
     }
 
-    // Verify password
     const isMatch = await bcrypt.compare(dto.password, user.passwordHash);
 
     if (!isMatch) {
@@ -42,8 +92,12 @@ export const authService = {
         const lockUntil = new Date(Date.now() + LOCK_DURATION_MS);
         await authRepository.lockAccount(user.id, lockUntil);
         await auditService.log({
-          userId: user.id, action: 'LOGIN', entity: 'User', entityId: user.id,
-          description: 'Account locked after max failed attempts', ipAddress: ip,
+          userId: user.id,
+          action: 'LOGIN',
+          entity: 'User',
+          entityId: user.id,
+          description: 'Account locked after max failed attempts',
+          ipAddress: ip,
         });
         throw new ForbiddenError('Account locked after too many failed attempts.');
       }
@@ -52,31 +106,52 @@ export const authService = {
       throw new UnauthorizedError('Invalid credentials');
     }
 
-    // Success — reset counters
     await authRepository.resetFailedAttempts(user.id, ip);
 
-    const tokens = await this._issueTokens(user, ip);
+    if (isMfaEligibleRole(user.role.code) && user.mfaEnabled && user.mfaSecret) {
+      const challengeToken = signMfaChallengeToken({
+        sub: user.id,
+        role: user.role.code,
+        regionId: user.assignedRegionId ?? undefined,
+        districtId: user.assignedDistrictId ?? undefined,
+      });
+
+      await auditService.log({
+        userId: user.id,
+        action: 'LOGIN',
+        entity: 'User',
+        entityId: user.id,
+        description: 'Password verified; MFA challenge issued',
+        ipAddress: ip,
+      });
+
+      return {
+        requiresMfa: true,
+        challengeToken,
+        user: serializeUser(user),
+      };
+    }
+
+    const tokens = await this._issueTokens(user);
 
     await auditService.log({
-      userId: user.id, action: 'LOGIN', entity: 'User', entityId: user.id,
-      description: 'Successful login', ipAddress: ip,
+      userId: user.id,
+      action: 'LOGIN',
+      entity: 'User',
+      entityId: user.id,
+      description: 'Successful login',
+      ipAddress: ip,
     });
 
     return {
+      requiresMfa: false,
       ...tokens,
-      user: {
-        id:       user.id,
-        fullName: user.fullName,
-        username: user.username,
-        email:    user.email,
-        role:     user.role.code,
-      },
+      user: serializeUser(user),
     };
   },
 
-  // ─── Voter biometric login ──────────────────────────────────────────────────
   async biometricLogin(dto: BiometricLoginDto, ip: string) {
-    const hash  = sha256(dto.biometricHash);
+    const hash = sha256(dto.biometricHash);
     const voter = await authRepository.findVoterByBiometricHash(hash);
 
     if (!voter) {
@@ -84,22 +159,25 @@ export const authService = {
     }
 
     const accessToken = signAccessToken({
-      sub:      voter.id,
-      role:     'VOTER',
+      sub: voter.id,
+      role: 'VOTER',
       regionId: voter.regionId ?? undefined,
       districtId: voter.districtId ?? undefined,
     });
 
     await auditService.log({
-      userId: voter.id, action: 'LOGIN', entity: 'Voter', entityId: voter.id,
-      description: 'Voter biometric login', ipAddress: ip,
+      userId: voter.id,
+      action: 'LOGIN',
+      entity: 'Voter',
+      entityId: voter.id,
+      description: 'Voter biometric login',
+      ipAddress: ip,
     });
 
-    return { accessToken, voter: { id: voter.id, voterId: voter.voterId } };
+    return { accessToken, token: accessToken, voter: { id: voter.id, voterId: voter.voterId } };
   },
 
-  // ─── Refresh access token ───────────────────────────────────────────────────
-  async refresh(dto: RefreshTokenDto, ip: string) {
+  async refresh(dto: RefreshTokenDto) {
     let payload;
     try {
       payload = verifyRefreshToken(dto.refreshToken);
@@ -108,14 +186,14 @@ export const authService = {
     }
 
     const stored = await authRepository.findRefreshToken(payload.sub);
-    if (!stored) throw new UnauthorizedError('Refresh token not found — please login again');
+    if (!stored) {
+      throw new UnauthorizedError('Refresh token not found - please login again');
+    }
 
-    // Validate stored hash matches submitted token
     const submittedHash = sha256(dto.refreshToken);
     if (stored.tokenHash !== submittedHash) {
-      // Possible token reuse — revoke all
       await authRepository.revokeRefreshToken(payload.sub);
-      throw new UnauthorizedError('Refresh token reuse detected — please login again');
+      throw new UnauthorizedError('Refresh token reuse detected - please login again');
     }
 
     if (stored.expiresAt < new Date()) {
@@ -124,37 +202,229 @@ export const authService = {
     }
 
     const user = await authRepository.findById(payload.sub);
-    if (!user) throw new NotFoundError('User');
+    if (!user) {
+      throw new NotFoundError('User');
+    }
 
-    return this._issueTokens(user, ip);
+    return this._issueTokens(user);
   },
 
-  // ─── Logout ─────────────────────────────────────────────────────────────────
+  async completeMfaChallenge(dto: MfaChallengeDto, ip: string) {
+    let payload;
+    try {
+      payload = verifyMfaChallengeToken(dto.challengeToken);
+    } catch {
+      throw new UnauthorizedError('Invalid or expired MFA challenge');
+    }
+
+    if (payload.type !== 'mfa') {
+      throw new UnauthorizedError('Invalid MFA challenge');
+    }
+
+    const user = await authRepository.findById(payload.sub);
+    if (!user) {
+      throw new NotFoundError('User');
+    }
+
+    const state = getStoredMfaState(user);
+    const factorResult = this._consumeMfaFactor(state, dto);
+    if (!factorResult.valid) {
+      throw new UnauthorizedError('Invalid MFA code');
+    }
+
+    if (factorResult.nextState) {
+      await authRepository.updateMfaState(user.id, true, createMfaStateCipher(factorResult.nextState));
+    }
+
+    const tokens = await this._issueTokens(user);
+
+    await auditService.log({
+      userId: user.id,
+      action: 'LOGIN',
+      entity: 'User',
+      entityId: user.id,
+      description: factorResult.usedRecoveryCode ? 'Successful MFA login with recovery code' : 'Successful MFA login',
+      ipAddress: ip,
+    });
+
+    return {
+      requiresMfa: false,
+      ...tokens,
+      user: serializeUser(user),
+      recoveryCodesRemaining: factorResult.nextState?.recoveryCodes.length ?? state.recoveryCodes.length,
+    };
+  },
+
   async logout(userId: string, ip: string) {
     await authRepository.revokeRefreshToken(userId);
     await auditService.log({
-      userId, action: 'LOGOUT', entity: 'User', entityId: userId,
-      description: 'User logged out', ipAddress: ip,
+      userId,
+      action: 'LOGOUT',
+      entity: 'User',
+      entityId: userId,
+      description: 'User logged out',
+      ipAddress: ip,
     });
   },
 
-  // ─── Internal: issue access + refresh tokens ─────────────────────────────
-  async _issueTokens(user: any, ip: string) {
+  async getMfaStatus(userId: string) {
+    const user = await authRepository.findById(userId);
+    if (!user) {
+      throw new NotFoundError('User');
+    }
+
+    const eligible = isMfaEligibleRole(user.role.code);
+    const recoveryCodesRemaining = user.mfaEnabled && user.mfaSecret
+      ? parseMfaStateCipher(user.mfaSecret).recoveryCodes.length
+      : 0;
+
+    return {
+      eligible,
+      enabled: Boolean(user.mfaEnabled),
+      recoveryCodesRemaining,
+    };
+  },
+
+  async beginMfaEnrollment(userId: string) {
+    const user = await authRepository.findById(userId);
+    if (!user) {
+      throw new NotFoundError('User');
+    }
+
+    if (!isMfaEligibleRole(user.role.code)) {
+      throw new ForbiddenError('MFA enrollment is only available for admin-level accounts');
+    }
+
+    if (user.mfaEnabled) {
+      throw new BadRequestError('MFA is already enabled for this account');
+    }
+
+    const secret = generateMfaSecret();
+    const recoveryCodes = generateRecoveryCodes();
+    const otpauthUrl = buildOtpAuthUrl(secret, user.username);
+
+    return {
+      secret,
+      otpauthUrl,
+      qrCodeUrl: buildQrCodeUrl(otpauthUrl),
+      setupToken: encrypt(JSON.stringify({ userId, secret, recoveryCodes })),
+    };
+  },
+
+  async verifyMfaEnrollment(userId: string, dto: MfaEnrollmentVerifyDto, ip: string) {
+    const user = await authRepository.findById(userId);
+    if (!user) {
+      throw new NotFoundError('User');
+    }
+
+    const enrollmentState = JSON.parse(decrypt(dto.setupToken)) as {
+      userId: string;
+      secret: string;
+      recoveryCodes: string[];
+    };
+
+    if (enrollmentState.userId !== userId) {
+      throw new ForbiddenError('Enrollment token does not belong to the current user');
+    }
+
+    if (!verifyTotpCode(enrollmentState.secret, dto.code)) {
+      throw new UnauthorizedError('Invalid MFA code');
+    }
+
+    await authRepository.updateMfaState(
+      userId,
+      true,
+      createMfaStateCipher({
+        secret: enrollmentState.secret,
+        recoveryCodes: enrollmentState.recoveryCodes,
+      }),
+    );
+
+    await auditService.log({
+      userId,
+      action: 'UPDATE',
+      entity: 'User',
+      entityId: userId,
+      description: 'MFA enabled for user',
+      ipAddress: ip,
+    });
+
+    return {
+      enabled: true,
+      recoveryCodes: enrollmentState.recoveryCodes,
+    };
+  },
+
+  async disableMfa(userId: string, dto: MfaDisableDto, ip: string) {
+    const user = await authRepository.findById(userId);
+    if (!user) {
+      throw new NotFoundError('User');
+    }
+
+    const passwordMatches = await bcrypt.compare(dto.password, user.passwordHash);
+    if (!passwordMatches) {
+      throw new UnauthorizedError('Invalid credentials');
+    }
+
+    const state = getStoredMfaState(user);
+    const factorResult = this._consumeMfaFactor(state, dto);
+    if (!factorResult.valid) {
+      throw new UnauthorizedError('Invalid MFA code');
+    }
+
+    await authRepository.updateMfaState(userId, false, null);
+
+    await auditService.log({
+      userId,
+      action: 'UPDATE',
+      entity: 'User',
+      entityId: userId,
+      description: 'MFA disabled for user',
+      ipAddress: ip,
+    });
+
+    return { enabled: false };
+  },
+
+  async _issueTokens(user: any) {
     const tokenPayload = {
-      sub:        user.id,
-      role:       user.role.code,
-      regionId:   user.assignedRegionId   ?? undefined,
+      sub: user.id,
+      role: user.role.code,
+      regionId: user.assignedRegionId ?? undefined,
       districtId: user.assignedDistrictId ?? undefined,
     };
 
-    const accessToken  = signAccessToken(tokenPayload);
-    const rawRefresh   = generateSecureToken(48);
+    const accessToken = signAccessToken(tokenPayload);
     const refreshToken = signRefreshToken(tokenPayload);
 
-    // Store hash of the raw refresh token (never store plaintext)
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
     await authRepository.saveRefreshToken(user.id, sha256(refreshToken), expiresAt);
 
-    return { accessToken, refreshToken };
+    return { accessToken, refreshToken, token: accessToken };
+  },
+
+  _consumeMfaFactor(state: StoredMfaState, dto: { code?: string; recoveryCode?: string }) {
+    if (dto.code && verifyTotpCode(state.secret, dto.code)) {
+      return { valid: true, usedRecoveryCode: false };
+    }
+
+    if (dto.recoveryCode) {
+      const normalizedInput = normalizeRecoveryCode(dto.recoveryCode);
+      const matchedCode = state.recoveryCodes.find((code) => normalizeRecoveryCode(code) === normalizedInput);
+      if (!matchedCode) {
+        return { valid: false, usedRecoveryCode: false };
+      }
+
+      return {
+        valid: true,
+        usedRecoveryCode: true,
+        nextState: {
+          secret: state.secret,
+          recoveryCodes: state.recoveryCodes.filter((code) => code !== matchedCode),
+        },
+      };
+    }
+
+    return { valid: false, usedRecoveryCode: false };
   },
 };

@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
-import { prisma } from '../../config/database';
-import { logger } from '../../config/logger';
+import { prisma } from '../../configs/database';
+import { logger } from '../../configs/logger';
 import type { AuditAction } from '../../types';
 
 interface AuditLogInput {

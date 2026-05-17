@@ -1,4 +1,5 @@
 import { Request } from 'express';
+import { PERMISSIONS, ROLES, type Permission, type Role } from '../constants/auth';
 
 // ─── JWT Payload ─────────────────────────────────────────────────────────────
 export interface JwtPayload {
@@ -6,7 +7,7 @@ export interface JwtPayload {
   role: string;
   regionId?: string;
   districtId?: string;
-  type: 'access' | 'refresh';
+  type: 'access' | 'refresh' | 'mfa';
   iat?: number;
   exp?: number;
 }
@@ -39,34 +40,8 @@ export interface PaginationQuery {
 }
 
 // ─── Role / Permission constants ──────────────────────────────────────────────
-export const ROLES = {
-  SUPER_ADMIN:    'SUPER_ADMIN',
-  ADMIN:          'ADMIN',
-  REGIONAL_ADMIN: 'REGIONAL_ADMIN',
-  DISTRICT_ADMIN: 'DISTRICT_ADMIN',
-  STAFF:          'STAFF',
-  OBSERVER:       'OBSERVER',
-  VOTER:          'VOTER',
-} as const;
-
-export type Role = (typeof ROLES)[keyof typeof ROLES];
-
-export const PERMISSIONS = {
-  MANAGE_USERS:             'MANAGE_USERS',
-  MANAGE_ELECTIONS:         'MANAGE_ELECTIONS',
-  MANAGE_CANDIDATES:        'MANAGE_CANDIDATES',
-  MANAGE_VOTERS:            'MANAGE_VOTERS',
-  CAST_VOTE:                'CAST_VOTE',
-  VIEW_RESULTS:             'VIEW_RESULTS',
-  MANAGE_REGIONS:           'MANAGE_REGIONS',
-  MANAGE_DISTRICTS:         'MANAGE_DISTRICTS',
-  MANAGE_POLLING_STATIONS:  'MANAGE_POLLING_STATIONS',
-  VIEW_AUDIT_LOGS:          'VIEW_AUDIT_LOGS',
-  MANAGE_OBSERVERS:         'MANAGE_OBSERVERS',
-  GENERATE_REPORTS:         'GENERATE_REPORTS',
-} as const;
-
-export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
+export { PERMISSIONS, ROLES };
+export type { Permission, Role };
 
 // ─── Audit action types ───────────────────────────────────────────────────────
 export type AuditAction =

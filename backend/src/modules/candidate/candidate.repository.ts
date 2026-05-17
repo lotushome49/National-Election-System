@@ -1,4 +1,4 @@
-import { prisma } from '../../config/database';
+import { prisma } from '../../configs/database';
 import type { CandidateQuery } from './candidate.schema';
 
 export const candidateRepository = {

@@ -1,18 +1,30 @@
-import { Router } from 'express';
-import { resultController } from './result.controller';
-import { authenticate } from '../../middleware/authenticate';
-import { requirePermission } from '../../middleware/rbac';
-import { validate } from '../../middleware/validate';
-import { resultQuerySchema, computeResultSchema } from './result.schema';
+import { Router } from "express";
+import { resultController } from "./result.controller";
+import { authenticate } from "../../middleware/authenticate";
+import { requirePermission, scopeGuard } from "../../middleware/rbac";
+import { validate } from "../../middleware/validate";
+import { resultQuerySchema, computeResultSchema } from "./result.schema";
 
 const router = Router();
 
 router.use(authenticate);
 
-// Any authenticated user with VIEW_RESULTS permission can read
-router.get('/', requirePermission('VIEW_RESULTS'), validate(resultQuerySchema, 'query'), resultController.list);
+// Any user with VIEW_RESULTS can read, and scoped roles are constrained.
+router.get(
+  "/",
+  requirePermission("VIEW_RESULTS"),
+  scopeGuard,
+  validate(resultQuerySchema, "query"),
+  resultController.list,
+);
 
-// Only admins can trigger computation
-router.post('/compute', requirePermission('MANAGE_ELECTIONS'), validate(computeResultSchema), resultController.compute);
+// Result computation remains permission-gated and scope-gated.
+router.post(
+  "/compute",
+  requirePermission("MANAGE_ELECTIONS"),
+  scopeGuard,
+  validate(computeResultSchema),
+  resultController.compute,
+);
 
 export default router;

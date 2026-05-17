@@ -1,20 +1,29 @@
-import { Response, NextFunction } from 'express';
-import { resultService } from './result.service';
-import { sendSuccess, sendPaginated } from '../../utils/response';
-import type { AuthRequest } from '../../types';
+import { Response, NextFunction } from "express";
+import { resultService } from "./result.service";
+import { sendSuccess, sendPaginated } from "../../utils/response";
+import type { AuthRequest } from "../../types";
 
 export const resultController = {
   list: async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
-      const { data, meta } = await resultService.list(req.query as any);
+      const { data, meta } = await resultService.list(req.query as any, req.user);
       sendPaginated(res, data, meta);
-    } catch (err) { next(err); }
+    } catch (err) {
+      next(err);
+    }
   },
 
   compute: async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
-      const result = await resultService.compute(req.body, req.user!.sub, req.ip ?? '');
-      sendSuccess(res, result, 'Results computed successfully');
-    } catch (err) { next(err); }
+      const result = await resultService.compute(
+        req.body,
+        req.user!.sub,
+        req.ip ?? "",
+        req.user,
+      );
+      sendSuccess(res, result, "Results computed successfully");
+    } catch (err) {
+      next(err);
+    }
   },
 };

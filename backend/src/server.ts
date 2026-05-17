@@ -1,9 +1,9 @@
 import http from 'http';
 import { createApp } from './app';
-import { connectDatabase, disconnectDatabase } from './config/database';
-import { initSocket } from './config/socket';
-import { logger } from './config/logger';
-import { env } from './config/env';
+import { connectDatabase, disconnectDatabase } from './configs/database';
+import { initSocket } from './configs/socket';
+import { logger } from './configs/logger';
+import { env } from './configs/env';
 
 async function bootstrap(): Promise<void> {
   // 1. Connect to database
