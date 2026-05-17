@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Environment files — NEVER commit secrets
+.env
+.env.local
+.env.*.local
+backend/.env
+
+# Build output
+dist/
+build/
+*.js.map
+
+# Logs
+logs/
+*.log
+backend/logs/
+
+# IDE / editor
+.idea/
+.vscode/
+*.iml
+*.suo
+*.user
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary / test files
+tmp/
+*.tmp
+
+# Prisma generated client (regenerated via prisma generate)
+backend/node_modules/.prisma/
+
+# Lock files — keep package-lock.json, ignore yarn/pnpm if not used
+# package-lock.json  ← keep this tracked

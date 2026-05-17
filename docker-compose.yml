@@ -1,0 +1,83 @@
+version: '3.9'
+
+services:
+  # ── MySQL Database ───────────────────────────────────────────────────────────
+  db:
+    image: mysql:8.0
+    container_name: nehs_db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE:      nehs_db
+      MYSQL_USER:          nehs_user
+      MYSQL_PASSWORD:      ${MYSQL_PASSWORD:-strongpassword}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./backend/prisma/migrations/001_initial_schema.sql:/docker-entrypoint-initdb.d/001_schema.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "nehs_user", "-p${MYSQL_PASSWORD:-strongpassword}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - nehs_net
+
+  # ── Backend API ──────────────────────────────────────────────────────────────
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: production
+    container_name: nehs_api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV:               production
+      PORT:                   3000
+      API_VERSION:            v1
+      DATABASE_URL:           mysql://nehs_user:${MYSQL_PASSWORD:-strongpassword}@db:3306/nehs_db
+      JWT_SECRET:             ${JWT_SECRET}
+      JWT_EXPIRES_IN:         15m
+      JWT_REFRESH_SECRET:     ${JWT_REFRESH_SECRET}
+      JWT_REFRESH_EXPIRES_IN: 7d
+      ENCRYPTION_KEY:         ${ENCRYPTION_KEY}
+      CSRF_SECRET:            ${CSRF_SECRET}
+      CORS_ORIGIN:            ${CORS_ORIGIN:-http://localhost:5173}
+      RATE_LIMIT_WINDOW_MS:   900000
+      RATE_LIMIT_MAX:         100
+      AUTH_RATE_LIMIT_MAX:    10
+      LOG_LEVEL:              info
+      ADMIN_EMAIL:            ${ADMIN_EMAIL}
+      ADMIN_PASSWORD:         ${ADMIN_PASSWORD}
+    ports:
+      - "3000:3000"
+    volumes:
+      - api_logs:/app/logs
+    networks:
+      - nehs_net
+
+  # ── Adminer (DB GUI — dev only) ───────────────────────────────────────────────
+  adminer:
+    image: adminer:4
+    container_name: nehs_adminer
+    restart: unless-stopped
+    depends_on:
+      - db
+    ports:
+      - "8080:8080"
+    networks:
+      - nehs_net
+    profiles:
+      - dev
+
+volumes:
+  mysql_data:
+  api_logs:
+
+networks:
+  nehs_net:
+    driver: bridge

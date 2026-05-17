@@ -1,0 +1,16 @@
+# Dependencies
+node_modules/
+
+# Environment — secrets must never be committed
+.env
+.env.local
+
+# Build output
+dist/
+
+# Logs
+logs/
+*.log
+
+# Prisma generated client
+node_modules/.prisma/

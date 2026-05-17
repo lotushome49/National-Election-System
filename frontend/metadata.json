@@ -1,0 +1,12 @@
+{
+  "name": "NEHS - National Election Handling System",
+  "description": "A secure national election platform built with Node.js, Express, MySQL, and React, featuring biometric hashing, AES encryption, and real-time Socket.io results.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "biometric_simulation",
+    "real_time_results",
+    "role_based_access_control"
+  ]
+}

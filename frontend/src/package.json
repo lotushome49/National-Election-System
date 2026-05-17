@@ -1,0 +1,25 @@
+{
+    "name": "nehs-backend",
+    "version": "1.0.0",
+    "description": "Production Backend for National Election Handling System",
+    "main": "src/index.ts",
+    "scripts": {
+        "dev": "tsx watch src/index.ts",
+        "build": "tsc",
+        "start": "node dist/index.js"
+    },
+    "dependencies": {
+        "express": "^4.18.2",
+        "socket.io": "^4.7.2",
+        "cors": "^2.8.5",
+        "helmet": "^7.1.0",
+        "dotenv": "^16.3.1",
+        "jsonwebtoken": "^9.0.2",
+        "bcryptjs": "^2.4.3",
+        "express-rate-limit": "^7.1.5",
+        "drizzle-orm": "^0.29.3",
+        "mysql2": "^3.9.1",
+        "uuid": "^9.0.1",
+        "tsx": "^4.7.0"
+    }
+}

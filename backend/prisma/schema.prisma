@@ -1,0 +1,631 @@
+// =============================================================================
+// NEHS — National Election Handling System
+// Prisma Schema  |  MySQL  |  UUID PKs  |  3NF  |  RBAC  |  Soft Delete
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// ENUMS
+// ---------------------------------------------------------------------------
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  LOCKED
+}
+
+enum RoleCode {
+  SUPER_ADMIN
+  ADMIN
+  REGIONAL_ADMIN
+  DISTRICT_ADMIN
+  STAFF
+  OBSERVER
+  VOTER
+}
+
+enum Permission {
+  MANAGE_USERS
+  MANAGE_ELECTIONS
+  MANAGE_CANDIDATES
+  MANAGE_VOTERS
+  CAST_VOTE
+  VIEW_RESULTS
+  MANAGE_REGIONS
+  MANAGE_DISTRICTS
+  MANAGE_POLLING_STATIONS
+  VIEW_AUDIT_LOGS
+  MANAGE_OBSERVERS
+  GENERATE_REPORTS
+}
+
+enum ElectionType {
+  PRESIDENTIAL
+  PARLIAMENTARY
+  LOCAL
+  BY_ELECTION
+  REFERENDUM
+}
+
+enum ElectionStatus {
+  DRAFT
+  SCHEDULED
+  NOMINATION_OPEN
+  NOMINATION_CLOSED
+  CAMPAIGN
+  VOTING_OPEN
+  VOTING_CLOSED
+  COUNTING
+  RESULTS_DECLARED
+  DISPUTED
+  CANCELLED
+}
+
+enum CandidateStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  WITHDRAWN
+  DISQUALIFIED
+}
+
+enum TokenStatus {
+  UNUSED
+  USED
+  EXPIRED
+  REVOKED
+}
+
+enum AuditAction {
+  CREATE
+  READ
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  VOTE_CAST
+  TOKEN_ISSUED
+  TOKEN_USED
+  TOKEN_REVOKED
+  ELECTION_STATE_CHANGE
+  RESULT_PUBLISHED
+  OBSERVER_REPORT_SUBMITTED
+  SYSTEM_EVENT
+}
+
+enum NotificationType {
+  EMAIL
+  SMS
+  IN_APP
+  PUSH
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  DELIVERED
+  FAILED
+  READ
+}
+
+enum ObserverReportType {
+  INCIDENT
+  IRREGULARITY
+  COMPLAINT
+  GENERAL_OBSERVATION
+}
+
+enum ObserverReportStatus {
+  SUBMITTED
+  UNDER_REVIEW
+  RESOLVED
+  DISMISSED
+}
+
+// ---------------------------------------------------------------------------
+// REGION
+// ---------------------------------------------------------------------------
+
+model Region {
+  id          String    @id @default(uuid()) @db.VarChar(36)
+  name        String    @unique @db.VarChar(255)
+  code        String    @unique @db.VarChar(20)
+  description String?   @db.Text
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  createdBy   String?   @db.VarChar(36) @map("created_by")
+  updatedBy   String?   @db.VarChar(36) @map("updated_by")
+  deletedAt   DateTime? @map("deleted_at")
+
+  districts         District[]
+  voters            Voter[]
+  ballots           Ballot[]
+  results           Result[]
+  pollingStations   PollingStation[]
+  userAssignments   User[]           @relation("UserRegion")
+
+  @@index([deletedAt])
+  @@map("regions")
+}
+
+// ---------------------------------------------------------------------------
+// DISTRICT
+// ---------------------------------------------------------------------------
+
+model District {
+  id          String    @id @default(uuid()) @db.VarChar(36)
+  regionId    String    @db.VarChar(36) @map("region_id")
+  name        String    @db.VarChar(255)
+  code        String    @unique @db.VarChar(20)
+  description String?   @db.Text
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  createdBy   String?   @db.VarChar(36) @map("created_by")
+  updatedBy   String?   @db.VarChar(36) @map("updated_by")
+  deletedAt   DateTime? @map("deleted_at")
+
+  region          Region           @relation(fields: [regionId], references: [id])
+  voters          Voter[]
+  ballots         Ballot[]
+  results         Result[]
+  pollingStations PollingStation[]
+  userAssignments User[]           @relation("UserDistrict")
+
+  @@unique([regionId, name])
+  @@index([regionId])
+  @@index([deletedAt])
+  @@map("districts")
+}
+
+// ---------------------------------------------------------------------------
+// POLLING STATION
+// ---------------------------------------------------------------------------
+
+model PollingStation {
+  id           String    @id @default(uuid()) @db.VarChar(36)
+  districtId   String    @db.VarChar(36) @map("district_id")
+  regionId     String    @db.VarChar(36) @map("region_id")
+  name         String    @db.VarChar(255)
+  code         String    @unique @db.VarChar(30)
+  address      String?   @db.Text
+  latitude     Decimal?  @db.Decimal(10, 8)
+  longitude    Decimal?  @db.Decimal(11, 8)
+  capacity     Int       @default(0)
+  isActive     Boolean   @default(true) @map("is_active")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  createdBy    String?   @db.VarChar(36) @map("created_by")
+  updatedBy    String?   @db.VarChar(36) @map("updated_by")
+  deletedAt    DateTime? @map("deleted_at")
+
+  district        District         @relation(fields: [districtId], references: [id])
+  region          Region           @relation(fields: [regionId], references: [id])
+  voters          Voter[]
+  ballots         Ballot[]
+  results         Result[]
+  observerReports ObserverReport[]
+
+  @@index([districtId])
+  @@index([regionId])
+  @@index([isActive])
+  @@index([deletedAt])
+  @@map("polling_stations")
+}
+
+// ---------------------------------------------------------------------------
+// ROLE
+// ---------------------------------------------------------------------------
+
+model Role {
+  id          String     @id @default(uuid()) @db.VarChar(36)
+  code        RoleCode   @unique
+  name        String     @unique @db.VarChar(100)
+  description String?    @db.Text
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+  deletedAt   DateTime?  @map("deleted_at")
+
+  users       User[]
+  permissions RolePermission[]
+
+  @@index([deletedAt])
+  @@map("roles")
+}
+
+// ---------------------------------------------------------------------------
+// ROLE PERMISSION
+// ---------------------------------------------------------------------------
+
+model RolePermission {
+  id         String     @id @default(uuid()) @db.VarChar(36)
+  roleId     String     @db.VarChar(36) @map("role_id")
+  permission Permission
+  createdAt  DateTime   @default(now()) @map("created_at")
+  createdBy  String?    @db.VarChar(36) @map("created_by")
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permission])
+  @@index([roleId])
+  @@map("role_permissions")
+}
+
+// ---------------------------------------------------------------------------
+// USER
+// ---------------------------------------------------------------------------
+
+model User {
+  id                 String      @id @default(uuid()) @db.VarChar(36)
+  roleId             String      @db.VarChar(36) @map("role_id")
+  fullName           String      @db.VarChar(255) @map("full_name")
+  username           String      @unique @db.VarChar(100)
+  email              String?     @unique @db.VarChar(255)
+  passwordHash       String      @db.VarChar(255) @map("password_hash")
+  status             UserStatus  @default(ACTIVE)
+  assignedRegionId   String?     @db.VarChar(36) @map("assigned_region_id")
+  assignedDistrictId String?     @db.VarChar(36) @map("assigned_district_id")
+  failedAttempts     Int         @default(0) @map("failed_attempts")
+  lockUntil          DateTime?   @map("lock_until")
+  lastLoginAt        DateTime?   @map("last_login_at")
+  lastLoginIp        String?     @db.VarChar(45) @map("last_login_ip")
+  mfaEnabled         Boolean     @default(false) @map("mfa_enabled")
+  mfaSecret          String?     @db.VarChar(255) @map("mfa_secret")
+  createdAt          DateTime    @default(now()) @map("created_at")
+  updatedAt          DateTime    @updatedAt @map("updated_at")
+  createdBy          String?     @db.VarChar(36) @map("created_by")
+  updatedBy          String?     @db.VarChar(36) @map("updated_by")
+  deletedAt          DateTime?   @map("deleted_at")
+
+  role             Role            @relation(fields: [roleId], references: [id])
+  assignedRegion   Region?         @relation("UserRegion",   fields: [assignedRegionId],   references: [id])
+  assignedDistrict District?       @relation("UserDistrict", fields: [assignedDistrictId], references: [id])
+  auditLogs        AuditLog[]
+  notifications    Notification[]
+  observerReports  ObserverReport[]
+  votingTokens     VotingToken[]
+  refreshToken     RefreshToken?
+
+  @@index([roleId])
+  @@index([status])
+  @@index([assignedRegionId])
+  @@index([assignedDistrictId])
+  @@index([deletedAt])
+  @@map("users")
+}
+
+// ---------------------------------------------------------------------------
+// REFRESH TOKEN  (one per user — rotated on every refresh)
+// ---------------------------------------------------------------------------
+
+model RefreshToken {
+  id         String   @id @default(uuid()) @db.VarChar(36)
+  userId     String   @unique @db.VarChar(36) @map("user_id")
+  tokenHash  String   @db.VarChar(255) @map("token_hash")
+  expiresAt  DateTime @map("expires_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+// ---------------------------------------------------------------------------
+// VOTER
+// ---------------------------------------------------------------------------
+
+model Voter {
+  id                 String    @id @default(uuid()) @db.VarChar(36)
+  userId             String?   @unique @db.VarChar(36) @map("user_id")
+  voterId            String    @unique @db.VarChar(50) @map("voter_id")
+  nationalId         String    @unique @db.VarChar(50) @map("national_id")
+  fullName           String    @db.VarChar(255) @map("full_name")
+  dateOfBirth        DateTime  @map("date_of_birth") @db.Date
+  gender             String?   @db.VarChar(20)
+  phone              String?   @db.VarChar(20)
+  email              String?   @db.VarChar(255)
+  address            String?   @db.Text
+  regionId           String?   @db.VarChar(36) @map("region_id")
+  districtId         String?   @db.VarChar(36) @map("district_id")
+  pollingStationId   String?   @db.VarChar(36) @map("polling_station_id")
+  biometricTemplate  String?   @db.Text @map("biometric_template")
+  biometricHash      String    @unique @db.VarChar(255) @map("biometric_hash")
+  isVerified         Boolean   @default(false) @map("is_verified")
+  registrationDate   DateTime  @default(now()) @map("registration_date")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+  createdBy          String?   @db.VarChar(36) @map("created_by")
+  updatedBy          String?   @db.VarChar(36) @map("updated_by")
+  deletedAt          DateTime? @map("deleted_at")
+
+  region         Region?         @relation(fields: [regionId],         references: [id])
+  district       District?       @relation(fields: [districtId],       references: [id])
+  pollingStation PollingStation? @relation(fields: [pollingStationId], references: [id])
+  votingTokens   VotingToken[]
+  ballots        Ballot[]
+
+  @@index([regionId])
+  @@index([districtId])
+  @@index([pollingStationId])
+  @@index([isVerified])
+  @@index([deletedAt])
+  @@map("voters")
+}
+
+// ---------------------------------------------------------------------------
+// ELECTION
+// ---------------------------------------------------------------------------
+
+model Election {
+  id               String         @id @default(uuid()) @db.VarChar(36)
+  title            String         @db.VarChar(255)
+  description      String?        @db.Text
+  type             ElectionType
+  status           ElectionStatus @default(DRAFT)
+  nominationStart  DateTime?      @map("nomination_start")
+  nominationEnd    DateTime?      @map("nomination_end")
+  campaignStart    DateTime?      @map("campaign_start")
+  campaignEnd      DateTime?      @map("campaign_end")
+  votingStart      DateTime?      @map("voting_start")
+  votingEnd        DateTime?      @map("voting_end")
+  resultsAt        DateTime?      @map("results_at")
+  isNational       Boolean        @default(true) @map("is_national")
+  maxVotesPerVoter Int            @default(1) @map("max_votes_per_voter")
+  metadata         Json?
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+  createdBy        String?        @db.VarChar(36) @map("created_by")
+  updatedBy        String?        @db.VarChar(36) @map("updated_by")
+  deletedAt        DateTime?      @map("deleted_at")
+
+  candidates      Candidate[]
+  ballots         Ballot[]
+  votingTokens    VotingToken[]
+  results         Result[]
+  observerReports ObserverReport[]
+  auditLogs       AuditLog[]
+
+  @@index([status])
+  @@index([type])
+  @@index([votingStart, votingEnd])
+  @@index([deletedAt])
+  @@map("elections")
+}
+
+// ---------------------------------------------------------------------------
+// CANDIDATE
+// ---------------------------------------------------------------------------
+
+model Candidate {
+  id           String          @id @default(uuid()) @db.VarChar(36)
+  electionId   String          @db.VarChar(36) @map("election_id")
+  fullName     String          @db.VarChar(255) @map("full_name")
+  party        String          @db.VarChar(255)
+  partyCode    String?         @db.VarChar(20) @map("party_code")
+  bio          String?         @db.Text
+  manifesto    String?         @db.Text
+  symbol       String?         @db.VarChar(10)
+  photoUrl     String?         @db.Text @map("photo_url")
+  ballotOrder  Int?            @map("ballot_order")
+  status       CandidateStatus @default(PENDING)
+  regionId     String?         @db.VarChar(36) @map("region_id")
+  districtId   String?         @db.VarChar(36) @map("district_id")
+  createdAt    DateTime        @default(now()) @map("created_at")
+  updatedAt    DateTime        @updatedAt @map("updated_at")
+  createdBy    String?         @db.VarChar(36) @map("created_by")
+  updatedBy    String?         @db.VarChar(36) @map("updated_by")
+  deletedAt    DateTime?       @map("deleted_at")
+
+  election     Election        @relation(fields: [electionId], references: [id])
+  ballots      Ballot[]
+  results      Result[]
+
+  @@unique([electionId, party, regionId])
+  @@index([electionId])
+  @@index([status])
+  @@index([regionId])
+  @@index([districtId])
+  @@index([deletedAt])
+  @@map("candidates")
+}
+
+// ---------------------------------------------------------------------------
+// VOTING TOKEN
+// ---------------------------------------------------------------------------
+
+model VotingToken {
+  id           String      @id @default(uuid()) @db.VarChar(36)
+  electionId   String      @db.VarChar(36) @map("election_id")
+  voterId      String      @db.VarChar(36) @map("voter_id")
+  issuedToUser String?     @db.VarChar(36) @map("issued_to_user")
+  tokenHash    String      @unique @db.VarChar(255) @map("token_hash")
+  status       TokenStatus @default(UNUSED)
+  issuedAt     DateTime    @default(now()) @map("issued_at")
+  usedAt       DateTime?   @map("used_at")
+  expiresAt    DateTime    @map("expires_at")
+  ipAddress    String?     @db.VarChar(45) @map("ip_address")
+  userAgent    String?     @db.Text @map("user_agent")
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
+
+  election     Election    @relation(fields: [electionId], references: [id])
+  voter        Voter       @relation(fields: [voterId],    references: [id])
+  issuedTo     User?       @relation(fields: [issuedToUser], references: [id])
+  ballot       Ballot?
+
+  @@unique([electionId, voterId])
+  @@index([electionId])
+  @@index([voterId])
+  @@index([status])
+  @@index([expiresAt])
+  @@map("voting_tokens")
+}
+
+// ---------------------------------------------------------------------------
+// BALLOT
+// ---------------------------------------------------------------------------
+
+model Ballot {
+  id               String    @id @default(uuid()) @db.VarChar(36)
+  electionId       String    @db.VarChar(36) @map("election_id")
+  candidateId      String    @db.VarChar(36) @map("candidate_id")
+  votingTokenId    String    @unique @db.VarChar(36) @map("voting_token_id")
+  voterId          String    @db.VarChar(36) @map("voter_id")
+  regionId         String    @db.VarChar(36) @map("region_id")
+  districtId       String?   @db.VarChar(36) @map("district_id")
+  pollingStationId String?   @db.VarChar(36) @map("polling_station_id")
+  castAt           DateTime  @default(now()) @map("cast_at")
+  ipAddress        String?   @db.VarChar(45) @map("ip_address")
+  receiptHash      String    @unique @db.VarChar(255) @map("receipt_hash")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  election         Election        @relation(fields: [electionId],    references: [id])
+  candidate        Candidate       @relation(fields: [candidateId],   references: [id])
+  votingToken      VotingToken     @relation(fields: [votingTokenId], references: [id])
+  voter            Voter           @relation(fields: [voterId],       references: [id])
+  region           Region          @relation(fields: [regionId],      references: [id])
+  district         District?       @relation(fields: [districtId],    references: [id])
+  pollingStation   PollingStation? @relation(fields: [pollingStationId], references: [id])
+
+  @@index([electionId])
+  @@index([candidateId])
+  @@index([regionId])
+  @@index([districtId])
+  @@index([pollingStationId])
+  @@index([castAt])
+  @@map("ballots")
+}
+
+// ---------------------------------------------------------------------------
+// RESULT
+// ---------------------------------------------------------------------------
+
+model Result {
+  id               String    @id @default(uuid()) @db.VarChar(36)
+  electionId       String    @db.VarChar(36) @map("election_id")
+  candidateId      String    @db.VarChar(36) @map("candidate_id")
+  regionId         String?   @db.VarChar(36) @map("region_id")
+  districtId       String?   @db.VarChar(36) @map("district_id")
+  pollingStationId String?   @db.VarChar(36) @map("polling_station_id")
+  totalVotes       Int       @default(0) @map("total_votes")
+  validVotes       Int       @default(0) @map("valid_votes")
+  rejectedVotes    Int       @default(0) @map("rejected_votes")
+  percentage       Decimal   @default(0) @db.Decimal(5, 2)
+  isWinner         Boolean   @default(false) @map("is_winner")
+  isFinal          Boolean   @default(false) @map("is_final")
+  computedAt       DateTime  @default(now()) @map("computed_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+  createdBy        String?   @db.VarChar(36) @map("created_by")
+
+  election         Election        @relation(fields: [electionId],    references: [id])
+  candidate        Candidate       @relation(fields: [candidateId],   references: [id])
+  region           Region?         @relation(fields: [regionId],      references: [id])
+  district         District?       @relation(fields: [districtId],    references: [id])
+  pollingStation   PollingStation? @relation(fields: [pollingStationId], references: [id])
+
+  @@unique([electionId, candidateId, regionId, districtId, pollingStationId], name: "electionId_candidateId_regionId_districtId_pollingStationId")
+  @@index([electionId])
+  @@index([candidateId])
+  @@index([regionId])
+  @@index([isFinal])
+  @@map("results")
+}
+
+// ---------------------------------------------------------------------------
+// AUDIT LOG
+// ---------------------------------------------------------------------------
+
+model AuditLog {
+  id           String      @id @default(uuid()) @db.VarChar(36)
+  userId       String?     @db.VarChar(36) @map("user_id")
+  electionId   String?     @db.VarChar(36) @map("election_id")
+  action       AuditAction
+  entity       String      @db.VarChar(100)
+  entityId     String?     @db.VarChar(36) @map("entity_id")
+  oldValues    Json?       @map("old_values")
+  newValues    Json?       @map("new_values")
+  ipAddress    String?     @db.VarChar(45) @map("ip_address")
+  userAgent    String?     @db.Text @map("user_agent")
+  description  String?     @db.Text
+  createdAt    DateTime    @default(now()) @map("created_at")
+
+  user         User?       @relation(fields: [userId],     references: [id])
+  election     Election?   @relation(fields: [electionId], references: [id])
+
+  @@index([userId])
+  @@index([electionId])
+  @@index([action])
+  @@index([entity, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ---------------------------------------------------------------------------
+// OBSERVER REPORT
+// ---------------------------------------------------------------------------
+
+model ObserverReport {
+  id               String               @id @default(uuid()) @db.VarChar(36)
+  electionId       String               @db.VarChar(36) @map("election_id")
+  observerId       String               @db.VarChar(36) @map("observer_id")
+  pollingStationId String?              @db.VarChar(36) @map("polling_station_id")
+  type             ObserverReportType
+  status           ObserverReportStatus @default(SUBMITTED)
+  title            String               @db.VarChar(255)
+  description      String               @db.Text
+  evidenceUrls     Json?                @map("evidence_urls")
+  resolvedBy       String?              @db.VarChar(36) @map("resolved_by")
+  resolvedAt       DateTime?            @map("resolved_at")
+  resolution       String?              @db.Text
+  createdAt        DateTime             @default(now()) @map("created_at")
+  updatedAt        DateTime             @updatedAt @map("updated_at")
+  deletedAt        DateTime?            @map("deleted_at")
+
+  election         Election        @relation(fields: [electionId],       references: [id])
+  observer         User            @relation(fields: [observerId],       references: [id])
+  pollingStation   PollingStation? @relation(fields: [pollingStationId], references: [id])
+
+  @@index([electionId])
+  @@index([observerId])
+  @@index([pollingStationId])
+  @@index([type])
+  @@index([status])
+  @@index([deletedAt])
+  @@map("observer_reports")
+}
+
+// ---------------------------------------------------------------------------
+// NOTIFICATION
+// ---------------------------------------------------------------------------
+
+model Notification {
+  id         String             @id @default(uuid()) @db.VarChar(36)
+  userId     String             @db.VarChar(36) @map("user_id")
+  type       NotificationType
+  status     NotificationStatus @default(PENDING)
+  subject    String             @db.VarChar(255)
+  body       String             @db.Text
+  metadata   Json?
+  sentAt     DateTime?          @map("sent_at")
+  readAt     DateTime?          @map("read_at")
+  createdAt  DateTime           @default(now()) @map("created_at")
+  updatedAt  DateTime           @updatedAt @map("updated_at")
+
+  user       User               @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([status])
+  @@index([type])
+  @@index([createdAt])
+  @@map("notifications")
+}
