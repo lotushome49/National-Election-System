@@ -19,4 +19,4 @@ export const HAS_PERMISSION = {
 } as const satisfies Record<string, readonly Role[]>;
 
 export const checkPerm = (role: Role, permission: keyof typeof HAS_PERMISSION) =>
-  HAS_PERMISSION[permission].includes(role);
+  (HAS_PERMISSION[permission] as readonly Role[]).includes(role);

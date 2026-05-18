@@ -4,15 +4,16 @@
     "module": "ESNext",
     "moduleResolution": "node",
     "outDir": "./dist",
-    "rootDir": "./src",
+    "rootDir": ".",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "allowJs": true,
-    "types": ["node", "vitest/globals"]
+    "jsx": "react-jsx",
+    "types": ["vitest/globals"]
   },
-  "include": ["src/**/*"],
+  "include": ["**/*"],
   "exclude": ["node_modules"]
 }
