@@ -31,6 +31,73 @@ function encryptBiometric(template: string): string {
   return `${iv.toString("hex")}:${encrypted.toString("hex")}`;
 }
 
+function decryptBiometric(ciphertext: string): string {
+  const [ivHex, encryptedHex] = ciphertext.split(":");
+  if (!ivHex || !encryptedHex) {
+    throw new Error("Invalid ciphertext format");
+  }
+  const iv = Buffer.from(ivHex, "hex");
+  const encrypted = Buffer.from(encryptedHex, "hex");
+  const decipher = crypto.createDecipheriv("aes-256-cbc", ENCRYPTION_KEY, iv);
+  let decrypted = decipher.update(encrypted);
+  decrypted = Buffer.concat([decrypted, decipher.final()]);
+  return decrypted.toString("utf8");
+}
+
+function normalizeBiometricSample(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "").trim();
+}
+
+function computeDeterministicBiometricScore(
+  probe: string,
+  reference: string,
+): number {
+  const p = normalizeBiometricSample(probe);
+  const r = normalizeBiometricSample(reference);
+
+  if (!p || !r) return 0;
+  if (p === r) return 100;
+
+  const probeGrams = buildBigrams(p);
+  const refGrams = buildBigrams(r);
+
+  const intersection = [...probeGrams].filter((gram) => refGrams.has(gram)).length;
+  const union = new Set([...probeGrams, ...refGrams]).size;
+  const jaccard = union > 0 ? intersection / union : 0;
+
+  const prefix = commonPrefixLength(p, r) / Math.max(p.length, r.length);
+  const lengthDelta =
+    Math.abs(p.length - r.length) / Math.max(1, Math.max(p.length, r.length));
+
+  const weighted = jaccard * 0.8 + prefix * 0.25 - lengthDelta * 0.15;
+  const score = Math.round(Math.max(0, Math.min(1, weighted)) * 100);
+
+  return score;
+}
+
+function buildBigrams(value: string): Set<string> {
+  if (value.length < 2) return new Set([value]);
+
+  const grams: string[] = [];
+  for (let i = 0; i < value.length - 1; i += 1) {
+    grams.push(value.slice(i, i + 2));
+  }
+
+  return new Set(grams);
+}
+
+function commonPrefixLength(a: string, b: string): number {
+  const max = Math.min(a.length, b.length);
+  let count = 0;
+
+  for (let i = 0; i < max; i += 1) {
+    if (a[i] !== b[i]) break;
+    count += 1;
+  }
+
+  return count;
+}
+
 // Rate limiter for authentication and registration attempts - Relaxed for development
 const authLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute
@@ -755,19 +822,42 @@ async function startServer() {
       }
 
       // Validate Uniqueness
-      let existingVoter: any = null;
+      let nidVoter: any = null;
       const bHash = crypto.createHash('sha256').update(biometricHash.toString().trim()).digest('hex');
 
       if (isConnected) {
-        const results = await db.select().from(voters).where(sql`${voters.nationalId} = ${nationalId} OR ${voters.biometricHash} = ${bHash}`).limit(1);
-        existingVoter = results[0];
+        const results = await db.select().from(voters).where(eq(voters.nationalId, nationalId)).limit(1);
+        nidVoter = results[0];
       } else {
-        existingVoter = memoryDb.voters.find(v => v.nationalId === nationalId || v.biometricHash === bHash);
+        nidVoter = memoryDb.voters.find(v => v.nationalId === nationalId);
       }
 
-      if (existingVoter) {
+      if (nidVoter) {
         await logAudit("REGISTRATION_REJECTED_DUPLICATE", { nationalId, email, phone });
-        return res.status(400).json({ error: "A voter with this National ID or Biometrics is already registered." });
+        return res.status(400).json({ error: "A voter with this National ID is already registered." });
+      }
+
+      // Fetch all voters and check fuzzy biometric match
+      let allVoters: any[] = [];
+      if (isConnected) {
+        allVoters = await db.select().from(voters);
+      } else {
+        allVoters = memoryDb.voters;
+      }
+
+      for (const v of allVoters) {
+        if (v.biometricTemplate) {
+          try {
+            const decrypted = decryptBiometric(v.biometricTemplate);
+            const score = computeDeterministicBiometricScore(biometricHash.toString().trim(), decrypted);
+            if (score >= 85) {
+              await logAudit("REGISTRATION_REJECTED_DUPLICATE", { nationalId, email, phone });
+              return res.status(400).json({ error: `Biometric duplicate detected: matches existing voter "${v.fullName}" with score of ${score}%` });
+            }
+          } catch (e) {
+            // Ignore decryption failure for legacy records
+          }
+        }
       }
 
       const birthDate = new Date(dob);
@@ -784,8 +874,7 @@ async function startServer() {
       }
 
       // Secure Biometric Processing
-      const biometricTemplate = `TEMPLATE_${bHash}`;
-      const encryptedTemplate = encryptBiometric(biometricTemplate);
+      const encryptedTemplate = encryptBiometric(biometricHash.toString().trim());
 
       const year = new Date().getFullYear();
       const randomSuffix = Math.floor(1000 + Math.random() * 9000);
@@ -830,6 +919,46 @@ async function startServer() {
     }
   });
 
+  app.post("/api/auth/login/biometric", authLimiter, async (req, res) => {
+    const { biometricHash } = req.body;
+    if (!biometricHash) return res.status(400).json({ error: "Biometric hash required" });
+
+    let allVoters: any[] = [];
+    if (isConnected) {
+      allVoters = await db.select().from(voters);
+    } else {
+      allVoters = memoryDb.voters;
+    }
+
+    let bestVoter: any = null;
+    let highestScore = 0;
+
+    for (const v of allVoters) {
+      if (v.biometricTemplate) {
+        try {
+          const decrypted = decryptBiometric(v.biometricTemplate);
+          const score = computeDeterministicBiometricScore(biometricHash, decrypted);
+          if (score > highestScore) {
+            highestScore = score;
+            bestVoter = v;
+          }
+        } catch (e) {
+          // Ignore decryption failure
+        }
+      }
+    }
+
+    if (!bestVoter || highestScore < 85) {
+      await logAudit("VOTER_LOGIN_FAILED", { biometricHash });
+      return res.status(401).json({ error: `Biometric authentication failed${highestScore > 0 ? ` (highest match: ${highestScore}%)` : ""}` });
+    }
+
+    const voter = bestVoter;
+    const token = jwt.sign({ id: voter.id, role: ROLES.VOTER }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+    await logAudit("VOTER_LOGIN_SUCCESS", { voterId: voter.id, matchScore: highestScore });
+    return res.json({ token, user: { id: voter.id, fullName: voter.fullName, hasVoted: voter.hasVoted, role: ROLES.VOTER }, matchScore: highestScore });
+  });
+
   app.post("/api/auth/login", authLimiter, async (req, res) => {
     const { role, username, password, biometricHash, regionId, districtId } = req.body;
 
@@ -837,23 +966,40 @@ async function startServer() {
     if (role === ROLES.VOTER) {
       if (!biometricHash) return res.status(400).json({ error: "Biometric hash required" });
 
-      const bHash = crypto.createHash('sha256').update(biometricHash.toString().trim()).digest('hex');
-      let voter: any = null;
+      let allVoters: any[] = [];
       if (isConnected) {
-        const results = await db.select().from(voters).where(eq(voters.biometricHash, bHash)).limit(1);
-        voter = results[0];
+        allVoters = await db.select().from(voters);
       } else {
-        voter = memoryDb.voters.find((v: any) => v.biometricHash === bHash);
+        allVoters = memoryDb.voters;
       }
 
-      if (!voter) {
+      let bestVoter: any = null;
+      let highestScore = 0;
+
+      for (const v of allVoters) {
+        if (v.biometricTemplate) {
+          try {
+            const decrypted = decryptBiometric(v.biometricTemplate);
+            const score = computeDeterministicBiometricScore(biometricHash, decrypted);
+            if (score > highestScore) {
+              highestScore = score;
+              bestVoter = v;
+            }
+          } catch (e) {
+            // Ignore decryption failure
+          }
+        }
+      }
+
+      if (!bestVoter || highestScore < 85) {
         await logAudit("VOTER_LOGIN_FAILED", { biometricHash });
-        return res.status(401).json({ error: "Biometric authentication failed." });
+        return res.status(401).json({ error: `Biometric authentication failed${highestScore > 0 ? ` (highest match: ${highestScore}%)` : ""}` });
       }
 
+      const voter = bestVoter;
       const token = jwt.sign({ id: voter.id, role: ROLES.VOTER }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
-      await logAudit("VOTER_LOGIN_SUCCESS", { voterId: voter.id });
-      return res.json({ token, user: { id: voter.id, fullName: voter.fullName, hasVoted: voter.hasVoted, role: ROLES.VOTER } });
+      await logAudit("VOTER_LOGIN_SUCCESS", { voterId: voter.id, matchScore: highestScore });
+      return res.json({ token, user: { id: voter.id, fullName: voter.fullName, hasVoted: voter.hasVoted, role: ROLES.VOTER }, matchScore: highestScore });
     }
 
     // Role-based login with Username/Password

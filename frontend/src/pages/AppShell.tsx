@@ -40,6 +40,8 @@ import { MfaSecurityView } from "../components/admin/MfaSecurityView";
 import { PasswordResetView } from "../components/auth/PasswordResetView";
 import { SessionManagementView } from "../components/admin/SessionManagementView";
 import { ObserverEvidenceView } from "../components/observer/ObserverEvidenceView";
+import { ElectionManagementView } from "../components/admin/ElectionManagementView";
+import { CandidateManagementView } from "../components/admin/CandidateManagementView";
 import { LogItem } from "../components/results/LogItem";
 import { StatCard } from "../components/results/StatCard";
 import { checkPerm } from "../constants/permissions";
@@ -180,6 +182,40 @@ export default function AppShell() {
                 <Lock size={18} />
                 <span className="text-sm tracking-tight">
                   {t("user_management")}
+                </span>
+              </button>
+            )}
+
+            {checkPerm(role, "MANAGE_ELECTION") && (
+              <button
+                onClick={() => setView("elections")}
+                className={cn(
+                  "w-full flex items-center gap-3 px-5 py-3.5 rounded-2xl font-bold transition-all duration-300",
+                  view === "elections"
+                    ? "bg-slate-900 text-white shadow-lg shadow-slate-200"
+                    : "text-slate-400 hover:text-slate-600 hover:bg-slate-50",
+                )}
+              >
+                <Boxes size={18} />
+                <span className="text-sm tracking-tight">
+                  {lang === "en" ? "Elections" : "ምርጫዎች"}
+                </span>
+              </button>
+            )}
+
+            {checkPerm(role, "MANAGE_ELECTION") && (
+              <button
+                onClick={() => setView("candidates")}
+                className={cn(
+                  "w-full flex items-center gap-3 px-5 py-3.5 rounded-2xl font-bold transition-all duration-300",
+                  view === "candidates"
+                    ? "bg-slate-900 text-white shadow-lg shadow-slate-200"
+                    : "text-slate-400 hover:text-slate-600 hover:bg-slate-50",
+                )}
+              >
+                <Users size={18} />
+                <span className="text-sm tracking-tight">
+                  {lang === "en" ? "Candidates" : "ዕጩዎች"}
                 </span>
               </button>
             )}
@@ -402,6 +438,28 @@ export default function AppShell() {
                 {t("user_management")}
               </button>
             )}
+            {checkPerm(role, "MANAGE_ELECTION") && (
+              <button
+                onClick={() => {
+                  setView("elections");
+                  setMobileMenuOpen(false);
+                }}
+                className="w-full text-left font-bold text-slate-700 p-3 hover:bg-slate-50 rounded-xl"
+              >
+                {lang === "en" ? "Elections" : "ምርጫዎች"}
+              </button>
+            )}
+            {checkPerm(role, "MANAGE_ELECTION") && (
+              <button
+                onClick={() => {
+                  setView("candidates");
+                  setMobileMenuOpen(false);
+                }}
+                className="w-full text-left font-bold text-slate-700 p-3 hover:bg-slate-50 rounded-xl"
+              >
+                {lang === "en" ? "Candidates" : "ዕጩዎች"}
+              </button>
+            )}
             {checkPerm(role, "VIEW_AUDIT_LOGS") && (
               <button
                 onClick={() => {
@@ -565,6 +623,20 @@ export default function AppShell() {
                 token={token}
                 t={t}
                 i18n={i18n}
+                user={user}
+              />
+            )}
+            {view === "elections" && checkPerm(role, "MANAGE_ELECTION") && (
+              <ElectionManagementView
+                setView={setView}
+                token={token}
+                user={user}
+              />
+            )}
+            {view === "candidates" && checkPerm(role, "MANAGE_ELECTION") && (
+              <CandidateManagementView
+                setView={setView}
+                token={token}
                 user={user}
               />
             )}
@@ -761,6 +833,72 @@ function LoginView({
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const lang = i18n.language as "en" | "am";
 
+  const [biometricState, setBiometricState] = useState<'idle' | 'initializing' | 'scanning' | 'verifying' | 'failed' | 'success'>('idle');
+  const [biometricScore, setBiometricScore] = useState<number | null>(null);
+  const [cooldown, setCooldown] = useState(0);
+
+  useEffect(() => {
+    if (cooldown > 0) {
+      const timer = setTimeout(() => setCooldown(cooldown - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [cooldown]);
+
+  const startBiometricLogin = async () => {
+    if (cooldown > 0) return;
+    setBiometricState('initializing');
+    setError("");
+    
+    // Simulate fingerprint sensor initializing (800ms)
+    await new Promise(r => setTimeout(r, 800));
+    setBiometricState('scanning');
+    
+    // Simulate scan pattern matching (1200ms)
+    await new Promise(r => setTimeout(r, 1200));
+    setBiometricState('verifying');
+    
+    try {
+      const endpoint = "/api/auth/login/biometric";
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ biometricHash: fpHash }),
+      });
+
+      const contentType = response.headers.get("content-type");
+      let data;
+      if (contentType && contentType.includes("application/json")) {
+        data = await response.json();
+      } else {
+        throw new Error("Authentication failed: Server returned an invalid response.");
+      }
+
+      if (!response.ok) {
+        throw new Error(data?.message || data?.error || "Authentication failed");
+      }
+
+      const unwrapped = unwrapApiData(data);
+      setBiometricState('success');
+      setBiometricScore(unwrapped?.matchScore || 100);
+      
+      // Delay slightly for success animation before finalize
+      await new Promise(r => setTimeout(r, 1000));
+      finalizeLogin(unwrapped, "VOTER");
+    } catch (err: any) {
+      setBiometricState('failed');
+      const scoreMatch = err.message.match(/highest match: (\d+)%/);
+      if (scoreMatch) {
+        setBiometricScore(parseInt(scoreMatch[1], 10));
+      } else {
+        setBiometricScore(null);
+      }
+      setError(err.message);
+      
+      // Trigger a 5 seconds cooldown
+      setCooldown(5);
+    }
+  };
+
   const resetChallengeState = () => {
     setMfaChallengeToken(null);
     setMfaCode("");
@@ -925,12 +1063,116 @@ function LoginView({
         )}
 
         <div className="space-y-8 relative z-10">
-          {!selectedRole ? (
+          {biometricState !== 'idle' ? (
+            <div className="flex flex-col items-center justify-center p-6 bg-slate-50 border border-slate-100 rounded-3xl animate-in fade-in zoom-in duration-300">
+              <div className="relative mb-6">
+                {/* Glowing Outer Rings */}
+                <div className={`absolute -inset-4 rounded-full blur-xl opacity-35 transition-all duration-500 ${
+                  biometricState === 'success' ? 'bg-green-500 scale-110' :
+                  biometricState === 'failed' ? 'bg-red-500 scale-100' :
+                  'bg-election-blue animate-pulse'
+                }`} />
+
+                {/* Fingerprint container */}
+                <div className={`relative w-32 h-32 rounded-full border-4 flex items-center justify-center bg-white transition-all duration-500 ${
+                  biometricState === 'success' ? 'border-green-500 shadow-2xl shadow-green-200' :
+                  biometricState === 'failed' ? 'border-red-500 shadow-2xl shadow-red-200' :
+                  'border-election-blue shadow-2xl shadow-sky-100'
+                }`}>
+                  {biometricState === 'success' ? (
+                    <CheckCircle2 className="text-green-500 w-16 h-16 animate-bounce" />
+                  ) : biometricState === 'failed' ? (
+                    <AlertCircle className="text-red-500 w-16 h-16" />
+                  ) : (
+                    <Fingerprint className={`text-election-blue w-16 h-16 transition-all duration-300 ${
+                      biometricState === 'scanning' ? 'scale-110 animate-pulse' : ''
+                    }`} />
+                  )}
+
+                  {/* Scanning Laser Line */}
+                  {(biometricState === 'scanning' || biometricState === 'verifying') && (
+                    <motion.div
+                      animate={{ top: ["15%", "85%", "15%"] }}
+                      transition={{
+                        repeat: Infinity,
+                        duration: 2,
+                        ease: "easeInOut",
+                      }}
+                      className="absolute left-4 right-4 h-1 bg-election-blue rounded-full shadow-[0_0_10px_#0ea5e9]"
+                    />
+                  )}
+                </div>
+              </div>
+
+              {/* Status title & description */}
+              <h3 className="font-bold text-xl tracking-tight text-slate-800 mb-2">
+                {biometricState === 'initializing' && "Initializing Sensor..."}
+                {biometricState === 'scanning' && "Scanning Fingerprint..."}
+                {biometricState === 'verifying' && "Verifying Signature..."}
+                {biometricState === 'success' && "Verification Success!"}
+                {biometricState === 'failed' && "Biometric Match Failed"}
+              </h3>
+
+              <p className="text-xs text-slate-500 text-center max-w-xs font-mono uppercase tracking-wider mb-6">
+                {biometricState === 'initializing' && "Aligning optical reader and loading core cryptography keys..."}
+                {biometricState === 'scanning' && `Hashing sensor pattern... SHA256[${fpHash ? fpHash.slice(0, 8) : "INITIALIZING"}...]`}
+                {biometricState === 'verifying' && "Executing 1:N Jaccard similarity distance search..."}
+                {biometricState === 'success' && `Perfect Match Verified! Score: ${biometricScore}%`}
+                {biometricState === 'failed' && (
+                  biometricScore !== null 
+                    ? `Matching similarity score: ${biometricScore}% (Requires >= 85%)`
+                    : "No matching biometric profile found on ledger."
+                )}
+              </p>
+
+              {/* Action buttons / cooldown indicator */}
+              <div className="w-full flex gap-3">
+                {biometricState === 'failed' && (
+                  <>
+                    <button
+                      disabled={cooldown > 0}
+                      onClick={startBiometricLogin}
+                      className="flex-1 bg-election-blue text-white py-3 px-6 rounded-xl text-xs font-bold shadow-lg shadow-election-blue/20 hover:bg-sky-600 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+                    >
+                      {cooldown > 0 ? (
+                        <>
+                          <RefreshCw size={12} className="animate-spin" />
+                          Retry in {cooldown}s
+                        </>
+                      ) : (
+                        "Scan Again"
+                      )}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setBiometricState('idle');
+                        setError("");
+                      }}
+                      className="flex-1 bg-slate-100 text-slate-600 py-3 px-6 rounded-xl text-xs font-bold hover:bg-slate-200 transition-all"
+                    >
+                      Use Other Account
+                    </button>
+                  </>
+                )}
+                {(biometricState === 'initializing' || biometricState === 'scanning' || biometricState === 'verifying') && (
+                  <button
+                    onClick={() => {
+                      setBiometricState('idle');
+                      setLoading(false);
+                    }}
+                    className="w-full bg-slate-100 text-slate-600 py-3 rounded-xl text-xs font-bold hover:bg-slate-200 transition-all"
+                  >
+                    Cancel Scan
+                  </button>
+                )}
+              </div>
+            </div>
+          ) : !selectedRole ? (
             <>
               <div className="space-y-4">
                 <button
-                  disabled={loading}
-                  onClick={() => loginAs("VOTER")}
+                  disabled={loading || cooldown > 0}
+                  onClick={startBiometricLogin}
                   className="w-full group bg-slate-900 text-white p-8 rounded-[2rem] font-bold flex items-center justify-between hover:bg-slate-800 transition-all duration-300 disabled:opacity-50 shadow-2xl shadow-slate-300"
                 >
                   <div className="flex items-center gap-6">

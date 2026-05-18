@@ -1,7 +1,9 @@
 import { v4 as uuidv4 } from "uuid";
 import { voterRepository } from "./voter.repository";
-import { sha256, encrypt } from "../../utils/crypto";
+import { sha256, encrypt, decrypt } from "../../utils/crypto";
 import { ConflictError, NotFoundError } from "../../errors/AppError";
+import { prisma } from "../../configs/database";
+import { computeDeterministicBiometricScore } from "../../utils/biometricMock";
 import { buildPaginationMeta } from "../../utils/response";
 import { applyUserScope, assertUserScopeAccess } from "../../utils/scope";
 import { auditService } from "../audit/audit.service";
@@ -43,6 +45,29 @@ export const voterService = {
     const byNationalId = await voterRepository.findByNationalId(dto.nationalId);
     if (byNationalId)
       throw new ConflictError("A voter with this national ID already exists");
+
+    // 1:N fuzzy biometric check
+    const allVoters = await prisma.voter.findMany({
+      where: { deletedAt: null },
+      select: { id: true, fullName: true, biometricTemplate: true }
+    });
+
+    for (const v of allVoters) {
+      if (v.biometricTemplate) {
+        try {
+          const decrypted = decrypt(v.biometricTemplate);
+          const score = computeDeterministicBiometricScore(dto.biometricHash, decrypted);
+          if (score >= 85) {
+            throw new ConflictError(
+              `Biometric duplicate detected: matches existing voter "${v.fullName}" with score of ${score}%`
+            );
+          }
+        } catch (e: any) {
+          if (e instanceof ConflictError) throw e;
+          // Ignore decryption failures for corrupted/legacy database records
+        }
+      }
+    }
 
     const biometricHash = sha256(dto.biometricHash);
     const byBiometric =

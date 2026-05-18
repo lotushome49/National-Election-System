@@ -128,6 +128,7 @@ test('completeMfaChallenge consumes a recovery code and issues tokens', async (t
       return { ...user, mfaEnabled: enabled, mfaSecret: cipher } as any;
     }),
     stubMethod(authRepository, 'saveRefreshToken', async () => undefined),
+    stubMethod(authRepository, 'createSession', async () => ({ id: 'session-1' } as any)),
     stubMethod(auditService, 'log', async () => undefined),
   ];
   t.after(() => restore.forEach((fn) => fn()));

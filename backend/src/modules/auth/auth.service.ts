@@ -34,6 +34,8 @@ import type {
   MfaEnrollmentVerifyDto,
   MfaDisableDto,
 } from "./auth.schema";
+import { prisma } from "../../configs/database";
+import { computeDeterministicBiometricScore } from "../../utils/biometricMock";
 
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCK_DURATION_MS = 30 * 60 * 1000;
@@ -192,12 +194,36 @@ export const authService = {
   },
 
   async biometricLogin(dto: BiometricLoginDto, ip: string) {
-    const hash = sha256(dto.biometricHash);
-    const voter = await authRepository.findVoterByBiometricHash(hash);
+    // 1:N fuzzy lookup
+    const allVoters = await prisma.voter.findMany({
+      where: { deletedAt: null },
+    });
 
-    if (!voter) {
-      throw new UnauthorizedError("Biometric authentication failed");
+    let bestVoter: any = null;
+    let highestScore = 0;
+
+    for (const v of allVoters) {
+      if (v.biometricTemplate) {
+        try {
+          const decrypted = decrypt(v.biometricTemplate);
+          const score = computeDeterministicBiometricScore(dto.biometricHash, decrypted);
+          if (score > highestScore) {
+            highestScore = score;
+            bestVoter = v;
+          }
+        } catch (e) {
+          // Ignore decryption failures
+        }
+      }
     }
+
+    if (!bestVoter || highestScore < 85) {
+      throw new UnauthorizedError(
+        `Biometric authentication failed${highestScore > 0 ? ` (highest match: ${highestScore}%)` : ""}`
+      );
+    }
+
+    const voter = bestVoter;
 
     const session = await authRepository.createSession({
       userId: voter.id,
@@ -218,7 +244,7 @@ export const authService = {
       action: "LOGIN",
       entity: "Voter",
       entityId: voter.id,
-      description: "Voter biometric login",
+      description: `Voter biometric login (match score: ${highestScore}%)`,
       ipAddress: ip,
     });
 
@@ -229,6 +255,7 @@ export const authService = {
       token: accessToken,
       sessionId: session.id,
       voter: { id: voter.id, voterId: voter.voterId },
+      matchScore: highestScore,
     };
   },
 
