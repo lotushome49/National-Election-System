@@ -41,6 +41,12 @@ router.patch(
   validate(updateVoterSchema),
   voterController.update,
 );
+router.patch(
+  "/:id/verify",
+  requirePermission("MANAGE_VOTERS"),
+  scopeGuard,
+  voterController.verify,
+);
 router.delete(
   "/:id",
   requirePermission("MANAGE_VOTERS"),

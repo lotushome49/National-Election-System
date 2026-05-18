@@ -288,7 +288,42 @@ async function startServer() {
         status: "ACTIVE"
       }
     ] as any[],
-    voters: [] as any[],
+    voters: [
+      {
+        id: "voter-1",
+        voterId: "ET-2026-8941-4567",
+        fullName: "Abebe Bikila",
+        dob: "1985-05-15",
+        nationalId: "NID-123456",
+        address: "Addis Ababa, Arada Sub-city, House 123",
+        phone: "+251911223344",
+        email: "abebe@election.gov.et",
+        regionId: "r1",
+        districtId: "Bole",
+        biometricTemplate: "encrypted_template_1",
+        biometricHash: "c3a8b9f0e1d2c3b4a5f6e7",
+        hasVoted: false,
+        isVerified: true,
+        registrationDate: new Date()
+      },
+      {
+        id: "voter-2",
+        voterId: "ET-2026-1049-7890",
+        fullName: "Tirunesh Dibaba",
+        dob: "1990-10-20",
+        nationalId: "NID-654321",
+        address: "Addis Ababa, Bole Sub-city, House 456",
+        phone: "+251911556677",
+        email: "tirunesh@election.gov.et",
+        regionId: "r1",
+        districtId: "Bole",
+        biometricTemplate: "encrypted_template_2",
+        biometricHash: "a1b2c3d4e5f6a1b2c3d4e5",
+        hasVoted: false,
+        isVerified: false,
+        registrationDate: new Date()
+      }
+    ] as any[],
     votes: [] as any[],
     auditLogs: [] as any[],
     electionSettings: [{ id: 1, phase: 'REGISTRATION' }]
@@ -608,6 +643,33 @@ async function startServer() {
     }
   });
 
+  app.patch("/api/admin/voters/:id/verify", authorize("REGISTER_VOTER"), async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { verified } = req.body;
+
+      if (isConnected) {
+        // Fallback or Drizzle update if Drizzle is connected
+        await db.update(voters).set({ isVerified: Boolean(verified) }).where(eq(voters.id, id));
+      } else {
+        const voter = memoryDb.voters.find(v => v.id === id);
+        if (voter) {
+          voter.isVerified = Boolean(verified);
+        }
+      }
+
+      await logAudit("VOTER_VERIFICATION_UPDATED", {
+        voterId: id,
+        verified: Boolean(verified),
+        adminId: (req as any).user.id || "ADMIN",
+      });
+
+      res.json({ success: true, verified: Boolean(verified) });
+    } catch (e) {
+      res.status(500).json({ error: "Failed to update voter verification status" });
+    }
+  });
+
   app.get("/api/admin/audit-logs", authorize("VIEW_AUDIT_LOGS"), async (req, res) => {
     try {
       if (isConnected) {
@@ -893,6 +955,7 @@ async function startServer() {
         biometricTemplate: encryptedTemplate,
         biometricHash: bHash,
         hasVoted: false,
+        isVerified: false,
         registrationDate: new Date()
       };
 
@@ -954,6 +1017,10 @@ async function startServer() {
     }
 
     const voter = bestVoter;
+    if (!voter.isVerified) {
+      await logAudit("VOTER_LOGIN_UNVERIFIED", { voterId: voter.id });
+      return res.status(403).json({ error: "Voter registration is awaiting verification approval." });
+    }
     const token = jwt.sign({ id: voter.id, role: ROLES.VOTER }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
     await logAudit("VOTER_LOGIN_SUCCESS", { voterId: voter.id, matchScore: highestScore });
     return res.json({ token, user: { id: voter.id, fullName: voter.fullName, hasVoted: voter.hasVoted, role: ROLES.VOTER }, matchScore: highestScore });
@@ -997,6 +1064,10 @@ async function startServer() {
       }
 
       const voter = bestVoter;
+      if (!voter.isVerified) {
+        await logAudit("VOTER_LOGIN_UNVERIFIED", { voterId: voter.id });
+        return res.status(403).json({ error: "Voter registration is awaiting verification approval." });
+      }
       const token = jwt.sign({ id: voter.id, role: ROLES.VOTER }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
       await logAudit("VOTER_LOGIN_SUCCESS", { voterId: voter.id, matchScore: highestScore });
       return res.json({ token, user: { id: voter.id, fullName: voter.fullName, hasVoted: voter.hasVoted, role: ROLES.VOTER }, matchScore: highestScore });

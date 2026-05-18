@@ -70,4 +70,20 @@ export const voterController = {
       next(err);
     }
   },
+
+  verify: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const { verified } = req.body;
+      const result = await voterService.verify(
+        req.params.id,
+        Boolean(verified),
+        req.user!.sub,
+        req.ip ?? "",
+        req.user,
+      );
+      sendSuccess(res, result, "Voter verification status updated successfully");
+    } catch (err) {
+      next(err);
+    }
+  },
 };

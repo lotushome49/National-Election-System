@@ -9,6 +9,10 @@ import {
   Globe,
   MapPin,
   CheckCircle,
+  FileText,
+  Upload,
+  Download,
+  ShieldCheck,
 } from "lucide-react";
 import { motion } from "motion/react";
 import { fetchJson } from "../../services/api/client";
@@ -29,6 +33,7 @@ type Candidate = {
   regionId?: string | null;
   districtId?: string | null;
   election?: { title: string };
+  documentsJson?: string | null;
 };
 
 type Election = {
@@ -81,6 +86,10 @@ export function CandidateManagementView({ setView, token, user }: Props) {
   const [showModal, setShowModal] = useState(false);
   const [modalMode, setModalMode] = useState<"create" | "edit">("create");
   const [editingId, setEditingId] = useState<string | null>(null);
+
+  const [selectedCandidateForDocs, setSelectedCandidateForDocs] = useState<Candidate | null>(null);
+  const [uploadingDocs, setUploadingDocs] = useState(false);
+  const [docUploadError, setDocUploadError] = useState<string | null>(null);
 
   const [form, setForm] = useState({
     electionId: "",
@@ -312,6 +321,23 @@ export function CandidateManagementView({ setView, token, user }: Props) {
                     <p className="text-[9px] text-slate-300 font-black uppercase">
                       ID: {cand.id} · Region: {cand.regionId || "National Scope"}
                     </p>
+                    {cand.documentsJson && JSON.parse(cand.documentsJson).length > 0 && (
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {JSON.parse(cand.documentsJson).map((doc: any) => (
+                          <a
+                            key={doc.id}
+                            href={doc.publicUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1 px-2 py-0.5 bg-slate-50 hover:bg-slate-100 text-slate-500 rounded border border-slate-100 text-[8px] font-bold uppercase tracking-wider transition-colors"
+                            title={`Checksum: ${doc.checksum}`}
+                          >
+                            <FileText size={10} className="text-slate-400" />
+                            {doc.originalName}
+                          </a>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -333,6 +359,13 @@ export function CandidateManagementView({ setView, token, user }: Props) {
                       </button>
                     </>
                   )}
+
+                  <button
+                    onClick={() => setSelectedCandidateForDocs(cand)}
+                    className="px-4 py-2 bg-slate-50 text-slate-600 hover:bg-slate-900 hover:text-white border border-slate-100 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-1"
+                  >
+                    <FileText size={10} /> Credentials
+                  </button>
 
                   <button
                     onClick={() => openEdit(cand)}
@@ -488,6 +521,176 @@ export function CandidateManagementView({ setView, token, user }: Props) {
                 {modalMode === "create" ? "Register Contestant" : "Save Changes"}
               </button>
             </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Credentials Modal */}
+      {selectedCandidateForDocs && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-6 z-50">
+          <motion.div
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-white rounded-[3.5rem] shadow-2xl border border-slate-100 max-w-2xl w-full p-10 space-y-6 max-h-[90vh] overflow-y-auto"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-display font-black text-2xl text-slate-900 uppercase tracking-tighter">
+                  Candidacy Credentials
+                </h3>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">
+                  Contestant: {selectedCandidateForDocs.fullName} · Party: {selectedCandidateForDocs.party}
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setSelectedCandidateForDocs(null);
+                  setDocUploadError(null);
+                }}
+                className="p-3 bg-slate-50 text-slate-400 hover:text-slate-900 rounded-full transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-5 rounded-2xl bg-amber-50/50 border border-amber-100 space-y-2">
+              <h4 className="text-[9px] font-black uppercase tracking-widest text-amber-800 flex items-center gap-1.5">
+                <ShieldCheck size={12} /> Compliance Requirements
+              </h4>
+              <p className="text-[10px] text-amber-700/80 leading-relaxed font-medium">
+                Please upload academic certificates, endorsement letters, and clean record audits in secure PDF format. Maximum size per file is 25MB.
+              </p>
+            </div>
+
+            {/* Document List */}
+            <div className="space-y-3">
+              <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                Uploaded Credentials
+              </h4>
+
+              {(() => {
+                const docs = selectedCandidateForDocs.documentsJson
+                  ? JSON.parse(selectedCandidateForDocs.documentsJson)
+                  : [];
+
+                if (docs.length === 0) {
+                  return (
+                    <div className="p-8 text-center border-2 border-dashed border-slate-100 rounded-2xl text-slate-400 text-[10px] font-bold uppercase tracking-wider">
+                      No credentials uploaded yet. Please use the section below to upload.
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                    {docs.map((doc: any) => (
+                      <div
+                        key={doc.id}
+                        className="p-4 rounded-xl border border-slate-100 hover:bg-slate-50/50 flex items-center justify-between gap-4 transition-all"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="p-2.5 bg-slate-50 rounded-lg text-slate-400">
+                            <FileText size={18} />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-bold text-xs text-slate-900 truncate uppercase tracking-tight">
+                              {doc.originalName}
+                            </p>
+                            <p className="text-[8px] text-slate-400 font-medium uppercase mt-0.5">
+                              {Math.round(doc.fileSize / 1024)} KB · Uploaded {new Date(doc.uploadedAt).toLocaleDateString()}
+                            </p>
+                            <p className="text-[7px] font-mono text-slate-300 truncate mt-0.5" title={`SHA-256: ${doc.checksum}`}>
+                              SHA-256: {doc.checksum}
+                            </p>
+                          </div>
+                        </div>
+
+                        <a
+                          href={doc.publicUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-2.5 bg-slate-50 hover:bg-slate-900 hover:text-white rounded-lg text-slate-500 transition-all flex items-center justify-center shrink-0"
+                        >
+                          <Download size={14} />
+                        </a>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Upload Area */}
+            <div className="space-y-3">
+              <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 font-display">
+                Upload New Credentials
+              </h4>
+
+              <div className="relative group border-2 border-dashed border-slate-200 hover:border-slate-400 rounded-[2rem] p-8 text-center transition-all bg-slate-50/50 hover:bg-slate-50">
+                <input
+                  type="file"
+                  multiple
+                  accept=".pdf,application/pdf"
+                  onChange={async (e) => {
+                    const files = e.target.files;
+                    if (!files || files.length === 0) return;
+
+                    setUploadingDocs(true);
+                    setDocUploadError(null);
+
+                    try {
+                      const formData = new FormData();
+                      for (let i = 0; i < files.length; i++) {
+                        if (files[i].type !== "application/pdf") {
+                          throw new Error("Only secure PDF documents are permitted.");
+                        }
+                        formData.append("files", files[i]);
+                      }
+
+                      const res = await fetchJson<any>(`/api/v1/candidates/${selectedCandidateForDocs.id}/documents`, {
+                        method: "POST",
+                        body: formData,
+                        headers: {
+                          Authorization: `Bearer ${token}`,
+                        },
+                      });
+
+                      // Re-load the main candidate list
+                      await loadData();
+
+                      // Update the selected candidate modal state
+                      if (res && res.data) {
+                        setSelectedCandidateForDocs(res.data);
+                      }
+                    } catch (err: any) {
+                      setDocUploadError(err.message || "Failed to upload document");
+                    } finally {
+                      setUploadingDocs(false);
+                    }
+                  }}
+                  disabled={uploadingDocs}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
+                />
+                
+                <div className="space-y-2 pointer-events-none">
+                  <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto text-slate-400 group-hover:scale-110 transition-transform">
+                    <Upload size={18} />
+                  </div>
+                  <div className="text-[10px] font-black uppercase tracking-widest text-slate-600">
+                    {uploadingDocs ? "Uploading credentials..." : "Drag & drop or click to upload PDF"}
+                  </div>
+                  <div className="text-[8px] text-slate-400 font-medium uppercase">
+                    Verification documents, certificates, letters (Max 25MB)
+                  </div>
+                </div>
+              </div>
+
+              {docUploadError && (
+                <div className="p-4 rounded-xl bg-rose-50 border border-rose-100 text-rose-600 text-[10px] font-bold uppercase tracking-widest flex items-center gap-2">
+                  <AlertCircle size={14} /> {docUploadError}
+                </div>
+              )}
+            </div>
           </motion.div>
         </div>
       )}

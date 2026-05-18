@@ -9,6 +9,7 @@ import {
   candidateStatusSchema,
   candidateQuerySchema,
 } from "./candidate.schema";
+import { candidateUpload } from "./candidate.upload";
 
 const router = Router();
 
@@ -44,6 +45,13 @@ router.patch(
   scopeGuard,
   validate(candidateStatusSchema),
   candidateController.updateStatus,
+);
+router.post(
+  "/:id/documents",
+  requirePermission("MANAGE_CANDIDATES"),
+  scopeGuard,
+  candidateUpload.array("files"),
+  candidateController.uploadDocuments,
 );
 router.delete(
   "/:id",

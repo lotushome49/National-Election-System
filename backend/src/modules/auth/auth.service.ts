@@ -225,6 +225,10 @@ export const authService = {
 
     const voter = bestVoter;
 
+    if (!voter.isVerified) {
+      throw new UnauthorizedError("Voter registration is awaiting verification approval.");
+    }
+
     const session = await authRepository.createSession({
       userId: voter.id,
       expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),

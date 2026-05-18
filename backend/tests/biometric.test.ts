@@ -98,6 +98,7 @@ test('biometricLogin performs successful 1:N fuzzy matches and returns match sco
     biometricTemplate: encrypt('c3a8b9f0e1d2c3b4a5f6e7'),
     regionId: 'r1',
     districtId: 'd1',
+    isVerified: true,
   };
 
   const prismaFindManyStub = async (args?: any) => [existingVoter] as any;

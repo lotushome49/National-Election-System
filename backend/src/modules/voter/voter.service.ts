@@ -170,4 +170,36 @@ export const voterService = {
       ipAddress: ip,
     });
   },
+
+  async verify(
+    id: string,
+    verified: boolean,
+    actorId: string,
+    ip: string,
+    requester?: JwtPayload,
+  ) {
+    const existing = await voterRepository.findById(id);
+    if (!existing) throw new NotFoundError("Voter");
+    assertUserScopeAccess(
+      requester,
+      { regionId: existing.regionId, districtId: existing.districtId },
+      "voters",
+    );
+
+    const updated = await voterRepository.update(id, {
+      isVerified: verified,
+      updatedBy: actorId,
+    });
+
+    await auditService.log({
+      userId: actorId,
+      action: "UPDATE",
+      entity: "Voter",
+      entityId: id,
+      description: `Voter verification status set to ${verified}`,
+      ipAddress: ip,
+    });
+
+    return updated;
+  },
 };

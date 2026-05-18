@@ -6,6 +6,7 @@ import {
   sendNoContent,
   sendPaginated,
 } from "../../utils/response";
+import { BadRequestError } from "../../errors/AppError";
 import type { AuthRequest } from "../../types";
 
 export const candidateController = {
@@ -87,6 +88,25 @@ export const candidateController = {
         req.user,
       );
       sendNoContent(res);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  uploadDocuments: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const files = (req.files || []) as Express.Multer.File[];
+      if (files.length === 0) {
+        throw new BadRequestError("No files uploaded");
+      }
+      const updated = await candidateService.uploadDocuments(
+        req.params.id,
+        files,
+        req.user!.sub,
+        req.ip ?? "",
+        req.user,
+      );
+      sendSuccess(res, updated, "Candidate credentials uploaded");
     } catch (err) {
       next(err);
     }
