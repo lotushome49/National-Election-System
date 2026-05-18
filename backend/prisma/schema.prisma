@@ -298,6 +298,7 @@ model User {
   observerReports  ObserverReport[]
   votingTokens     VotingToken[]
   sessions         UserSession[]
+  passwordResetToken PasswordResetToken?
 
   @@index([roleId])
   @@index([status])
@@ -348,6 +349,29 @@ model UserSession {
   @@index([status])
   @@index([expiresAt])
   @@map("user_sessions")
+}
+
+// ---------------------------------------------------------------------------
+// PASSWORD RESET TOKEN
+// ---------------------------------------------------------------------------
+
+model PasswordResetToken {
+  id          String   @id @default(uuid()) @db.VarChar(36)
+  userId      String   @unique @db.VarChar(36) @map("user_id")
+  tokenHash   String   @db.VarChar(255) @map("token_hash")
+  expiresAt   DateTime @map("expires_at")
+  usedAt      DateTime? @map("used_at")
+  revokedAt   DateTime? @map("revoked_at")
+  requestedIp String?  @db.VarChar(45) @map("requested_ip")
+  requestedUserAgent String? @db.VarChar(255) @map("requested_user_agent")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+  @@index([usedAt])
+  @@map("password_reset_tokens")
 }
 
 // ---------------------------------------------------------------------------

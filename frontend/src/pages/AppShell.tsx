@@ -37,6 +37,7 @@ import {
 import { CandidateDetailModal } from "../components/candidates/CandidateDetailModal";
 import { GeographyManagementView } from "../components/admin/GeographyManagementView";
 import { MfaSecurityView } from "../components/admin/MfaSecurityView";
+import { PasswordResetView } from "../components/auth/PasswordResetView";
 import { SessionManagementView } from "../components/admin/SessionManagementView";
 import { LogItem } from "../components/results/LogItem";
 import { StatCard } from "../components/results/StatCard";
@@ -509,6 +510,9 @@ export default function AppShell() {
                 t={t}
                 i18n={i18n}
               />
+            )}
+            {view === "password-reset" && (
+              <PasswordResetView setView={setView} />
             )}
             {view === "help" && (
               <HelpView setView={setView} role={role} t={t} i18n={i18n} />
@@ -1176,6 +1180,12 @@ function LoginView({
             className="mt-2 text-slate-400 text-[10px] uppercase font-bold tracking-widest hover:text-slate-600 transition-colors"
           >
             {t("platform_faq")}
+          </button>
+          <button
+            onClick={() => setView("password-reset")}
+            className="mt-2 text-slate-400 text-[10px] uppercase font-bold tracking-widest hover:text-slate-600 transition-colors"
+          >
+            Forgot password?
           </button>
         </div>
       </div>

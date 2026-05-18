@@ -268,7 +268,8 @@ export const authService = {
 
     const submittedHash = sha256(dto.refreshToken);
     if (stored.tokenHash !== submittedHash) {
-      await authRepository.revokeRefreshToken(payload.sub);
+      await authRepository.revokeSession(payload.sid, payload.sub);
+      await authRepository.revokeRefreshToken(payload.sid);
       throw new UnauthorizedError(
         "Refresh token reuse detected - please login again",
       );
