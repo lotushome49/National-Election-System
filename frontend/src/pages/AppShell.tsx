@@ -4510,17 +4510,31 @@ function ResultsDashboardView({ setView, token, t, i18n }: any) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/results", { headers: { Authorization: `Bearer ${token}` } })
+    fetch("/api/reports/overview", {
+      headers: { Authorization: `Bearer ${token}` },
+    })
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
         return res.json();
       })
-      .then((data) => {
-        setResults(data);
+      .then((payload) => {
+        const overview = payload?.data;
+        setResults({
+          electionId: overview?.election?.id,
+          total: overview?.totalBallots ?? 0,
+          counts:
+            overview?.candidateStandings?.map((candidate: any) => ({
+              id: candidate.candidateId,
+              displayName: candidate.fullName,
+              party: candidate.party,
+              votes: candidate.votes,
+            })) ?? [],
+        });
         setLoading(false);
       })
       .catch((err) => {
         console.error("Failed to fetch results:", err);
+        setResults({ total: 0, counts: [] });
         setLoading(false);
       });
   }, [token]);
@@ -4585,7 +4599,10 @@ function ResultsDashboardView({ setView, token, t, i18n }: any) {
         <button
           onClick={async () => {
             try {
-              const response = await fetch("/api/results/export/csv", {
+              const electionQuery = results?.electionId
+                ? `?electionId=${encodeURIComponent(results.electionId)}`
+                : "";
+              const response = await fetch(`/api/reports/export/csv${electionQuery}`, {
                 headers: { Authorization: `Bearer ${token}` },
               });
               if (!response.ok) throw new Error("Failed to export");
@@ -4638,10 +4655,10 @@ function ResultsDashboardView({ setView, token, t, i18n }: any) {
               <div className="flex justify-between items-end mb-1">
                 <div className="space-y-1">
                   <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest block">
-                    {t(c.id + "_party")}
+                    {c.party}
                   </span>
                   <span className="text-xl font-display font-black text-slate-900 uppercase tracking-tighter group-hover/bar:translate-x-1 transition-transform inline-block">
-                    {t(c.id + "_name")}
+                    {c.displayName}
                   </span>
                 </div>
                 <div className="text-right space-y-1">
@@ -4649,7 +4666,9 @@ function ResultsDashboardView({ setView, token, t, i18n }: any) {
                     {c.votes.toLocaleString()}
                   </span>
                   <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest block">
-                    {((c.votes / results.total || 1) * 100).toFixed(1)}%
+                    {results.total > 0
+                      ? `${((c.votes / results.total) * 100).toFixed(1)}%`
+                      : "0.0%"}
                   </span>
                 </div>
               </div>

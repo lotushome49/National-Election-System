@@ -15,6 +15,7 @@ import passwordResetRoutes from "../modules/passwordReset/passwordReset.routes";
 import regionRoutes from "../modules/region/region.routes";
 import districtRoutes from "../modules/district/district.routes";
 import pollingStationRoutes from "../modules/pollingStation/pollingStation.routes";
+import reportsRoutes from "../modules/reports/reports.routes";
 
 const router = Router();
 
@@ -43,5 +44,6 @@ router.use("/password-reset", passwordResetRoutes);
 router.use("/regions", regionRoutes);
 router.use("/districts", districtRoutes);
 router.use("/polling-stations", pollingStationRoutes);
+router.use("/reports", reportsRoutes);
 
 export default router;

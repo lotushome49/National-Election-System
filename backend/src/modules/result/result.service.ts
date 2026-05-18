@@ -89,7 +89,14 @@ export const resultService = {
     await Promise.all(upserts);
 
     // Broadcast live results
-    socketEmit.resultsUpdate({ electionId: dto.electionId, totalBallots, isFinal: dto.isFinal });
+    socketEmit.resultsUpdate({
+      electionId: dto.electionId,
+      totalBallots,
+      isFinal: dto.isFinal,
+      regionId: scopeFilters.regionId,
+      districtId: scopeFilters.districtId,
+      pollingStationId: scopeFilters.pollingStationId,
+    });
 
     await auditService.log({
       userId: actorId, action: 'RESULT_PUBLISHED', entity: 'Result',

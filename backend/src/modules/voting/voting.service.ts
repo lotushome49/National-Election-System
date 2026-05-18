@@ -107,7 +107,13 @@ export const votingService = {
 
     // 8. Broadcast live results update
     const totalVotes = await votingRepository.countByElection(dto.electionId);
-    socketEmit.resultsUpdate({ electionId: dto.electionId, totalVotes });
+    socketEmit.resultsUpdate({
+      electionId: dto.electionId,
+      totalVotes,
+      regionId: (voter as any).regionId ?? undefined,
+      districtId: (voter as any).districtId ?? undefined,
+      pollingStationId: (voter as any).pollingStationId ?? undefined,
+    });
 
     await auditService.log({
       userId: voterId, action: 'VOTE_CAST', entity: 'Ballot',
