@@ -1,21 +1,22 @@
-import express, { Application } from 'express';
-import helmet from 'helmet';
-import cors from 'cors';
-import cookieParser from 'cookie-parser';
-import compression from 'compression';
+import express, { Application } from "express";
+import helmet from "helmet";
+import cors from "cors";
+import cookieParser from "cookie-parser";
+import compression from "compression";
+import path from "path";
 
-import { env } from './configs/env';
-import { globalLimiter } from './middleware/rateLimiter';
-import { requestLogger } from './middleware/requestLogger';
-import { csrfProtection } from './middleware/csrf';
-import { errorHandler, notFoundHandler } from './middleware/errorHandler';
-import apiRoutes from './routes/index';
+import { env } from "./configs/env";
+import { globalLimiter } from "./middleware/rateLimiter";
+import { requestLogger } from "./middleware/requestLogger";
+import { csrfProtection } from "./middleware/csrf";
+import { errorHandler, notFoundHandler } from "./middleware/errorHandler";
+import apiRoutes from "./routes/index";
 
 export function createApp(): Application {
   const app = express();
 
   // ── Trust proxy (needed behind nginx / load balancer) ──────────────────────
-  app.set('trust proxy', 1);
+  app.set("trust proxy", 1);
 
   // ── Security headers ────────────────────────────────────────────────────────
   app.use(
@@ -23,9 +24,9 @@ export function createApp(): Application {
       contentSecurityPolicy: {
         directives: {
           defaultSrc: ["'self'"],
-          scriptSrc:  ["'self'"],
-          styleSrc:   ["'self'", "'unsafe-inline'"],
-          imgSrc:     ["'self'", 'data:', 'https:'],
+          scriptSrc: ["'self'"],
+          styleSrc: ["'self'", "'unsafe-inline'"],
+          imgSrc: ["'self'", "data:", "https:"],
         },
       },
       crossOriginEmbedderPolicy: false,
@@ -35,20 +36,23 @@ export function createApp(): Application {
   // ── CORS ────────────────────────────────────────────────────────────────────
   app.use(
     cors({
-      origin:      env.CORS_ORIGIN.split(',').map((o) => o.trim()),
+      origin: env.CORS_ORIGIN.split(",").map((o) => o.trim()),
       credentials: true,
-      methods:     ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'x-csrf-token'],
+      methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+      allowedHeaders: ["Content-Type", "Authorization", "x-csrf-token"],
     }),
   );
 
   // ── Body parsing & cookies ──────────────────────────────────────────────────
-  app.use(express.json({ limit: '1mb' }));
-  app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+  app.use(express.json({ limit: "1mb" }));
+  app.use(express.urlencoded({ extended: true, limit: "1mb" }));
   app.use(cookieParser());
 
   // ── Compression ─────────────────────────────────────────────────────────────
   app.use(compression());
+
+  // ── Static uploads ─────────────────────────────────────────────────────────
+  app.use("/uploads", express.static(path.resolve(process.cwd(), "uploads")));
 
   // ── Request logging ─────────────────────────────────────────────────────────
   app.use(requestLogger);

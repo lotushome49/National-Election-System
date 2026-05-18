@@ -296,6 +296,7 @@ model User {
   auditLogs        AuditLog[]
   notifications    Notification[]
   observerReports  ObserverReport[]
+  observerEvidence ObserverEvidence[]
   votingTokens     VotingToken[]
   sessions         UserSession[]
   passwordResetToken PasswordResetToken?
@@ -649,6 +650,7 @@ model ObserverReport {
   election         Election        @relation(fields: [electionId],       references: [id])
   observer         User            @relation(fields: [observerId],       references: [id])
   pollingStation   PollingStation? @relation(fields: [pollingStationId], references: [id])
+  evidenceItems    ObserverEvidence[]
 
   @@index([electionId])
   @@index([observerId])
@@ -657,6 +659,35 @@ model ObserverReport {
   @@index([status])
   @@index([deletedAt])
   @@map("observer_reports")
+}
+
+// ---------------------------------------------------------------------------
+// OBSERVER EVIDENCE
+// ---------------------------------------------------------------------------
+
+model ObserverEvidence {
+  id           String   @id @default(uuid()) @db.VarChar(36)
+  reportId     String?  @db.VarChar(36) @map("report_id")
+  uploadedBy   String   @db.VarChar(36) @map("uploaded_by")
+  originalName String   @db.VarChar(255) @map("original_name")
+  fileName     String   @db.VarChar(255) @map("file_name")
+  mimeType     String   @db.VarChar(100) @map("mime_type")
+  fileSize     Int      @map("file_size")
+  storagePath  String   @db.VarChar(500) @map("storage_path")
+  publicUrl    String   @db.VarChar(500) @map("public_url")
+  checksum     String?  @db.VarChar(64)
+  caption      String?  @db.VarChar(255)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  deletedAt    DateTime? @map("deleted_at")
+
+  report   ObserverReport? @relation(fields: [reportId], references: [id], onDelete: SetNull)
+  uploader User            @relation(fields: [uploadedBy], references: [id])
+
+  @@index([reportId])
+  @@index([uploadedBy])
+  @@index([deletedAt])
+  @@map("observer_evidence")
 }
 
 // ---------------------------------------------------------------------------

@@ -39,6 +39,7 @@ import { GeographyManagementView } from "../components/admin/GeographyManagement
 import { MfaSecurityView } from "../components/admin/MfaSecurityView";
 import { PasswordResetView } from "../components/auth/PasswordResetView";
 import { SessionManagementView } from "../components/admin/SessionManagementView";
+import { ObserverEvidenceView } from "../components/observer/ObserverEvidenceView";
 import { LogItem } from "../components/results/LogItem";
 import { StatCard } from "../components/results/StatCard";
 import { checkPerm } from "../constants/permissions";
@@ -68,6 +69,7 @@ export default function AppShell() {
   const fpHash = useFingerprint();
   const { results, electionPhase, setElectionPhase } =
     useElectionRealtime(token);
+  const canManageObserverEvidence = role === "OBSERVER" || role === "ADMIN";
 
   useEffect(() => {
     document.documentElement.dir = i18n.dir();
@@ -213,6 +215,21 @@ export default function AppShell() {
                 <span className="text-sm tracking-tight">
                   {t("results_console")}
                 </span>
+              </button>
+            )}
+
+            {canManageObserverEvidence && (
+              <button
+                onClick={() => setView("observer-evidence")}
+                className={cn(
+                  "w-full flex items-center gap-3 px-5 py-3.5 rounded-2xl font-bold transition-all duration-300",
+                  view === "observer-evidence"
+                    ? "bg-slate-900 text-white shadow-lg shadow-slate-200"
+                    : "text-slate-400 hover:text-slate-600 hover:bg-slate-50",
+                )}
+              >
+                <ShieldCheck size={18} />
+                <span className="text-sm tracking-tight">Evidence</span>
               </button>
             )}
 
@@ -410,6 +427,19 @@ export default function AppShell() {
             {token && (
               <button
                 onClick={() => {
+                  {
+                    canManageObserverEvidence && (
+                      <button
+                        onClick={() => {
+                          setView("observer-evidence");
+                          setMobileMenuOpen(false);
+                        }}
+                        className="w-full text-left font-bold text-slate-700 p-3 hover:bg-slate-50 rounded-xl"
+                      >
+                        Evidence
+                      </button>
+                    );
+                  }
                   setView("sessions");
                   setMobileMenuOpen(false);
                 }}
@@ -574,6 +604,13 @@ export default function AppShell() {
                 sessionId={sessionId}
                 setView={setView}
                 onSessionEnded={clearAuthState}
+              />
+            )}
+            {view === "observer-evidence" && canManageObserverEvidence && (
+              <ObserverEvidenceView
+                token={token}
+                role={role}
+                setView={setView}
               />
             )}
             {view === "voter-hub" && role === "VOTER" && (
