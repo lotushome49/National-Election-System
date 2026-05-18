@@ -1,13 +1,19 @@
-import { Request } from 'express';
-import { PERMISSIONS, ROLES, type Permission, type Role } from '../constants/auth';
+import { Request } from "express";
+import {
+  PERMISSIONS,
+  ROLES,
+  type Permission,
+  type Role,
+} from "../constants/auth";
 
 // ─── JWT Payload ─────────────────────────────────────────────────────────────
 export interface JwtPayload {
-  sub: string;          // user id
+  sub: string; // user id
+  sid?: string;
   role: string;
   regionId?: string;
   districtId?: string;
-  type: 'access' | 'refresh' | 'mfa';
+  type: "access" | "refresh" | "mfa";
   iat?: number;
   exp?: number;
 }
@@ -36,7 +42,7 @@ export interface PaginationQuery {
   page?: number;
   limit?: number;
   sortBy?: string;
-  sortOrder?: 'asc' | 'desc';
+  sortOrder?: "asc" | "desc";
 }
 
 // ─── Role / Permission constants ──────────────────────────────────────────────
@@ -45,15 +51,24 @@ export type { Permission, Role };
 
 // ─── Audit action types ───────────────────────────────────────────────────────
 export type AuditAction =
-  | 'CREATE' | 'READ' | 'UPDATE' | 'DELETE'
-  | 'LOGIN'  | 'LOGOUT'
-  | 'VOTE_CAST' | 'TOKEN_ISSUED' | 'TOKEN_USED' | 'TOKEN_REVOKED'
-  | 'ELECTION_STATE_CHANGE' | 'RESULT_PUBLISHED'
-  | 'OBSERVER_REPORT_SUBMITTED' | 'SYSTEM_EVENT';
+  | "CREATE"
+  | "READ"
+  | "UPDATE"
+  | "DELETE"
+  | "LOGIN"
+  | "LOGOUT"
+  | "VOTE_CAST"
+  | "TOKEN_ISSUED"
+  | "TOKEN_USED"
+  | "TOKEN_REVOKED"
+  | "ELECTION_STATE_CHANGE"
+  | "RESULT_PUBLISHED"
+  | "OBSERVER_REPORT_SUBMITTED"
+  | "SYSTEM_EVENT";
 
 // ─── Socket events ────────────────────────────────────────────────────────────
 export interface SocketEvents {
-  'results:update': (data: unknown) => void;
-  'election:state': (data: { electionId: string; status: string }) => void;
-  'notification:new': (data: unknown) => void;
+  "results:update": (data: unknown) => void;
+  "election:state": (data: { electionId: string; status: string }) => void;
+  "notification:new": (data: unknown) => void;
 }

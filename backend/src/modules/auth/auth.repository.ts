@@ -1,4 +1,4 @@
-import { prisma } from '../../configs/database';
+import { prisma } from "../../configs/database";
 
 export const authRepository = {
   /** Find user by username, including role for permission checks */
@@ -26,7 +26,7 @@ export const authRepository = {
   lockAccount: (id: string, until: Date) =>
     prisma.user.update({
       where: { id },
-      data: { lockUntil: until, status: 'LOCKED' },
+      data: { lockUntil: until, status: "LOCKED" },
     }),
 
   /** Reset failed attempts and unlock on successful login */
@@ -35,10 +35,10 @@ export const authRepository = {
       where: { id },
       data: {
         failedAttempts: 0,
-        lockUntil:      null,
-        status:         'ACTIVE',
-        lastLoginAt:    new Date(),
-        lastLoginIp:    ip,
+        lockUntil: null,
+        status: "ACTIVE",
+        lastLoginAt: new Date(),
+        lastLoginIp: ip,
       },
     }),
 
@@ -50,21 +50,85 @@ export const authRepository = {
       include: { role: { include: { permissions: true } } },
     }),
 
+  /** Create a session row for a successful login */
+  createSession: (data: {
+    userId: string;
+    expiresAt: Date;
+    ipAddress?: string;
+    userAgent?: string;
+  }) =>
+    prisma.userSession.create({
+      data: {
+        userId: data.userId,
+        expiresAt: data.expiresAt,
+        ipAddress: data.ipAddress,
+        userAgent: data.userAgent,
+      },
+    }),
+
+  /** List all sessions for a user */
+  listSessions: (userId: string) =>
+    prisma.userSession.findMany({
+      where: { userId },
+      orderBy: [{ status: "asc" }, { updatedAt: "desc" }],
+      include: { refreshToken: true },
+    }),
+
+  /** Find a session by id */
+  findSessionById: (sessionId: string) =>
+    prisma.userSession.findUnique({
+      where: { id: sessionId },
+      include: { refreshToken: true },
+    }),
+
+  /** Find an active session by id */
+  findActiveSessionById: (sessionId: string) =>
+    prisma.userSession.findFirst({
+      where: {
+        id: sessionId,
+        status: "ACTIVE",
+        revokedAt: null,
+        expiresAt: { gt: new Date() },
+      },
+      include: { refreshToken: true },
+    }),
+
+  /** Update session activity timestamp */
+  touchSession: (sessionId: string) =>
+    prisma.userSession.update({
+      where: { id: sessionId },
+      data: { lastSeenAt: new Date() },
+    }),
+
+  /** Revoke a session */
+  revokeSession: (sessionId: string, userId: string) =>
+    prisma.userSession.updateMany({
+      where: { id: sessionId, userId },
+      data: { status: "REVOKED", revokedAt: new Date() },
+    }),
+
+  /** Revoke all sessions for a user */
+  revokeAllSessions: (userId: string) =>
+    prisma.userSession.updateMany({
+      where: { userId, status: "ACTIVE" },
+      data: { status: "REVOKED", revokedAt: new Date() },
+    }),
+
   /** Store hashed refresh token */
-  saveRefreshToken: (userId: string, tokenHash: string, expiresAt: Date) =>
+  saveRefreshToken: (sessionId: string, tokenHash: string, expiresAt: Date) =>
     prisma.refreshToken.upsert({
-      where:  { userId },
-      create: { userId, tokenHash, expiresAt },
+      where: { sessionId },
+      create: { sessionId, tokenHash, expiresAt },
       update: { tokenHash, expiresAt },
     }),
 
-  /** Find stored refresh token by userId */
-  findRefreshToken: (userId: string) =>
-    prisma.refreshToken.findUnique({ where: { userId } }),
+  /** Find stored refresh token by sessionId */
+  findRefreshToken: (sessionId: string) =>
+    prisma.refreshToken.findUnique({ where: { sessionId } }),
 
   /** Revoke refresh token (logout) */
-  revokeRefreshToken: (userId: string) =>
-    prisma.refreshToken.deleteMany({ where: { userId } }),
+  revokeRefreshToken: (sessionId: string) =>
+    prisma.refreshToken.deleteMany({ where: { sessionId } }),
 
   /** Find voter by biometric hash */
   findVoterByBiometricHash: (hash: string) =>
