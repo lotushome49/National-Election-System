@@ -10,10 +10,28 @@ import {
   Vote,
 } from "lucide-react";
 import { StatCard } from "../results/StatCard";
+import { useEffect, useState } from "react";
+import { fetchOverview } from "../../services/api/reports";
 
-export function SuperAdminDashboard({ setView, t, i18n, results }: any) {
+export function SuperAdminDashboard({ setView, t, i18n, results, token }: any) {
   const lang = i18n.language as "en" | "am";
-  const nationalBallots = results?.total ?? 12840;
+  const [overview, setOverview] = useState<any>(null);
+  const nationalBallots = overview?.totalBallots ?? results?.total ?? 12840;
+
+  useEffect(() => {
+    let mounted = true;
+    if (!token) return;
+    fetchOverview(token)
+      .then((data) => {
+        if (mounted) setOverview(data);
+      })
+      .catch(() => {
+        /* best-effort: keep placeholders on failure */
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [token]);
   const cards = [
     {
       title: "National Users",
