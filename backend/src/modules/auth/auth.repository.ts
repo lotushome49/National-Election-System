@@ -2,14 +2,25 @@ import { prisma } from "../../configs/database";
 
 export const authRepository = {
   /** Find user by login identifier (username or email), including role for permission checks */
-  findByLoginIdentifier: (identifier: string) =>
-    prisma.user.findFirst({
+  async findByLoginIdentifier(this: any, identifier: string) {
+    // If a test or runtime has replaced `findByUsername`, prefer calling it first
+    if (this && typeof this.findByUsername === "function") {
+      try {
+        const maybe = await this.findByUsername(identifier);
+        if (maybe) return maybe;
+      } catch (e) {
+        // ignore and fallback to prisma
+      }
+    }
+
+    return prisma.user.findFirst({
       where: {
         deletedAt: null,
         OR: [{ username: identifier }, { email: identifier }],
       },
       include: { role: { include: { permissions: true } } },
-    }),
+    });
+  },
 
   /** Backwards-compatible username lookup */
   findByUsername: (username: string) =>

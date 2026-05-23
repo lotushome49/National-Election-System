@@ -37,7 +37,14 @@ export const reportsService = {
   async getOverview(query: ReportsQuery, requester?: JwtPayload) {
     const cacheKey = (() => {
       const id = query.electionId ?? "latest";
-      const scope = applyUserScope<ReportScope>({ regionId: undefined, districtId: undefined, pollingStationId: undefined }, requester);
+      const scope = applyUserScope<ReportScope>(
+        {
+          regionId: undefined,
+          districtId: undefined,
+          pollingStationId: undefined,
+        },
+        requester,
+      );
       return `overview:${id}:r:${scope.regionId ?? "_"}:d:${scope.districtId ?? "_"}:p:${scope.pollingStationId ?? "_"}`;
     })();
 
@@ -46,9 +53,6 @@ export const reportsService = {
       return cached.value;
     }
 
-    // fallthrough to compute the overview and then cache it below
-
-    async function compute(): Promise<any> {
     const election = query.electionId
       ? await reportsRepository.findElectionById(query.electionId)
       : await reportsRepository.findLatestElection();
@@ -66,17 +70,13 @@ export const reportsService = {
       requester,
     );
 
-    const [
-      totalBallots,
-      totalRegisteredVoters,
-      candidateVotes,
-      regionalVotes,
-    ] = await Promise.all([
-      reportsRepository.countBallots(election.id, scoped),
-      reportsRepository.countRegisteredVoters(scoped),
-      reportsRepository.aggregateVotesByCandidate(election.id, scoped),
-      reportsRepository.aggregateVotesByRegion(election.id, scoped),
-    ]);
+    const [totalBallots, totalRegisteredVoters, candidateVotes, regionalVotes] =
+      await Promise.all([
+        reportsRepository.countBallots(election.id, scoped),
+        reportsRepository.countRegisteredVoters(scoped),
+        reportsRepository.aggregateVotesByCandidate(election.id, scoped),
+        reportsRepository.aggregateVotesByRegion(election.id, scoped),
+      ]);
 
     const candidateIds = candidateVotes.map((row) => row.candidateId);
     const [candidateDetails, regions] = await Promise.all([
@@ -84,7 +84,9 @@ export const reportsService = {
         ? reportsRepository.findCandidatesByIds(candidateIds)
         : Promise.resolve([]),
       regionalVotes.length > 0
-        ? reportsRepository.findRegionsByIds(regionalVotes.map((row) => row.regionId))
+        ? reportsRepository.findRegionsByIds(
+            regionalVotes.map((row) => row.regionId),
+          )
         : Promise.resolve([]),
     ]);
 
@@ -141,12 +143,20 @@ export const reportsService = {
       regionalBreakdown,
     };
 
-    (reportsService as any)._cache.set(cacheKey, { ts: Date.now(), value: result });
+    (reportsService as any)._cache.set(cacheKey, {
+      ts: Date.now(),
+      value: result,
+    });
     return result;
   },
 
   buildOverviewCsv(overview: {
-    election: { id: string; title: string; status: string; isNational: boolean };
+    election: {
+      id: string;
+      title: string;
+      status: string;
+      isNational: boolean;
+    };
     totalBallots: number;
     totalRegisteredVoters: number;
     turnoutPercentage: number;
@@ -166,7 +176,9 @@ export const reportsService = {
     lines.push("");
 
     lines.push("Candidate Standings");
-    lines.push("Candidate ID,Full Name,Party,Party Code,Votes,Percentage,Winner");
+    lines.push(
+      "Candidate ID,Full Name,Party,Party Code,Votes,Percentage,Winner",
+    );
     for (const standing of overview.candidateStandings) {
       lines.push(
         [
@@ -199,7 +211,7 @@ export const reportsService = {
 };
 
 function sanitizeCsvValue(value: string): string {
-  if (value.includes(",") || value.includes("\"") || value.includes("\n")) {
+  if (value.includes(",") || value.includes('"') || value.includes("\n")) {
     return `"${value.replace(/\"/g, '""')}"`;
   }
   return value;
