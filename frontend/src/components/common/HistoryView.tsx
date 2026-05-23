@@ -3,7 +3,7 @@ import { motion } from "motion/react";
 import { Clock, FileCheck, Database, ChevronRight } from "lucide-react";
 import { cn } from "../../utils/cn";
 
-export function HistoryView({ setView, role, t, i18n }: any) {
+export function HistoryView({ setView, role, homeView, t, i18n }: any) {
   const lang = i18n.language as "en" | "am";
   const pastElections = [
     {
@@ -67,11 +67,12 @@ export function HistoryView({ setView, role, t, i18n }: any) {
           <button
             onClick={() =>
               setView(
-                role === "NONE"
-                  ? "login"
-                  : role === "VOTER"
-                    ? "voter-hub"
-                    : "dashboard",
+                homeView ||
+                  (role === "NONE"
+                    ? "login"
+                    : role === "VOTER"
+                      ? "voter-hub"
+                      : "dashboard"),
               )
             }
             className="px-10 py-5 bg-slate-900 text-white rounded-[2rem] text-[10px] font-black uppercase tracking-[0.3em] shadow-2xl shadow-slate-200 hover:bg-slate-800 transition-all"

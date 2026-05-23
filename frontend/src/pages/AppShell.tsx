@@ -177,6 +177,13 @@ export default function AppShell() {
   const canManageObserverEvidence =
     role === "OBSERVER" || role === "ADMIN" || role === "SUPER_ADMIN";
 
+  const getHomeViewForRole = (currentRole: Role | "NONE") =>
+    currentRole === "VOTER"
+      ? "voter-hub"
+      : currentRole === "NONE"
+        ? "login"
+        : "dashboard";
+
   type SidebarItem = {
     key: string;
     label: string;
@@ -537,10 +544,22 @@ export default function AppShell() {
               <PasswordResetView setView={setView} />
             )}
             {view === "help" && (
-              <HelpView setView={setView} role={role} t={t} i18n={i18n} />
+              <HelpView
+                setView={setView}
+                role={role}
+                homeView={getHomeViewForRole(role)}
+                t={t}
+                i18n={i18n}
+              />
             )}
             {view === "history" && (
-              <HistoryView setView={setView} role={role} t={t} i18n={i18n} />
+              <HistoryView
+                setView={setView}
+                role={role}
+                homeView={getHomeViewForRole(role)}
+                t={t}
+                i18n={i18n}
+              />
             )}
             {view === "voters" && checkPerm(role, "MANAGE_VOTERS") && (
               <VoterRegistryView
@@ -609,6 +628,7 @@ export default function AppShell() {
                 token={token}
                 sessionId={sessionId}
                 setView={setView}
+                homeView={getHomeViewForRole(role)}
                 onSessionEnded={clearAuthState}
               />
             )}
@@ -713,26 +733,16 @@ export default function AppShell() {
               />
             )}
             {view === "dashboard" && role === "VOTER" && (
-              <div className="max-w-md mx-auto text-center py-20">
-                <ShieldCheck
-                  size={48}
-                  className="mx-auto text-slate-200 mb-4"
-                />
-                <h3 className="text-xl font-bold text-slate-800">
-                  Administrative Access Required
-                </h3>
-                <p className="text-slate-500 text-sm mt-2">
-                  The administrative dashboard is reserved for authorized
-                  election officials. As a voter, you can only access your
-                  personal Voter Hub.
-                </p>
-                <button
-                  onClick={() => setView("voter-hub")}
-                  className="mt-8 bg-election-dark text-white px-8 py-3 rounded-xl font-bold"
-                >
-                  Return to Voter Hub
-                </button>
-              </div>
+              <VoterHub
+                key="voter-dashboard"
+                user={user}
+                token={token}
+                setView={setView}
+                t={t}
+                role={role}
+                electionPhase={electionPhase}
+                i18n={i18n}
+              />
             )}
           </AnimatePresence>
         </main>

@@ -29,6 +29,7 @@ interface Props {
   token: string | null;
   sessionId: string | null;
   setView: (view: string) => void;
+  homeView?: string;
   onSessionEnded: () => void;
 }
 
@@ -64,6 +65,7 @@ export function SessionManagementView({
   token,
   sessionId,
   setView,
+  homeView,
   onSessionEnded,
 }: Props) {
   const [sessions, setSessions] = useState<SessionRecord[]>([]);
@@ -135,7 +137,7 @@ export function SessionManagementView({
       className="max-w-6xl mx-auto pb-20 space-y-10"
     >
       <button
-        onClick={() => setView("dashboard")}
+        onClick={() => setView(homeView || "dashboard")}
         className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.3em] text-slate-400 hover:text-slate-900 transition-colors"
       >
         <ArrowLeft size={14} />

@@ -3,7 +3,7 @@ import { motion } from "motion/react";
 import { ShieldCheck, Activity, Shield } from "lucide-react";
 import { cn } from "../../utils/cn";
 
-export function HelpView({ setView, role, t, i18n }: any) {
+export function HelpView({ setView, role, homeView, t, i18n }: any) {
   const lang = i18n.language as "en" | "am";
   const faqs = [
     {
@@ -77,11 +77,12 @@ export function HelpView({ setView, role, t, i18n }: any) {
           <button
             onClick={() =>
               setView(
-                role === "NONE"
-                  ? "login"
-                  : role === "VOTER"
-                    ? "voter-hub"
-                    : "dashboard",
+                homeView ||
+                  (role === "NONE"
+                    ? "login"
+                    : role === "VOTER"
+                      ? "voter-hub"
+                      : "dashboard"),
               )
             }
             className="text-[10px] font-black text-slate-900 uppercase tracking-[0.3em] hover:underline transition-all"
