@@ -1,7 +1,17 @@
 import { prisma } from "../../configs/database";
 
 export const authRepository = {
-  /** Find user by username, including role for permission checks */
+  /** Find user by login identifier (username or email), including role for permission checks */
+  findByLoginIdentifier: (identifier: string) =>
+    prisma.user.findFirst({
+      where: {
+        deletedAt: null,
+        OR: [{ username: identifier }, { email: identifier }],
+      },
+      include: { role: { include: { permissions: true } } },
+    }),
+
+  /** Backwards-compatible username lookup */
   findByUsername: (username: string) =>
     prisma.user.findFirst({
       where: { username, deletedAt: null },
