@@ -173,7 +173,8 @@ export default function AppShell() {
   const lang = i18n.language as "en" | "am";
   const { results, electionPhase, setElectionPhase } =
     useElectionRealtime(token);
-  const canManageObserverEvidence = role === "OBSERVER" || role === "ADMIN" || role === "SUPER_ADMIN";
+  const canManageObserverEvidence =
+    role === "OBSERVER" || role === "ADMIN" || role === "SUPER_ADMIN";
 
   useEffect(() => {
     document.documentElement.dir = i18n.dir();
@@ -239,214 +240,160 @@ export default function AppShell() {
             </div>
           </div>
           <div className="flex-1 space-y-1.5">
-            <button
-              onClick={() => setView("dashboard")}
-              className={cn(
-                "w-full flex items-center gap-3 px-5 py-3.5 rounded-2xl font-bold transition-all duration-300",
-                view === "dashboard"
-                  ? "bg-slate-900 text-white shadow-lg shadow-slate-200"
-                  : "text-slate-400 hover:text-slate-600 hover:bg-slate-50",
-              )}
-            >
-              <LayoutDashboard size={18} />
-              <span className="text-sm tracking-tight">{t("dashboard")}</span>
-            </button>
+            {/* Render deterministic sidebar from role -> menu mapping */}
+            {(() => {
+              const map: Record<
+                string,
+                Array<{ key: string; label: string; icon: any; view: string }>
+              > = {
+                SUPER_ADMIN: [
+                  {
+                    key: "dashboard",
+                    label: t("dashboard"),
+                    icon: <LayoutDashboard size={18} />,
+                    view: "dashboard",
+                  },
+                  {
+                    key: "users",
+                    label: t("user_management"),
+                    icon: <UserCheck size={18} />,
+                    view: "users",
+                  },
+                  {
+                    key: "geography",
+                    label: "Geography",
+                    icon: <Globe size={18} />,
+                    view: "geography",
+                  },
+                  {
+                    key: "results-dashboard",
+                    label: t("results_console"),
+                    icon: <PieChart size={18} />,
+                    view: "results-dashboard",
+                  },
+                ],
+                ADMIN: [
+                  {
+                    key: "dashboard",
+                    label: t("dashboard"),
+                    icon: <LayoutDashboard size={18} />,
+                    view: "dashboard",
+                  },
+                  {
+                    key: "voters",
+                    label: t("voter_registry"),
+                    icon: <UserCheck size={18} />,
+                    view: "voters",
+                  },
+                  {
+                    key: "users",
+                    label: t("user_management"),
+                    icon: <Lock size={18} />,
+                    view: "users",
+                  },
+                  {
+                    key: "geography",
+                    label: "Geography",
+                    icon: <Globe size={18} />,
+                    view: "geography",
+                  },
+                  {
+                    key: "results-dashboard",
+                    label: t("results_console"),
+                    icon: <PieChart size={18} />,
+                    view: "results-dashboard",
+                  },
+                ],
+                REGIONAL_ADMIN: [
+                  {
+                    key: "dashboard",
+                    label: t("dashboard"),
+                    icon: <LayoutDashboard size={18} />,
+                    view: "dashboard",
+                  },
+                  {
+                    key: "voters",
+                    label: t("voter_registry"),
+                    icon: <UserCheck size={18} />,
+                    view: "voters",
+                  },
+                  {
+                    key: "geography",
+                    label: "Geography",
+                    icon: <Globe size={18} />,
+                    view: "geography",
+                  },
+                ],
+                DISTRICT_ADMIN: [
+                  {
+                    key: "dashboard",
+                    label: t("dashboard"),
+                    icon: <LayoutDashboard size={18} />,
+                    view: "dashboard",
+                  },
+                  {
+                    key: "voters",
+                    label: t("voter_registry"),
+                    icon: <UserCheck size={18} />,
+                    view: "voters",
+                  },
+                ],
+                STAFF: [
+                  {
+                    key: "dashboard",
+                    label: t("dashboard"),
+                    icon: <LayoutDashboard size={18} />,
+                    view: "dashboard",
+                  },
+                  {
+                    key: "voters",
+                    label: t("voter_registry"),
+                    icon: <UserCheck size={18} />,
+                    view: "voters",
+                  },
+                ],
+                OBSERVER: [
+                  {
+                    key: "dashboard",
+                    label: t("dashboard"),
+                    icon: <LayoutDashboard size={18} />,
+                    view: "dashboard",
+                  },
+                  {
+                    key: "observer-evidence",
+                    label: "Evidence",
+                    icon: <ShieldCheck size={18} />,
+                    view: "observer-evidence",
+                  },
+                ],
+                VOTER: [
+                  {
+                    key: "voter-hub",
+                    label: t("voter_hub"),
+                    icon: <User size={18} />,
+                    view: "voter-hub",
+                  },
+                ],
+                NONE: [],
+              };
 
-            {checkPerm(role, "MANAGE_VOTERS") && (
-              <button
-                onClick={() => setView("voters")}
-                className={cn(
-                  "w-full flex items-center gap-3 px-5 py-3.5 rounded-2xl font-bold transition-all duration-300",
-                  view === "voters"
-                    ? "bg-slate-900 text-white shadow-lg shadow-slate-200"
-                    : "text-slate-400 hover:text-slate-600 hover:bg-slate-50",
-                )}
-              >
-                <UserCheck size={18} />
-                <span className="text-sm tracking-tight">
-                  {t("voter_registry")}
-                </span>
-              </button>
-            )}
-
-            {checkPerm(role, "MANAGE_VOTERS") && (
-              <button
-                onClick={() => setView("registration")}
-                className={cn(
-                  "w-full flex items-center gap-3 px-5 py-3.5 rounded-2xl font-bold transition-all duration-300",
-                  view === "registration"
-                    ? "bg-slate-900 text-white shadow-lg shadow-slate-200"
-                    : "text-slate-400 hover:text-slate-600 hover:bg-slate-50",
-                )}
-              >
-                <FileCheck size={18} />
-                <span className="text-sm tracking-tight">
-                  {t("registration")}
-                </span>
-              </button>
-            )}
-
-            {checkPerm(role, "MANAGE_USERS") && (
-              <button
-                onClick={() => setView("users")}
-                className={cn(
-                  "w-full flex items-center gap-3 px-5 py-3.5 rounded-2xl font-bold transition-all duration-300",
-                  view === "users"
-                    ? "bg-slate-900 text-white shadow-lg shadow-slate-200"
-                    : "text-slate-400 hover:text-slate-600 hover:bg-slate-50",
-                )}
-              >
-                <Lock size={18} />
-                <span className="text-sm tracking-tight">
-                  {t("user_management")}
-                </span>
-              </button>
-            )}
-
-            {checkPerm(role, "MANAGE_ELECTIONS") && (
-              <button
-                onClick={() => setView("elections")}
-                className={cn(
-                  "w-full flex items-center gap-3 px-5 py-3.5 rounded-2xl font-bold transition-all duration-300",
-                  view === "elections"
-                    ? "bg-slate-900 text-white shadow-lg shadow-slate-200"
-                    : "text-slate-400 hover:text-slate-600 hover:bg-slate-50",
-                )}
-              >
-                <Boxes size={18} />
-                <span className="text-sm tracking-tight">
-                  {lang === "en" ? "Elections" : "ምርጫዎች"}
-                </span>
-              </button>
-            )}
-
-            {checkPerm(role, "MANAGE_CANDIDATES") && (
-              <button
-                onClick={() => setView("candidates")}
-                className={cn(
-                  "w-full flex items-center gap-3 px-5 py-3.5 rounded-2xl font-bold transition-all duration-300",
-                  view === "candidates"
-                    ? "bg-slate-900 text-white shadow-lg shadow-slate-200"
-                    : "text-slate-400 hover:text-slate-600 hover:bg-slate-50",
-                )}
-              >
-                <Users size={18} />
-                <span className="text-sm tracking-tight">
-                  {lang === "en" ? "Candidates" : "ዕጩዎች"}
-                </span>
-              </button>
-            )}
-
-            {checkPerm(role, "VIEW_AUDIT_LOGS") && (
-              <button
-                onClick={() => setView("audit-logs")}
-                className={cn(
-                  "w-full flex items-center gap-3 px-5 py-3.5 rounded-2xl font-bold transition-all duration-300",
-                  view === "audit-logs"
-                    ? "bg-slate-900 text-white shadow-lg shadow-slate-200"
-                    : "text-slate-400 hover:text-slate-600 hover:bg-slate-50",
-                )}
-              >
-                <Database size={18} />
-                <span className="text-sm tracking-tight">
-                  {t("audit_logs")}
-                </span>
-              </button>
-            )}
-
-            {checkPerm(role, "VIEW_RESULTS") && (
-              <button
-                onClick={() => setView("results-dashboard")}
-                className={cn(
-                  "w-full flex items-center gap-3 px-5 py-3.5 rounded-2xl font-bold transition-all duration-300",
-                  view === "results-dashboard"
-                    ? "bg-slate-900 text-white shadow-lg shadow-slate-200"
-                    : "text-slate-400 hover:text-slate-600 hover:bg-slate-50",
-                )}
-              >
-                <PieChart size={18} />
-                <span className="text-sm tracking-tight">
-                  {t("results_console")}
-                </span>
-              </button>
-            )}
-
-            {canManageObserverEvidence && (
-              <button
-                onClick={() => setView("observer-evidence")}
-                className={cn(
-                  "w-full flex items-center gap-3 px-5 py-3.5 rounded-2xl font-bold transition-all duration-300",
-                  view === "observer-evidence"
-                    ? "bg-slate-900 text-white shadow-lg shadow-slate-200"
-                    : "text-slate-400 hover:text-slate-600 hover:bg-slate-50",
-                )}
-              >
-                <ShieldCheck size={18} />
-                <span className="text-sm tracking-tight">Evidence</span>
-              </button>
-            )}
-
-            {token && (
-              <button
-                onClick={() => setView("sessions")}
-                className={cn(
-                  "w-full flex items-center gap-3 px-5 py-3.5 rounded-2xl font-bold transition-all duration-300",
-                  view === "sessions"
-                    ? "bg-slate-900 text-white shadow-lg shadow-slate-200"
-                    : "text-slate-400 hover:text-slate-600 hover:bg-slate-50",
-                )}
-              >
-                <Clock size={18} />
-                <span className="text-sm tracking-tight">Sessions</span>
-              </button>
-            )}
-
-            {(checkPerm(role, "MANAGE_REGIONS") ||
-              checkPerm(role, "MANAGE_DISTRICTS") ||
-              checkPerm(role, "MANAGE_POLLING_STATIONS")) && (
-              <button
-                onClick={() => setView("geography")}
-                className={cn(
-                  "w-full flex items-center gap-3 px-5 py-3.5 rounded-2xl font-bold transition-all duration-300",
-                  view === "geography"
-                    ? "bg-slate-900 text-white shadow-lg shadow-slate-200"
-                    : "text-slate-400 hover:text-slate-600 hover:bg-slate-50",
-                )}
-              >
-                <Globe size={18} />
-                <span className="text-sm tracking-tight">Geography</span>
-              </button>
-            )}
-
-            {isMfaEligibleRole(role) && (
-              <button
-                onClick={() => setView("security")}
-                className={cn(
-                  "w-full flex items-center gap-3 px-5 py-3.5 rounded-2xl font-bold transition-all duration-300",
-                  view === "security"
-                    ? "bg-slate-900 text-white shadow-lg shadow-slate-200"
-                    : "text-slate-400 hover:text-slate-600 hover:bg-slate-50",
-                )}
-              >
-                <Shield size={18} />
-                <span className="text-sm tracking-tight">Security</span>
-              </button>
-            )}
-
-            {role === "VOTER" && (
-              <button
-                onClick={() => setView("voter-hub")}
-                className={cn(
-                  "w-full flex items-center gap-3 px-5 py-3.5 rounded-2xl font-bold transition-all duration-300",
-                  view === "voter-hub"
-                    ? "bg-slate-900 text-white shadow-lg shadow-slate-200"
-                    : "text-slate-400 hover:text-slate-600 hover:bg-slate-50",
-                )}
-              >
-                <User size={18} />
-                <span className="text-sm tracking-tight">{t("voter_hub")}</span>
-              </button>
-            )}
+              const items = map[role] || [];
+              return items.map((it) => (
+                <button
+                  key={it.key}
+                  onClick={() => setView(it.view)}
+                  className={cn(
+                    "w-full flex items-center gap-3 px-5 py-3.5 rounded-2xl font-bold transition-all duration-300",
+                    view === it.view
+                      ? "bg-slate-900 text-white shadow-lg shadow-slate-200"
+                      : "text-slate-400 hover:text-slate-600 hover:bg-slate-50",
+                  )}
+                >
+                  {it.icon}
+                  <span className="text-sm tracking-tight">{it.label}</span>
+                </button>
+              ));
+            })()}
 
             <div className="pt-6 border-t border-slate-100 mt-6 space-y-4">
               <button
@@ -887,7 +834,9 @@ export default function AppShell() {
                 t={t}
                 user={user}
                 electionPhase={electionPhase}
-                setElectionPhase={setElectionPhase}
+                setElectionPhase={(phase: string) =>
+                  setElectionPhase(phase as any)
+                }
                 token={token}
                 i18n={i18n}
               />

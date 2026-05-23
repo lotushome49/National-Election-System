@@ -1,9 +1,20 @@
-import { useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, Globe2, MapPinned, Plus, Trash2, Waypoints } from 'lucide-react';
-import { motion } from 'motion/react';
-import { fetchJson } from '../../services/api/client';
-import { cn } from '../../utils/cn';
-import { getScopeAccessModel, getUserDistrictId, getUserRegionId } from '../../utils/scope';
+import { useEffect, useMemo, useState } from "react";
+import {
+  ChevronLeft,
+  Globe2,
+  MapPinned,
+  Plus,
+  Trash2,
+  Waypoints,
+} from "lucide-react";
+import { motion } from "motion/react";
+import { fetchJson } from "../../services/api/client";
+import { cn } from "../../utils/cn";
+import {
+  getScopeAccessModel,
+  getUserDistrictId,
+  getUserRegionId,
+} from "../../utils/scope";
 
 type Region = {
   id: string;
@@ -42,11 +53,15 @@ interface Props {
   user: any;
 }
 
-async function apiRequest<T>(path: string, token: string | null, init?: RequestInit): Promise<T> {
+async function apiRequest<T>(
+  path: string,
+  token: string | null,
+  init?: RequestInit,
+): Promise<T> {
   return fetchJson<T>(`/api/v1${path}`, {
     ...init,
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
       ...(init?.headers ?? {}),
     },
@@ -55,28 +70,59 @@ async function apiRequest<T>(path: string, token: string | null, init?: RequestI
 
 export function GeographyManagementView({ setView, token, user }: Props) {
   const scopeAccess = getScopeAccessModel(user);
-  const [tab, setTab] = useState<'regions' | 'districts' | 'stations'>('regions');
+  const [tab, setTab] = useState<"regions" | "districts" | "stations">(
+    "regions",
+  );
   const [regions, setRegions] = useState<Region[]>([]);
   const [districts, setDistricts] = useState<District[]>([]);
   const [stations, setStations] = useState<PollingStation[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [selectedRegionId, setSelectedRegionId] = useState<string | null>(getUserRegionId(user));
-  const [selectedDistrictId, setSelectedDistrictId] = useState<string | null>(getUserDistrictId(user));
-  const [regionForm, setRegionForm] = useState({ name: '', code: '', description: '' });
-  const [districtForm, setDistrictForm] = useState({ name: '', code: '', description: '' });
-  const [stationForm, setStationForm] = useState({ name: '', code: '', address: '', capacity: '0', isActive: true });
+  const [selectedRegionId, setSelectedRegionId] = useState<string | null>(
+    getUserRegionId(user),
+  );
+  const [selectedDistrictId, setSelectedDistrictId] = useState<string | null>(
+    getUserDistrictId(user),
+  );
+  const [regionForm, setRegionForm] = useState({
+    name: "",
+    code: "",
+    description: "",
+  });
+  const [districtForm, setDistrictForm] = useState({
+    name: "",
+    code: "",
+    description: "",
+  });
+  const [stationForm, setStationForm] = useState({
+    name: "",
+    code: "",
+    address: "",
+    capacity: "0",
+    isActive: true,
+  });
+  const [regionEditingId, setRegionEditingId] = useState<string | null>(null);
+  const [districtEditingId, setDistrictEditingId] = useState<string | null>(
+    null,
+  );
+  const [stationEditingId, setStationEditingId] = useState<string | null>(null);
 
   const filteredDistricts = useMemo(
-    () => districts.filter((district) => !selectedRegionId || district.regionId === selectedRegionId),
+    () =>
+      districts.filter(
+        (district) =>
+          !selectedRegionId || district.regionId === selectedRegionId,
+      ),
     [districts, selectedRegionId],
   );
 
   const filteredStations = useMemo(
     () =>
       stations.filter((station) => {
-        if (selectedRegionId && station.regionId !== selectedRegionId) return false;
-        if (selectedDistrictId && station.districtId !== selectedDistrictId) return false;
+        if (selectedRegionId && station.regionId !== selectedRegionId)
+          return false;
+        if (selectedDistrictId && station.districtId !== selectedDistrictId)
+          return false;
         return true;
       }),
     [stations, selectedRegionId, selectedDistrictId],
@@ -85,17 +131,25 @@ export function GeographyManagementView({ setView, token, user }: Props) {
   const loadAll = async () => {
     setLoading(true);
     try {
-      const regionQuery = '';
-      const districtQuery = selectedRegionId ? `?regionId=${selectedRegionId}` : '';
+      const regionQuery = "";
+      const districtQuery = selectedRegionId
+        ? `?regionId=${selectedRegionId}`
+        : "";
       const stationParams = new URLSearchParams();
-      if (selectedRegionId) stationParams.set('regionId', selectedRegionId);
-      if (selectedDistrictId) stationParams.set('districtId', selectedDistrictId);
-      const stationQuery = stationParams.toString() ? `?${stationParams.toString()}` : '';
+      if (selectedRegionId) stationParams.set("regionId", selectedRegionId);
+      if (selectedDistrictId)
+        stationParams.set("districtId", selectedDistrictId);
+      const stationQuery = stationParams.toString()
+        ? `?${stationParams.toString()}`
+        : "";
 
       const [regionRes, districtRes, stationRes] = await Promise.all([
-        apiRequest<{ data: Region[] }>('/regions', token),
+        apiRequest<{ data: Region[] }>("/regions", token),
         apiRequest<{ data: District[] }>(`/districts${districtQuery}`, token),
-        apiRequest<{ data: PollingStation[] }>(`/polling-stations${stationQuery}`, token),
+        apiRequest<{ data: PollingStation[] }>(
+          `/polling-stations${stationQuery}`,
+          token,
+        ),
       ]);
 
       setRegions(regionRes.data);
@@ -106,7 +160,7 @@ export function GeographyManagementView({ setView, token, user }: Props) {
         setSelectedRegionId(getUserRegionId(user) ?? regionRes.data[0].id);
       }
     } catch (error) {
-      console.error('Failed to load geography data', error);
+      console.error("Failed to load geography data", error);
     } finally {
       setLoading(false);
     }
@@ -119,11 +173,19 @@ export function GeographyManagementView({ setView, token, user }: Props) {
   const createRegion = async () => {
     setSubmitting(true);
     try {
-      await apiRequest('/regions', token, {
-        method: 'POST',
-        body: JSON.stringify(regionForm),
-      });
-      setRegionForm({ name: '', code: '', description: '' });
+      if (regionEditingId) {
+        await apiRequest(`/regions/${regionEditingId}`, token, {
+          method: "PATCH",
+          body: JSON.stringify(regionForm),
+        });
+        setRegionEditingId(null);
+      } else {
+        await apiRequest("/regions", token, {
+          method: "POST",
+          body: JSON.stringify(regionForm),
+        });
+      }
+      setRegionForm({ name: "", code: "", description: "" });
       await loadAll();
     } finally {
       setSubmitting(false);
@@ -134,11 +196,19 @@ export function GeographyManagementView({ setView, token, user }: Props) {
     if (!selectedRegionId) return;
     setSubmitting(true);
     try {
-      await apiRequest('/districts', token, {
-        method: 'POST',
-        body: JSON.stringify({ ...districtForm, regionId: selectedRegionId }),
-      });
-      setDistrictForm({ name: '', code: '', description: '' });
+      if (districtEditingId) {
+        await apiRequest(`/districts/${districtEditingId}`, token, {
+          method: "PATCH",
+          body: JSON.stringify({ ...districtForm, regionId: selectedRegionId }),
+        });
+        setDistrictEditingId(null);
+      } else {
+        await apiRequest("/districts", token, {
+          method: "POST",
+          body: JSON.stringify({ ...districtForm, regionId: selectedRegionId }),
+        });
+      }
+      setDistrictForm({ name: "", code: "", description: "" });
       await loadAll();
     } finally {
       setSubmitting(false);
@@ -149,16 +219,35 @@ export function GeographyManagementView({ setView, token, user }: Props) {
     if (!selectedRegionId || !selectedDistrictId) return;
     setSubmitting(true);
     try {
-      await apiRequest('/polling-stations', token, {
-        method: 'POST',
-        body: JSON.stringify({
-          ...stationForm,
-          regionId: selectedRegionId,
-          districtId: selectedDistrictId,
-          capacity: Number(stationForm.capacity),
-        }),
+      if (stationEditingId) {
+        await apiRequest(`/polling-stations/${stationEditingId}`, token, {
+          method: "PATCH",
+          body: JSON.stringify({
+            ...stationForm,
+            regionId: selectedRegionId,
+            districtId: selectedDistrictId,
+            capacity: Number(stationForm.capacity),
+          }),
+        });
+        setStationEditingId(null);
+      } else {
+        await apiRequest("/polling-stations", token, {
+          method: "POST",
+          body: JSON.stringify({
+            ...stationForm,
+            regionId: selectedRegionId,
+            districtId: selectedDistrictId,
+            capacity: Number(stationForm.capacity),
+          }),
+        });
+      }
+      setStationForm({
+        name: "",
+        code: "",
+        address: "",
+        capacity: "0",
+        isActive: true,
       });
-      setStationForm({ name: '', code: '', address: '', capacity: '0', isActive: true });
       await loadAll();
     } finally {
       setSubmitting(false);
@@ -166,17 +255,31 @@ export function GeographyManagementView({ setView, token, user }: Props) {
   };
 
   const removeItem = async (path: string) => {
-    if (!confirm('Delete this item?')) return;
-    await apiRequest(path, token, { method: 'DELETE' });
+    if (!confirm("Delete this item?")) return;
+    await apiRequest(path, token, { method: "DELETE" });
+    // clear any editing selection if the deleted item was being edited
+    if (regionEditingId && path.includes(`/regions/${regionEditingId}`))
+      setRegionEditingId(null);
+    if (districtEditingId && path.includes(`/districts/${districtEditingId}`))
+      setDistrictEditingId(null);
+    if (
+      stationEditingId &&
+      path.includes(`/polling-stations/${stationEditingId}`)
+    )
+      setStationEditingId(null);
     await loadAll();
   };
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-7xl mx-auto pb-20 space-y-10">
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="max-w-7xl mx-auto pb-20 space-y-10"
+    >
       <div className="flex flex-col lg:flex-row justify-between gap-8">
         <div className="space-y-4">
           <button
-            onClick={() => setView('dashboard')}
+            onClick={() => setView("dashboard")}
             className="text-[10px] font-black text-slate-400 hover:text-slate-900 uppercase tracking-[0.3em] flex items-center gap-2 transition-colors"
           >
             <ChevronLeft size={14} /> Back to dashboard
@@ -185,7 +288,8 @@ export function GeographyManagementView({ setView, token, user }: Props) {
             Geographic Administration
           </h2>
           <p className="text-slate-400 text-sm font-medium uppercase tracking-widest max-w-2xl">
-            Manage regions, districts, and polling stations with server-enforced jurisdiction rules.
+            Manage regions, districts, and polling stations with server-enforced
+            jurisdiction rules.
           </p>
         </div>
 
@@ -195,13 +299,31 @@ export function GeographyManagementView({ setView, token, user }: Props) {
       </div>
 
       <div className="flex flex-wrap gap-2 p-2 bg-white border border-slate-100 rounded-[2rem] shadow-sm w-fit">
-        <button onClick={() => setTab('regions')} className={cn('px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest', tab === 'regions' ? 'bg-slate-900 text-white' : 'text-slate-500')}>
+        <button
+          onClick={() => setTab("regions")}
+          className={cn(
+            "px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest",
+            tab === "regions" ? "bg-slate-900 text-white" : "text-slate-500",
+          )}
+        >
           Regions
         </button>
-        <button onClick={() => setTab('districts')} className={cn('px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest', tab === 'districts' ? 'bg-slate-900 text-white' : 'text-slate-500')}>
+        <button
+          onClick={() => setTab("districts")}
+          className={cn(
+            "px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest",
+            tab === "districts" ? "bg-slate-900 text-white" : "text-slate-500",
+          )}
+        >
           Districts
         </button>
-        <button onClick={() => setTab('stations')} className={cn('px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest', tab === 'stations' ? 'bg-slate-900 text-white' : 'text-slate-500')}>
+        <button
+          onClick={() => setTab("stations")}
+          className={cn(
+            "px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest",
+            tab === "stations" ? "bg-slate-900 text-white" : "text-slate-500",
+          )}
+        >
           Polling Stations
         </button>
       </div>
@@ -209,11 +331,15 @@ export function GeographyManagementView({ setView, token, user }: Props) {
       <div className="grid grid-cols-1 xl:grid-cols-[1.2fr_0.8fr] gap-8">
         <section className="bg-white rounded-[3rem] border border-slate-100 shadow-sm overflow-hidden">
           <div className="px-10 py-8 border-b border-slate-100 flex items-center gap-4">
-            {tab === 'regions' && <Globe2 className="text-slate-900" />}
-            {tab === 'districts' && <MapPinned className="text-slate-900" />}
-            {tab === 'stations' && <Waypoints className="text-slate-900" />}
+            {tab === "regions" && <Globe2 className="text-slate-900" />}
+            {tab === "districts" && <MapPinned className="text-slate-900" />}
+            {tab === "stations" && <Waypoints className="text-slate-900" />}
             <h3 className="font-display font-black text-2xl tracking-tighter text-slate-900 uppercase">
-              {tab === 'regions' ? 'Regions' : tab === 'districts' ? 'Districts' : 'Polling Stations'}
+              {tab === "regions"
+                ? "Regions"
+                : tab === "districts"
+                  ? "Districts"
+                  : "Polling Stations"}
             </h3>
           </div>
 
@@ -223,45 +349,130 @@ export function GeographyManagementView({ setView, token, user }: Props) {
             </div>
           ) : (
             <div className="divide-y divide-slate-50">
-              {tab === 'regions' && regions.map((region) => (
-                <div key={region.id} className="px-10 py-6 flex items-center justify-between gap-4">
-                  <div>
-                    <p className="font-display font-black text-slate-900 text-xl uppercase tracking-tighter">{region.name}</p>
-                    <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">{region.code} · {(region._count?.districts ?? 0)} districts</p>
+              {tab === "regions" &&
+                regions.map((region) => (
+                  <div
+                    key={region.id}
+                    className={cn(
+                      "px-10 py-6 flex items-center justify-between gap-4",
+                      regionEditingId === region.id ? "bg-slate-50" : "",
+                    )}
+                  >
+                    <div
+                      onClick={() => {
+                        setRegionEditingId(region.id);
+                        setRegionForm({
+                          name: region.name,
+                          code: region.code,
+                          description: region.description ?? "",
+                        });
+                      }}
+                      style={{ cursor: "pointer" }}
+                    >
+                      <p className="font-display font-black text-slate-900 text-xl uppercase tracking-tighter">
+                        {region.name}
+                      </p>
+                      <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">
+                        {region.code} · {region._count?.districts ?? 0}{" "}
+                        districts
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => removeItem(`/regions/${region.id}`)}
+                        className="p-3 bg-rose-50 text-rose-400 rounded-xl hover:bg-rose-500 hover:text-white transition-all"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
                   </div>
-                  <button onClick={() => removeItem(`/regions/${region.id}`)} className="p-3 bg-rose-50 text-rose-400 rounded-xl hover:bg-rose-500 hover:text-white transition-all">
-                    <Trash2 size={18} />
-                  </button>
-                </div>
-              ))}
+                ))}
 
-              {tab === 'districts' && filteredDistricts.map((district) => (
-                <div key={district.id} className="px-10 py-6 flex items-center justify-between gap-4">
-                  <div>
-                    <p className="font-display font-black text-slate-900 text-xl uppercase tracking-tighter">{district.name}</p>
-                    <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">
-                      {district.code} · {district.region?.name} · {(district._count?.pollingStations ?? 0)} polling stations
-                    </p>
+              {tab === "districts" &&
+                filteredDistricts.map((district) => (
+                  <div
+                    key={district.id}
+                    className={cn(
+                      "px-10 py-6 flex items-center justify-between gap-4",
+                      districtEditingId === district.id ? "bg-slate-50" : "",
+                    )}
+                  >
+                    <div
+                      onClick={() => {
+                        setDistrictEditingId(district.id);
+                        setDistrictForm({
+                          name: district.name,
+                          code: district.code,
+                          description: district.description ?? "",
+                        });
+                        setSelectedRegionId(district.regionId);
+                      }}
+                      style={{ cursor: "pointer" }}
+                    >
+                      <p className="font-display font-black text-slate-900 text-xl uppercase tracking-tighter">
+                        {district.name}
+                      </p>
+                      <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">
+                        {district.code} · {district.region?.name} ·{" "}
+                        {district._count?.pollingStations ?? 0} polling stations
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => removeItem(`/districts/${district.id}`)}
+                        className="p-3 bg-rose-50 text-rose-400 rounded-xl hover:bg-rose-500 hover:text-white transition-all"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
                   </div>
-                  <button onClick={() => removeItem(`/districts/${district.id}`)} className="p-3 bg-rose-50 text-rose-400 rounded-xl hover:bg-rose-500 hover:text-white transition-all">
-                    <Trash2 size={18} />
-                  </button>
-                </div>
-              ))}
+                ))}
 
-              {tab === 'stations' && filteredStations.map((station) => (
-                <div key={station.id} className="px-10 py-6 flex items-center justify-between gap-4">
-                  <div>
-                    <p className="font-display font-black text-slate-900 text-xl uppercase tracking-tighter">{station.name}</p>
-                    <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">
-                      {station.code} · {station.district?.name} · Capacity {station.capacity} · {station.isActive ? 'Active' : 'Inactive'}
-                    </p>
+              {tab === "stations" &&
+                filteredStations.map((station) => (
+                  <div
+                    key={station.id}
+                    className={cn(
+                      "px-10 py-6 flex items-center justify-between gap-4",
+                      stationEditingId === station.id ? "bg-slate-50" : "",
+                    )}
+                  >
+                    <div
+                      onClick={() => {
+                        setStationEditingId(station.id);
+                        setStationForm({
+                          name: station.name,
+                          code: station.code,
+                          address: station.address ?? "",
+                          capacity: String(station.capacity),
+                          isActive: !!station.isActive,
+                        });
+                        setSelectedRegionId(station.regionId);
+                        setSelectedDistrictId(station.districtId);
+                      }}
+                      style={{ cursor: "pointer" }}
+                    >
+                      <p className="font-display font-black text-slate-900 text-xl uppercase tracking-tighter">
+                        {station.name}
+                      </p>
+                      <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">
+                        {station.code} · {station.district?.name} · Capacity{" "}
+                        {station.capacity} ·{" "}
+                        {station.isActive ? "Active" : "Inactive"}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() =>
+                          removeItem(`/polling-stations/${station.id}`)
+                        }
+                        className="p-3 bg-rose-50 text-rose-400 rounded-xl hover:bg-rose-500 hover:text-white transition-all"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
                   </div>
-                  <button onClick={() => removeItem(`/polling-stations/${station.id}`)} className="p-3 bg-rose-50 text-rose-400 rounded-xl hover:bg-rose-500 hover:text-white transition-all">
-                    <Trash2 size={18} />
-                  </button>
-                </div>
-              ))}
+                ))}
             </div>
           )}
         </section>
@@ -269,72 +480,240 @@ export function GeographyManagementView({ setView, token, user }: Props) {
         <section className="bg-white rounded-[3rem] border border-slate-100 shadow-sm p-8 space-y-6">
           <div className="space-y-4">
             <h3 className="font-display font-black text-2xl tracking-tighter text-slate-900 uppercase flex items-center gap-3">
-              <Plus size={18} /> Create {tab === 'regions' ? 'Region' : tab === 'districts' ? 'District' : 'Polling Station'}
+              <Plus size={18} /> Create{" "}
+              {tab === "regions"
+                ? "Region"
+                : tab === "districts"
+                  ? "District"
+                  : "Polling Station"}
             </h3>
 
-            {tab !== 'regions' && (
+            {tab !== "regions" && (
               <select
-                value={selectedRegionId ?? ''}
-                onChange={(event) => setSelectedRegionId(event.target.value || null)}
-                disabled={!scopeAccess.canPickRegion && scopeAccess.regionId !== null}
+                value={selectedRegionId ?? ""}
+                onChange={(event) =>
+                  setSelectedRegionId(event.target.value || null)
+                }
+                disabled={
+                  !scopeAccess.canPickRegion && scopeAccess.regionId !== null
+                }
                 className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-bold text-slate-900"
               >
                 <option value="">Select region</option>
                 {regions.map((region) => (
-                  <option key={region.id} value={region.id}>{region.name}</option>
+                  <option key={region.id} value={region.id}>
+                    {region.name}
+                  </option>
                 ))}
               </select>
             )}
 
-            {tab === 'stations' && (
+            {tab === "stations" && (
               <select
-                value={selectedDistrictId ?? ''}
-                onChange={(event) => setSelectedDistrictId(event.target.value || null)}
-                disabled={!scopeAccess.canPickDistrict && scopeAccess.districtId !== null}
+                value={selectedDistrictId ?? ""}
+                onChange={(event) =>
+                  setSelectedDistrictId(event.target.value || null)
+                }
+                disabled={
+                  !scopeAccess.canPickDistrict &&
+                  scopeAccess.districtId !== null
+                }
                 className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-bold text-slate-900"
               >
                 <option value="">Select district</option>
                 {filteredDistricts.map((district) => (
-                  <option key={district.id} value={district.id}>{district.name}</option>
+                  <option key={district.id} value={district.id}>
+                    {district.name}
+                  </option>
                 ))}
               </select>
             )}
 
-            {tab === 'regions' && (
+            {tab === "regions" && (
               <>
-                <input value={regionForm.name} onChange={(e) => setRegionForm({ ...regionForm, name: e.target.value })} placeholder="Region name" className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-bold text-slate-900" />
-                <input value={regionForm.code} onChange={(e) => setRegionForm({ ...regionForm, code: e.target.value })} placeholder="Code" className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-bold text-slate-900" />
-                <textarea value={regionForm.description} onChange={(e) => setRegionForm({ ...regionForm, description: e.target.value })} placeholder="Description" className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-medium text-slate-900 min-h-28" />
-                <button disabled={submitting} onClick={() => void createRegion()} className="w-full px-6 py-4 bg-slate-900 text-white rounded-[1.5rem] font-black uppercase tracking-widest">
-                  Create region
-                </button>
+                <input
+                  value={regionForm.name}
+                  onChange={(e) =>
+                    setRegionForm({ ...regionForm, name: e.target.value })
+                  }
+                  placeholder="Region name"
+                  className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-bold text-slate-900"
+                />
+                <input
+                  value={regionForm.code}
+                  onChange={(e) =>
+                    setRegionForm({ ...regionForm, code: e.target.value })
+                  }
+                  placeholder="Code"
+                  className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-bold text-slate-900"
+                />
+                <textarea
+                  value={regionForm.description}
+                  onChange={(e) =>
+                    setRegionForm({
+                      ...regionForm,
+                      description: e.target.value,
+                    })
+                  }
+                  placeholder="Description"
+                  className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-medium text-slate-900 min-h-28"
+                />
+                <div className="flex gap-3">
+                  <button
+                    disabled={submitting}
+                    onClick={() => void createRegion()}
+                    className="flex-1 px-6 py-4 bg-slate-900 text-white rounded-[1.5rem] font-black uppercase tracking-widest"
+                  >
+                    {regionEditingId ? "Update region" : "Create region"}
+                  </button>
+                  {regionEditingId && (
+                    <button
+                      onClick={() => {
+                        setRegionEditingId(null);
+                        setRegionForm({ name: "", code: "", description: "" });
+                      }}
+                      className="px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-black uppercase tracking-widest"
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </div>
               </>
             )}
 
-            {tab === 'districts' && (
+            {tab === "districts" && (
               <>
-                <input value={districtForm.name} onChange={(e) => setDistrictForm({ ...districtForm, name: e.target.value })} placeholder="District name" className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-bold text-slate-900" />
-                <input value={districtForm.code} onChange={(e) => setDistrictForm({ ...districtForm, code: e.target.value })} placeholder="Code" className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-bold text-slate-900" />
-                <textarea value={districtForm.description} onChange={(e) => setDistrictForm({ ...districtForm, description: e.target.value })} placeholder="Description" className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-medium text-slate-900 min-h-28" />
-                <button disabled={submitting || !selectedRegionId} onClick={() => void createDistrict()} className="w-full px-6 py-4 bg-slate-900 text-white rounded-[1.5rem] font-black uppercase tracking-widest disabled:opacity-50">
-                  Create district
-                </button>
+                <input
+                  value={districtForm.name}
+                  onChange={(e) =>
+                    setDistrictForm({ ...districtForm, name: e.target.value })
+                  }
+                  placeholder="District name"
+                  className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-bold text-slate-900"
+                />
+                <input
+                  value={districtForm.code}
+                  onChange={(e) =>
+                    setDistrictForm({ ...districtForm, code: e.target.value })
+                  }
+                  placeholder="Code"
+                  className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-bold text-slate-900"
+                />
+                <textarea
+                  value={districtForm.description}
+                  onChange={(e) =>
+                    setDistrictForm({
+                      ...districtForm,
+                      description: e.target.value,
+                    })
+                  }
+                  placeholder="Description"
+                  className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-medium text-slate-900 min-h-28"
+                />
+                <div className="flex gap-3">
+                  <button
+                    disabled={submitting || !selectedRegionId}
+                    onClick={() => void createDistrict()}
+                    className="flex-1 px-6 py-4 bg-slate-900 text-white rounded-[1.5rem] font-black uppercase tracking-widest disabled:opacity-50"
+                  >
+                    {districtEditingId ? "Update district" : "Create district"}
+                  </button>
+                  {districtEditingId && (
+                    <button
+                      onClick={() => {
+                        setDistrictEditingId(null);
+                        setDistrictForm({
+                          name: "",
+                          code: "",
+                          description: "",
+                        });
+                      }}
+                      className="px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-black uppercase tracking-widest"
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </div>
               </>
             )}
 
-            {tab === 'stations' && (
+            {tab === "stations" && (
               <>
-                <input value={stationForm.name} onChange={(e) => setStationForm({ ...stationForm, name: e.target.value })} placeholder="Polling station name" className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-bold text-slate-900" />
-                <input value={stationForm.code} onChange={(e) => setStationForm({ ...stationForm, code: e.target.value })} placeholder="Code" className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-bold text-slate-900" />
-                <input value={stationForm.address} onChange={(e) => setStationForm({ ...stationForm, address: e.target.value })} placeholder="Address" className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-medium text-slate-900" />
-                <input value={stationForm.capacity} onChange={(e) => setStationForm({ ...stationForm, capacity: e.target.value })} placeholder="Capacity" className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-medium text-slate-900" />
+                <input
+                  value={stationForm.name}
+                  onChange={(e) =>
+                    setStationForm({ ...stationForm, name: e.target.value })
+                  }
+                  placeholder="Polling station name"
+                  className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-bold text-slate-900"
+                />
+                <input
+                  value={stationForm.code}
+                  onChange={(e) =>
+                    setStationForm({ ...stationForm, code: e.target.value })
+                  }
+                  placeholder="Code"
+                  className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-bold text-slate-900"
+                />
+                <input
+                  value={stationForm.address}
+                  onChange={(e) =>
+                    setStationForm({ ...stationForm, address: e.target.value })
+                  }
+                  placeholder="Address"
+                  className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-medium text-slate-900"
+                />
+                <input
+                  value={stationForm.capacity}
+                  onChange={(e) =>
+                    setStationForm({ ...stationForm, capacity: e.target.value })
+                  }
+                  placeholder="Capacity"
+                  className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-medium text-slate-900"
+                />
                 <label className="flex items-center gap-3 px-2 text-sm font-bold text-slate-700">
-                  <input type="checkbox" checked={stationForm.isActive} onChange={(e) => setStationForm({ ...stationForm, isActive: e.target.checked })} />
+                  <input
+                    type="checkbox"
+                    checked={stationForm.isActive}
+                    onChange={(e) =>
+                      setStationForm({
+                        ...stationForm,
+                        isActive: e.target.checked,
+                      })
+                    }
+                  />
                   Active
                 </label>
-                <button disabled={submitting || !selectedRegionId || !selectedDistrictId} onClick={() => void createStation()} className="w-full px-6 py-4 bg-slate-900 text-white rounded-[1.5rem] font-black uppercase tracking-widest disabled:opacity-50">
-                  Create polling station
-                </button>
+                <div className="flex gap-3">
+                  <button
+                    disabled={
+                      submitting || !selectedRegionId || !selectedDistrictId
+                    }
+                    onClick={() => void createStation()}
+                    className="flex-1 px-6 py-4 bg-slate-900 text-white rounded-[1.5rem] font-black uppercase tracking-widest disabled:opacity-50"
+                  >
+                    {stationEditingId
+                      ? "Update polling station"
+                      : "Create polling station"}
+                  </button>
+                  {stationEditingId && (
+                    <button
+                      onClick={() => {
+                        setStationEditingId(null);
+                        setStationForm({
+                          name: "",
+                          code: "",
+                          address: "",
+                          capacity: "0",
+                          isActive: true,
+                        });
+                      }}
+                      className="px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-black uppercase tracking-widest"
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </div>
               </>
             )}
           </div>
