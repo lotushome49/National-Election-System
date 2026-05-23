@@ -3,7 +3,7 @@ import { voterRepository } from "./voter.repository";
 import { sha256, encrypt, decrypt } from "../../utils/crypto";
 import { ConflictError, NotFoundError } from "../../errors/AppError";
 import { prisma } from "../../configs/database";
-import { computeDeterministicBiometricScore } from "../../utils/biometricMock";
+import { computeFaceEmbeddingScore } from "../../utils/faceRecognition";
 import { buildPaginationMeta } from "../../utils/response";
 import { applyUserScope, assertUserScopeAccess } from "../../utils/scope";
 import { auditService } from "../audit/audit.service";
@@ -40,26 +40,30 @@ export const voterService = {
     actorId: string,
     ip: string,
     requester?: JwtPayload,
+    options?: { isVerified?: boolean },
   ) {
+    const faceEmbedding = dto.faceEmbedding;
+    if (!faceEmbedding) {
+      throw new ConflictError("Face embedding data required");
+    }
+
     // Deduplication checks
     const byNationalId = await voterRepository.findByNationalId(dto.nationalId);
-    if (byNationalId)
-      throw new ConflictError("A voter with this national ID already exists");
 
     // 1:N fuzzy biometric check
     const allVoters = await prisma.voter.findMany({
       where: { deletedAt: null },
-      select: { id: true, fullName: true, biometricTemplate: true }
+      select: { id: true, fullName: true, faceEmbedding: true },
     });
 
     for (const v of allVoters) {
-      if (v.biometricTemplate) {
+      if (v.faceEmbedding) {
         try {
-          const decrypted = decrypt(v.biometricTemplate);
-          const score = computeDeterministicBiometricScore(dto.biometricHash, decrypted);
+          const decrypted = decrypt(v.faceEmbedding);
+          const score = computeFaceEmbeddingScore(faceEmbedding, decrypted);
           if (score >= 85) {
             throw new ConflictError(
-              `Biometric duplicate detected: matches existing voter "${v.fullName}" with score of ${score}%`
+              `Face duplicate detected: matches existing voter "${v.fullName}" with score of ${score}%`,
             );
           }
         } catch (e: any) {
@@ -69,11 +73,11 @@ export const voterService = {
       }
     }
 
-    const biometricHash = sha256(dto.biometricHash);
+    const faceEmbeddingHash = sha256(faceEmbedding);
     const byBiometric =
-      await voterRepository.findByBiometricHash(biometricHash);
+      await voterRepository.findByBiometricHash(faceEmbeddingHash);
     if (byBiometric)
-      throw new ConflictError("Biometric data already registered");
+      throw new ConflictError("Face embedding data already registered");
 
     assertUserScopeAccess(
       requester,
@@ -81,7 +85,7 @@ export const voterService = {
       "voters",
     );
 
-    const voter = await voterRepository.create({
+    const voterData = {
       id: uuidv4(),
       voterId: `ET-${Date.now()}`,
       fullName: dto.fullName,
@@ -94,18 +98,24 @@ export const voterService = {
       regionId: dto.regionId,
       districtId: dto.districtId,
       pollingStationId: dto.pollingStationId,
-      biometricTemplate: encrypt(dto.biometricHash), // AES-256 encrypted
-      biometricHash, // SHA-256 for lookup
-      isVerified: false,
+      faceEmbedding: encrypt(faceEmbedding), // AES-256 encrypted
+      faceEmbeddingHash, // SHA-256 for lookup
+      isVerified: options?.isVerified ?? false,
       createdBy: actorId,
-    });
+    };
+
+    const voter = byNationalId
+      ? await voterRepository.update(byNationalId.id, voterData)
+      : await voterRepository.create(voterData);
 
     await auditService.log({
       userId: actorId,
       action: "CREATE",
       entity: "Voter",
       entityId: voter.id,
-      description: "Voter registered",
+      description: byNationalId
+        ? "Voter face embedding updated"
+        : "Voter registered",
       ipAddress: ip,
     });
 

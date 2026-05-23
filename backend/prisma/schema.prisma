@@ -8,7 +8,7 @@ generator client {
 }
 
 datasource db {
-  provider = "mysql"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -393,8 +393,8 @@ model Voter {
   regionId           String?   @db.VarChar(36) @map("region_id")
   districtId         String?   @db.VarChar(36) @map("district_id")
   pollingStationId   String?   @db.VarChar(36) @map("polling_station_id")
-  biometricTemplate  String?   @db.Text @map("biometric_template")
-  biometricHash      String    @unique @db.VarChar(255) @map("biometric_hash")
+  faceEmbedding      String?   @db.Text @map("biometric_template")
+  faceEmbeddingHash  String    @unique @db.VarChar(255) @map("biometric_hash")
   isVerified         Boolean   @default(false) @map("is_verified")
   registrationDate   DateTime  @default(now()) @map("registration_date")
   createdAt          DateTime  @default(now()) @map("created_at")

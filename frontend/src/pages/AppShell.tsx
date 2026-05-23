@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { motion, AnimatePresence } from "motion/react";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   Vote,
   Fingerprint,
@@ -58,7 +59,6 @@ import { LogItem } from "../components/results/LogItem";
 import { StatCard } from "../components/results/StatCard";
 import { checkPerm } from "../constants/permissions";
 import { useElectionRealtime } from "../hooks/useElectionRealtime";
-import { useFingerprint } from "../hooks/useFingerprint";
 import type { Candidate, Role } from "../types/election";
 import { cn } from "../utils/cn";
 import { isMfaEligibleRole, unwrapApiData } from "../utils/mfa";
@@ -76,11 +76,101 @@ export default function AppShell() {
   const [user, setUser] = useState<any>(null);
   const [token, setToken] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const [view, setView] = useState<string>("login");
+  const location = useLocation();
+  const navigate = useNavigate();
+  const viewFromPath = (pathname: string) => {
+    const normalizedPath = pathname.replace(/\/+$/, "") || "/";
+
+    switch (normalizedPath) {
+      case "/":
+      case "/login":
+        return "login";
+      case "/password-reset":
+        return "password-reset";
+      case "/help":
+        return "help";
+      case "/history":
+        return "history";
+      case "/voters":
+        return "voters";
+      case "/users":
+        return "users";
+      case "/elections":
+        return "elections";
+      case "/candidates":
+        return "candidates";
+      case "/audit-logs":
+        return "audit-logs";
+      case "/results-dashboard":
+        return "results-dashboard";
+      case "/geography":
+        return "geography";
+      case "/security":
+        return "security";
+      case "/sessions":
+        return "sessions";
+      case "/observer-evidence":
+        return "observer-evidence";
+      case "/voter-hub":
+        return "voter-hub";
+      case "/registration":
+        return "registration";
+      case "/voting-booth":
+        return "voting-booth";
+      case "/dashboard":
+        return "dashboard";
+      default:
+        return "login";
+    }
+  };
+  const pathFromView = (nextView: string) => {
+    switch (nextView) {
+      case "login":
+        return "/login";
+      case "password-reset":
+        return "/password-reset";
+      case "help":
+        return "/help";
+      case "history":
+        return "/history";
+      case "voters":
+        return "/voters";
+      case "users":
+        return "/users";
+      case "elections":
+        return "/elections";
+      case "candidates":
+        return "/candidates";
+      case "audit-logs":
+        return "/audit-logs";
+      case "results-dashboard":
+        return "/results-dashboard";
+      case "geography":
+        return "/geography";
+      case "security":
+        return "/security";
+      case "sessions":
+        return "/sessions";
+      case "observer-evidence":
+        return "/observer-evidence";
+      case "voter-hub":
+        return "/voter-hub";
+      case "registration":
+        return "/registration";
+      case "voting-booth":
+        return "/voting-booth";
+      case "dashboard":
+        return "/dashboard";
+      default:
+        return "/login";
+    }
+  };
+  const [view, setViewState] = useState<string>(() =>
+    viewFromPath(location.pathname),
+  );
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { t, i18n } = useTranslation();
   const lang = i18n.language as "en" | "am";
-  const fpHash = useFingerprint();
   const { results, electionPhase, setElectionPhase } =
     useElectionRealtime(token);
   const canManageObserverEvidence = role === "OBSERVER" || role === "ADMIN";
@@ -89,6 +179,21 @@ export default function AppShell() {
     document.documentElement.dir = i18n.dir();
     document.documentElement.lang = i18n.language;
   }, [i18n.language]);
+
+  useEffect(() => {
+    const nextView = viewFromPath(location.pathname);
+    setViewState(nextView);
+
+    if (location.pathname === "/") {
+      navigate("/login", { replace: true });
+    }
+  }, [location.pathname, navigate]);
+
+  const setView = (nextView: string) => {
+    setViewState(nextView);
+    navigate(pathFromView(nextView));
+    setMobileMenuOpen(false);
+  };
 
   const handleLogout = async () => {
     try {
@@ -605,7 +710,6 @@ export default function AppShell() {
                 setToken={setToken}
                 setSessionId={setSessionId}
                 setView={setView}
-                fpHash={fpHash}
                 results={results}
                 t={t}
                 i18n={i18n}
@@ -714,7 +818,6 @@ export default function AppShell() {
                 <RegistrationView
                   key="reg"
                   setView={setView}
-                  fpHash={fpHash}
                   t={t}
                   canRegister={checkPerm(role, "REGISTER_VOTER")}
                   role={role}
@@ -754,7 +857,6 @@ export default function AppShell() {
                   token={token}
                   setView={setView}
                   setUser={setUser}
-                  fpHash={fpHash}
                   role={role}
                   t={t}
                   i18n={i18n}

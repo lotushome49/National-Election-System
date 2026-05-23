@@ -3,6 +3,7 @@ import { authController } from "./auth.controller";
 import { validate } from "../../middleware/validate";
 import { authenticate } from "../../middleware/authenticate";
 import { authLimiter } from "../../middleware/rateLimiter";
+import { registerVoterSchema } from "../voter/voter.schema";
 import {
   loginSchema,
   biometricLoginSchema,
@@ -23,6 +24,14 @@ router.post(
   authLimiter,
   validate(biometricLoginSchema),
   authController.biometricLogin,
+);
+
+// POST /api/v1/auth/register-voter
+router.post(
+  "/register-voter",
+  authLimiter,
+  validate(registerVoterSchema),
+  authController.registerVoter,
 );
 
 // POST /api/v1/auth/refresh

@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { authService } from "./auth.service";
-import { sendSuccess } from "../../utils/response";
+import { voterService } from "../voter/voter.service";
+import { sendCreated, sendSuccess } from "../../utils/response";
 import type { AuthRequest } from "../../types";
 
 export const authController = {
@@ -17,6 +18,21 @@ export const authController = {
     try {
       const result = await authService.biometricLogin(req.body, req.ip ?? "");
       sendSuccess(res, result, "Biometric login successful");
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  registerVoter: async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await voterService.register(
+        req.body,
+        "PUBLIC",
+        req.ip ?? "",
+        undefined,
+        { isVerified: true },
+      );
+      sendCreated(res, result, "Voter registered successfully");
     } catch (err) {
       next(err);
     }

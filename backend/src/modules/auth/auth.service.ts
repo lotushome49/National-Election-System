@@ -35,7 +35,7 @@ import type {
   MfaDisableDto,
 } from "./auth.schema";
 import { prisma } from "../../configs/database";
-import { computeDeterministicBiometricScore } from "../../utils/biometricMock";
+import { computeFaceEmbeddingScore } from "../../utils/faceRecognition";
 
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCK_DURATION_MS = 30 * 60 * 1000;
@@ -194,7 +194,8 @@ export const authService = {
   },
 
   async biometricLogin(dto: BiometricLoginDto, ip: string) {
-    // 1:N fuzzy lookup
+    const faceEmbedding = dto.faceEmbedding;
+
     const allVoters = await prisma.voter.findMany({
       where: { deletedAt: null },
     });
@@ -203,10 +204,10 @@ export const authService = {
     let highestScore = 0;
 
     for (const v of allVoters) {
-      if (v.biometricTemplate) {
+      if (v.faceEmbedding) {
         try {
-          const decrypted = decrypt(v.biometricTemplate);
-          const score = computeDeterministicBiometricScore(dto.biometricHash, decrypted);
+          const decrypted = decrypt(v.faceEmbedding);
+          const score = computeFaceEmbeddingScore(faceEmbedding, decrypted);
           if (score > highestScore) {
             highestScore = score;
             bestVoter = v;
@@ -219,14 +220,16 @@ export const authService = {
 
     if (!bestVoter || highestScore < 85) {
       throw new UnauthorizedError(
-        `Biometric authentication failed${highestScore > 0 ? ` (highest match: ${highestScore}%)` : ""}`
+        `Face authentication failed${highestScore > 0 ? ` (highest match: ${highestScore}%)` : ""}`,
       );
     }
 
     const voter = bestVoter;
 
     if (!voter.isVerified) {
-      throw new UnauthorizedError("Voter registration is awaiting verification approval.");
+      throw new UnauthorizedError(
+        "Voter registration is awaiting verification approval.",
+      );
     }
 
     const session = await authRepository.createSession({
@@ -248,7 +251,7 @@ export const authService = {
       action: "LOGIN",
       entity: "Voter",
       entityId: voter.id,
-      description: `Voter biometric login (match score: ${highestScore}%)`,
+      description: `Voter face login (match score: ${highestScore}%)`,
       ipAddress: ip,
     });
 

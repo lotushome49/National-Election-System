@@ -21,8 +21,12 @@ export function VoterRegistryView({ setView, token, t, i18n, user }: any) {
   const [search, setSearch] = useState("");
   const [selectedVoter, setSelectedVoter] = useState<any | null>(null);
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
-  const [verificationFilter, setVerificationFilter] = useState<"all" | "pending" | "verified">("all");
-  const [updatingVerificationId, setUpdatingVerificationId] = useState<string | null>(null);
+  const [verificationFilter, setVerificationFilter] = useState<
+    "all" | "pending" | "verified"
+  >("all");
+  const [updatingVerificationId, setUpdatingVerificationId] = useState<
+    string | null
+  >(null);
   const [auditSuccess, setAuditSuccess] = useState(false);
 
   useEffect(() => {
@@ -72,10 +76,14 @@ export function VoterRegistryView({ setView, token, t, i18n, user }: any) {
       const resData = await response.json();
       if (response.ok) {
         setVoters((prev) =>
-          prev.map((v) => (v.id === voterId ? { ...v, isVerified: verified } : v))
+          prev.map((v) =>
+            v.id === voterId ? { ...v, isVerified: verified } : v,
+          ),
         );
         if (selectedVoter && selectedVoter.id === voterId) {
-          setSelectedVoter((prev: any) => prev ? { ...prev, isVerified: verified } : null);
+          setSelectedVoter((prev: any) =>
+            prev ? { ...prev, isVerified: verified } : null,
+          );
         }
       } else {
         alert(resData.error || "Failed to update voter verification status");
@@ -149,14 +157,18 @@ export function VoterRegistryView({ setView, token, t, i18n, user }: any) {
             "px-6 py-3 rounded-[1.5rem] font-black uppercase tracking-widest text-[9px] transition-all flex items-center gap-2",
             verificationFilter === "all"
               ? "bg-slate-900 text-white shadow-md shadow-slate-900/10"
-              : "text-slate-400 hover:text-slate-900"
+              : "text-slate-400 hover:text-slate-900",
           )}
         >
           {lang === "en" ? "All Citizens" : "ሁሉንም ዜጎች"}
-          <span className={cn(
-            "px-2 py-0.5 rounded-full text-[8px] font-black",
-            verificationFilter === "all" ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"
-          )}>
+          <span
+            className={cn(
+              "px-2 py-0.5 rounded-full text-[8px] font-black",
+              verificationFilter === "all"
+                ? "bg-white/20 text-white"
+                : "bg-slate-100 text-slate-500",
+            )}
+          >
             {voters.length}
           </span>
         </button>
@@ -166,15 +178,19 @@ export function VoterRegistryView({ setView, token, t, i18n, user }: any) {
             "px-6 py-3 rounded-[1.5rem] font-black uppercase tracking-widest text-[9px] transition-all flex items-center gap-2",
             verificationFilter === "pending"
               ? "bg-amber-500 text-white shadow-md shadow-amber-500/10"
-              : "text-slate-400 hover:text-amber-600"
+              : "text-slate-400 hover:text-amber-600",
           )}
         >
           {lang === "en" ? "Pending Audit" : "ኦዲት የሚጠብቁ"}
-          <span className={cn(
-            "px-2 py-0.5 rounded-full text-[8px] font-black",
-            verificationFilter === "pending" ? "bg-white/20 text-white" : "bg-amber-50 text-amber-600"
-          )}>
-            {voters.filter(v => !v.isVerified).length}
+          <span
+            className={cn(
+              "px-2 py-0.5 rounded-full text-[8px] font-black",
+              verificationFilter === "pending"
+                ? "bg-white/20 text-white"
+                : "bg-amber-50 text-amber-600",
+            )}
+          >
+            {voters.filter((v) => !v.isVerified).length}
           </span>
         </button>
         <button
@@ -183,15 +199,19 @@ export function VoterRegistryView({ setView, token, t, i18n, user }: any) {
             "px-6 py-3 rounded-[1.5rem] font-black uppercase tracking-widest text-[9px] transition-all flex items-center gap-2",
             verificationFilter === "verified"
               ? "bg-emerald-500 text-white shadow-md shadow-emerald-500/10"
-              : "text-slate-400 hover:text-emerald-600"
+              : "text-slate-400 hover:text-emerald-600",
           )}
         >
           {lang === "en" ? "Verified" : "የተረጋገጡ"}
-          <span className={cn(
-            "px-2 py-0.5 rounded-full text-[8px] font-black",
-            verificationFilter === "verified" ? "bg-white/20 text-white" : "bg-emerald-50 text-emerald-600"
-          )}>
-            {voters.filter(v => v.isVerified).length}
+          <span
+            className={cn(
+              "px-2 py-0.5 rounded-full text-[8px] font-black",
+              verificationFilter === "verified"
+                ? "bg-white/20 text-white"
+                : "bg-emerald-50 text-emerald-600",
+            )}
+          >
+            {voters.filter((v) => v.isVerified).length}
           </span>
         </button>
       </div>
@@ -252,9 +272,9 @@ export function VoterRegistryView({ setView, token, t, i18n, user }: any) {
                     <td className="px-10 py-6">
                       <span
                         className="text-[10px] text-slate-300 font-mono uppercase tracking-tighter truncate max-w-[120px] block group-hover:text-slate-900 transition-colors"
-                        title={voter.biometricHash}
+                        title={voter.faceEmbeddingHash}
                       >
-                        {voter.biometricHash.slice(0, 16)}...
+                        {voter.faceEmbeddingHash.slice(0, 16)}...
                       </span>
                     </td>
                     {/* Verification Status Badge */}
@@ -270,12 +290,18 @@ export function VoterRegistryView({ setView, token, t, i18n, user }: any) {
                         <div
                           className={cn(
                             "w-1.5 h-1.5 rounded-full",
-                            voter.isVerified ? "bg-emerald-500" : "bg-amber-500 animate-pulse",
+                            voter.isVerified
+                              ? "bg-emerald-500"
+                              : "bg-amber-500 animate-pulse",
                           )}
                         />
                         {voter.isVerified
-                          ? (lang === "en" ? "Verified" : "የተረጋገጠ")
-                          : (lang === "en" ? "Pending Audit" : "ኦዲት የሚጠብቅ")}
+                          ? lang === "en"
+                            ? "Verified"
+                            : "የተረጋገጠ"
+                          : lang === "en"
+                            ? "Pending Audit"
+                            : "ኦዲት የሚጠብቅ"}
                       </span>
                     </td>
 
@@ -313,12 +339,16 @@ export function VoterRegistryView({ setView, token, t, i18n, user }: any) {
                           "px-5 py-2.5 rounded-xl font-black uppercase tracking-widest text-[9px] shadow-sm transition-all flex items-center gap-2 w-fit ml-auto border",
                           voter.isVerified
                             ? "bg-slate-50 hover:bg-slate-100 text-slate-600 border-slate-100"
-                            : "bg-slate-900 hover:bg-slate-800 text-white border-slate-900"
+                            : "bg-slate-900 hover:bg-slate-800 text-white border-slate-900",
                         )}
                       >
                         {voter.isVerified
-                          ? (lang === "en" ? "View ID" : "መታወቂያ")
-                          : (lang === "en" ? "Audit" : "ኦዲት")}
+                          ? lang === "en"
+                            ? "View ID"
+                            : "መታወቂያ"
+                          : lang === "en"
+                            ? "Audit"
+                            : "ኦዲት"}
                       </button>
                     </td>
                   </tr>
@@ -374,10 +404,14 @@ export function VoterRegistryView({ setView, token, t, i18n, user }: any) {
                 <div className="space-y-2">
                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] flex items-center gap-2">
                     <ShieldCheck size={14} className="text-indigo-500" />
-                    {lang === "en" ? "National Security Registry Audit" : "ብሔራዊ ደህንነት መዝገብ ኦዲት"}
+                    {lang === "en"
+                      ? "National Security Registry Audit"
+                      : "ብሔራዊ ደህንነት መዝገብ ኦዲት"}
                   </p>
                   <h3 className="text-3xl font-display font-black tracking-tighter text-slate-900 uppercase">
-                    {lang === "en" ? "Voter Verification Audit" : "የመራጭ ማረጋገጫ ኦዲት"}
+                    {lang === "en"
+                      ? "Voter Verification Audit"
+                      : "የመራጭ ማረጋገጫ ኦዲት"}
                   </h3>
                   <p className="text-xs text-slate-400 uppercase tracking-widest leading-relaxed">
                     {lang === "en"
@@ -397,10 +431,14 @@ export function VoterRegistryView({ setView, token, t, i18n, user }: any) {
                     </div>
                     <div className="space-y-2">
                       <h4 className="text-2xl font-display font-black text-emerald-900 uppercase">
-                        {lang === "en" ? "Audit Approved Successfully" : "ኦዲቱ በተሳካ ሁኔታ ጸድቋል"}
+                        {lang === "en"
+                          ? "Audit Approved Successfully"
+                          : "ኦዲቱ በተሳካ ሁኔታ ጸድቋል"}
                       </h4>
                       <p className="text-xs font-semibold text-emerald-600 uppercase tracking-widest">
-                        {lang === "en" ? "Voter credentials locked and biometric voting enabled." : "የመራጭ ማረጋገጫ ተቆልፏል: ባዮሜትሪክ ድምጽ መስጠት ተፈቅዷል::"}
+                        {lang === "en"
+                          ? "Voter credentials locked and biometric voting enabled."
+                          : "የመራጭ ማረጋገጫ ተቆልፏል: ባዮሜትሪክ ድምጽ መስጠት ተፈቅዷል::"}
                       </p>
                     </div>
                   </motion.div>
@@ -412,13 +450,16 @@ export function VoterRegistryView({ setView, token, t, i18n, user }: any) {
                       <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px),linear-gradient(to_bottom,#ffffff03_1px,transparent_1px)] bg-[size:16px_16px]" />
                       {/* Holographic glowing seal */}
                       <div className="absolute top-8 right-8 w-24 h-24 bg-gradient-to-tr from-yellow-500/10 via-teal-500/10 to-indigo-500/10 rounded-full blur-xl border border-white/5 opacity-80 group-hover:scale-110 transition-transform duration-500" />
-                      
+
                       <div className="relative z-10 flex flex-col md:flex-row gap-8">
                         {/* Biometric Portrait Frame */}
                         <div className="w-36 h-48 bg-slate-900/60 border border-slate-700/50 rounded-xl relative flex flex-col items-center justify-center overflow-hidden shrink-0 shadow-inner">
                           {/* Laser Scan line animation */}
                           <div className="absolute inset-x-0 h-0.5 bg-emerald-500/80 shadow-[0_0_8px_#10b981] animate-[pulse_2s_infinite] top-1/4" />
-                          <Fingerprint size={64} className="text-emerald-500/80 animate-pulse" />
+                          <Fingerprint
+                            size={64}
+                            className="text-emerald-500/80 animate-pulse"
+                          />
                           <p className="absolute bottom-3 text-[7px] text-slate-400 font-mono tracking-widest uppercase">
                             {lang === "en" ? "BIOMETRIC SECURE" : "ባዮሜትሪክ ጥበቃ"}
                           </p>
@@ -429,42 +470,77 @@ export function VoterRegistryView({ setView, token, t, i18n, user }: any) {
                           <div className="border-b border-white/10 pb-4 flex justify-between items-start">
                             <div>
                               <p className="text-[7px] font-black text-amber-500 uppercase tracking-[0.2em] leading-none mb-1">
-                                {lang === "en" ? "FEDERAL DEMOCRATIC REPUBLIC OF ETHIOPIA" : "የኢትዮጵያ ፌዴራላዊ ዴሞክራሲያዊ ሪፐብሊክ"}
+                                {lang === "en"
+                                  ? "FEDERAL DEMOCRATIC REPUBLIC OF ETHIOPIA"
+                                  : "የኢትዮጵያ ፌዴራላዊ ዴሞክራሲያዊ ሪፐብሊክ"}
                               </p>
                               <h4 className="text-xs font-black uppercase tracking-wider text-slate-200">
-                                {lang === "en" ? "National Identity Card" : "ብሔራዊ መታወቂያ ካርድ"}
+                                {lang === "en"
+                                  ? "National Identity Card"
+                                  : "ብሔራዊ መታወቂያ ካርድ"}
                               </h4>
                             </div>
-                            <span className={cn(
-                              "text-[8px] font-black uppercase tracking-widest px-2.5 py-1 rounded bg-white/10 border border-white/10",
-                              selectedVoter.isVerified ? "text-emerald-400 border-emerald-500/20" : "text-amber-400 border-amber-500/20"
-                            )}>
-                              {selectedVoter.isVerified ? "VERIFIED" : "PENDING AUDIT"}
+                            <span
+                              className={cn(
+                                "text-[8px] font-black uppercase tracking-widest px-2.5 py-1 rounded bg-white/10 border border-white/10",
+                                selectedVoter.isVerified
+                                  ? "text-emerald-400 border-emerald-500/20"
+                                  : "text-amber-400 border-amber-500/20",
+                              )}
+                            >
+                              {selectedVoter.isVerified
+                                ? "VERIFIED"
+                                : "PENDING AUDIT"}
                             </span>
                           </div>
 
                           <div className="grid grid-cols-2 gap-4">
                             <div>
-                              <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">{lang === "en" ? "Full Name" : "ሙሉ ስም"}</p>
-                              <p className="text-sm font-black uppercase tracking-tight text-white leading-none">{selectedVoter.fullName}</p>
+                              <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">
+                                {lang === "en" ? "Full Name" : "ሙሉ ስም"}
+                              </p>
+                              <p className="text-sm font-black uppercase tracking-tight text-white leading-none">
+                                {selectedVoter.fullName}
+                              </p>
                             </div>
                             <div>
-                              <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">{lang === "en" ? "National ID" : "ብሔራዊ መታወቂያ"}</p>
-                              <p className="text-sm font-mono font-black text-amber-400 leading-none">{selectedVoter.nationalId}</p>
+                              <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">
+                                {lang === "en" ? "National ID" : "ብሔራዊ መታወቂያ"}
+                              </p>
+                              <p className="text-sm font-mono font-black text-amber-400 leading-none">
+                                {selectedVoter.nationalId}
+                              </p>
                             </div>
                             <div>
-                              <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">{lang === "en" ? "Date of Birth" : "የትውልድ ቀን"}</p>
-                              <p className="text-xs font-bold text-white leading-none">{selectedVoter.dob}</p>
+                              <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">
+                                {lang === "en" ? "Date of Birth" : "የትውልድ ቀን"}
+                              </p>
+                              <p className="text-xs font-bold text-white leading-none">
+                                {selectedVoter.dob}
+                              </p>
                             </div>
                             <div>
-                              <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">{lang === "en" ? "Region / District" : "ክልል / ወረዳ"}</p>
-                              <p className="text-xs font-bold text-white uppercase leading-none">{t(selectedVoter.regionId)} / {selectedVoter.districtId || "Bole"}</p>
+                              <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">
+                                {lang === "en"
+                                  ? "Region / District"
+                                  : "ክልል / ወረዳ"}
+                              </p>
+                              <p className="text-xs font-bold text-white uppercase leading-none">
+                                {t(selectedVoter.regionId)} /{" "}
+                                {selectedVoter.districtId || "Bole"}
+                              </p>
                             </div>
                           </div>
 
                           <div className="pt-2 border-t border-white/5">
-                            <p className="text-[7px] font-bold text-slate-500 uppercase tracking-widest mb-1">{lang === "en" ? "Secure Cryptographic Biometric Hash (SHA-256)" : "ደህንነቱ የተጠበቀ ምስጠራ ሃሽ (SHA-256)"}</p>
-                            <p className="text-[9px] font-mono text-slate-400 tracking-tighter truncate max-w-md uppercase">{selectedVoter.biometricHash}</p>
+                            <p className="text-[7px] font-bold text-slate-500 uppercase tracking-widest mb-1">
+                              {lang === "en"
+                                ? "Secure Cryptographic Face Hash (SHA-256)"
+                                : "ደህንነቱ የተጠበቀ የፊት ሃሽ (SHA-256)"}
+                            </p>
+                            <p className="text-[9px] font-mono text-slate-400 tracking-tighter truncate max-w-md uppercase">
+                              {selectedVoter.faceEmbeddingHash}
+                            </p>
                           </div>
                         </div>
                       </div>
@@ -473,20 +549,43 @@ export function VoterRegistryView({ setView, token, t, i18n, user }: any) {
                     {/* Audit Checklist */}
                     <div className="space-y-4 bg-slate-50 p-6 rounded-[2rem] border border-slate-100">
                       <h5 className="text-xs font-black uppercase tracking-widest text-slate-500 mb-2">
-                        {lang === "en" ? "Verification Checklist" : "የማረጋገጫ ዝርዝር"}
+                        {lang === "en"
+                          ? "Verification Checklist"
+                          : "የማረጋገጫ ዝርዝር"}
                       </h5>
                       <div className="space-y-3">
                         <div className="flex items-center gap-3 text-xs font-semibold text-slate-600">
-                          <CheckCircle2 size={16} className="text-emerald-500 shrink-0" />
-                          <span>{lang === "en" ? "Biometric template integrity hash check passed (100% Unique)" : "የባዮሜትሪክ ታማኝነት ማረጋገጫ አልፏል (100% ልዩ)"}</span>
+                          <CheckCircle2
+                            size={16}
+                            className="text-emerald-500 shrink-0"
+                          />
+                          <span>
+                            {lang === "en"
+                              ? "Biometric template integrity hash check passed (100% Unique)"
+                              : "የባዮሜትሪክ ታማኝነት ማረጋገጫ አልፏል (100% ልዩ)"}
+                          </span>
                         </div>
                         <div className="flex items-center gap-3 text-xs font-semibold text-slate-600">
-                          <CheckCircle2 size={16} className="text-emerald-500 shrink-0" />
-                          <span>{lang === "en" ? "National Citizenship Registry matches applicant credentials" : "ብሔራዊ ዜግነት ምዝገባ ከማመልከቻው ጋር ይዛመዳል"}</span>
+                          <CheckCircle2
+                            size={16}
+                            className="text-emerald-500 shrink-0"
+                          />
+                          <span>
+                            {lang === "en"
+                              ? "National Citizenship Registry matches applicant credentials"
+                              : "ብሔራዊ ዜግነት ምዝገባ ከማመልከቻው ጋር ይዛመዳል"}
+                          </span>
                         </div>
                         <div className="flex items-center gap-3 text-xs font-semibold text-slate-600">
-                          <CheckCircle2 size={16} className="text-emerald-500 shrink-0" />
-                          <span>{lang === "en" ? "Regional boundary jurisdiction and polling station scope validated" : "የክልል ወሰን ክልል እና የድምጽ መስጫ ጣቢያ ወሰን ተረጋግጧል"}</span>
+                          <CheckCircle2
+                            size={16}
+                            className="text-emerald-500 shrink-0"
+                          />
+                          <span>
+                            {lang === "en"
+                              ? "Regional boundary jurisdiction and polling station scope validated"
+                              : "የክልል ወሰን ክልል እና የድምጽ መስጫ ጣቢያ ወሰን ተረጋግጧል"}
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -508,8 +607,12 @@ export function VoterRegistryView({ setView, token, t, i18n, user }: any) {
                         >
                           <ShieldCheck size={18} />
                           {updatingVerificationId === selectedVoter.id
-                            ? (lang === "en" ? "Approving..." : "እያጸደቀ...")
-                            : (lang === "en" ? "Approve Verification" : "ማረጋገጫውን አጽድቅ")}
+                            ? lang === "en"
+                              ? "Approving..."
+                              : "እያጸደቀ..."
+                            : lang === "en"
+                              ? "Approve Verification"
+                              : "ማረጋገጫውን አጽድቅ"}
                         </button>
                       ) : (
                         <button
@@ -522,11 +625,15 @@ export function VoterRegistryView({ setView, token, t, i18n, user }: any) {
                         >
                           <AlertCircle size={18} />
                           {updatingVerificationId === selectedVoter.id
-                            ? (lang === "en" ? "Revoking..." : "እየሻረ...")
-                            : (lang === "en" ? "Revoke / Mark Pending" : "ማረጋገጫውን ሽር / ወደ ኦዲት መልስ")}
+                            ? lang === "en"
+                              ? "Revoking..."
+                              : "እየሻረ..."
+                            : lang === "en"
+                              ? "Revoke / Mark Pending"
+                              : "ማረጋገጫውን ሽር / ወደ ኦዲት መልስ"}
                         </button>
                       )}
-                      
+
                       <button
                         onClick={() => setIsAuditModalOpen(false)}
                         className="px-8 py-4 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-[1.8rem] font-black uppercase tracking-widest text-[10px] transition-all"

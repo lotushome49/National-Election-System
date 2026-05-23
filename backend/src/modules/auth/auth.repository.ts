@@ -133,6 +133,6 @@ export const authRepository = {
   /** Find voter by biometric hash */
   findVoterByBiometricHash: (hash: string) =>
     prisma.voter.findFirst({
-      where: { biometricHash: hash, deletedAt: null },
+      where: { faceEmbeddingHash: hash, deletedAt: null },
     }),
 };

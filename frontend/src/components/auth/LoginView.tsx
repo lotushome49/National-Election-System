@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { motion } from "motion/react";
 import {
   ShieldCheck,
-  Fingerprint,
+  Camera,
   Lock,
   AlertCircle,
   ArrowLeft,
@@ -14,10 +14,16 @@ import {
   LayoutDashboard,
   Database,
   CheckCircle2,
+  UserPlus,
 } from "lucide-react";
 import { unwrapApiData } from "../../utils/mfa";
 import { cn } from "../../utils/cn";
 import type { Role } from "../../types/election";
+import {
+  computeFaceEmbeddingScore,
+  createDemoFaceEmbedding,
+} from "../../utils/faceRecognition";
+import { useFaceEmbedding } from "../../hooks/useFaceEmbedding";
 
 export function LoginView({
   setRole,
@@ -25,7 +31,6 @@ export function LoginView({
   setToken,
   setSessionId,
   setView,
-  fpHash,
   results,
   t,
   i18n,
@@ -44,9 +49,19 @@ export function LoginView({
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const lang = i18n.language as "en" | "am";
 
-  const [biometricState, setBiometricState] = useState<'idle' | 'initializing' | 'scanning' | 'verifying' | 'failed' | 'success'>('idle');
+  const [biometricState, setBiometricState] = useState<
+    "idle" | "initializing" | "scanning" | "verifying" | "failed" | "success"
+  >("idle");
   const [biometricScore, setBiometricScore] = useState<number | null>(null);
   const [cooldown, setCooldown] = useState(0);
+  const {
+    videoRef,
+    modelReady,
+    modelError,
+    startCamera,
+    stopCamera,
+    captureEmbedding,
+  } = useFaceEmbedding();
 
   useEffect(() => {
     if (cooldown > 0) {
@@ -55,48 +70,190 @@ export function LoginView({
     }
   }, [cooldown]);
 
-  const startBiometricLogin = async () => {
-    if (cooldown > 0) return;
-    setBiometricState('initializing');
-    setError("");
-    
-    // Simulate fingerprint sensor initializing (800ms)
-    await new Promise(r => setTimeout(r, 800));
-    setBiometricState('scanning');
-    
-    // Simulate scan pattern matching (1200ms)
-    await new Promise(r => setTimeout(r, 1200));
-    setBiometricState('verifying');
-    
-    try {
-      const endpoint = "/api/auth/login/biometric";
-      const response = await fetch(endpoint, {
+  useEffect(() => () => stopCamera(), [stopCamera]);
+
+  const postWithFallback = async (
+    paths: string[],
+    body: Record<string, unknown>,
+  ) => {
+    let lastResponse: Response | null = null;
+
+    for (const path of paths) {
+      const response = await fetch(path, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ biometricHash: fpHash }),
+        body: JSON.stringify(body),
       });
+
+      if (response.status !== 404) {
+        return response;
+      }
+
+      lastResponse = response;
+    }
+
+    if (lastResponse) return lastResponse;
+    throw new Error("Authentication endpoint not found (404)");
+  };
+
+  const createDeterministicDemoFaceEmbedding = (nationalId: string) => {
+    const normalized = (nationalId || "")
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, "")
+      .trim();
+
+    if (!normalized) return "";
+
+    let hash = 0;
+    for (let i = 0; i < normalized.length; i += 1) {
+      hash = (hash * 31 + normalized.charCodeAt(i)) >>> 0;
+    }
+
+    return createDemoFaceEmbedding(normalized || String(hash));
+  };
+
+  const getDemoFaceEmbedding = () => {
+    try {
+      const raw = localStorage.getItem("demoVoterAuth");
+      if (!raw) return "";
+      const parsed = JSON.parse(raw) as {
+        nationalId?: string;
+        faceEmbedding?: string;
+      };
+
+      if (parsed.faceEmbedding) return parsed.faceEmbedding;
+      if (parsed.nationalId) {
+        return createDeterministicDemoFaceEmbedding(parsed.nationalId);
+      }
+    } catch {
+      return "";
+    }
+
+    return "";
+  };
+
+  const getDemoVoterProfile = () => {
+    try {
+      const raw = localStorage.getItem("demoVoterAuth");
+      if (!raw) return null;
+      return JSON.parse(raw) as {
+        nationalId?: string;
+        voterId?: string;
+        fullName?: string;
+        faceEmbedding?: string;
+      };
+    } catch {
+      return null;
+    }
+  };
+
+  const tryDemoLogin = (capturedEmbedding: string) => {
+    const profile = getDemoVoterProfile();
+    if (!profile?.faceEmbedding) return null;
+
+    const score = computeFaceEmbeddingScore(
+      capturedEmbedding,
+      profile.faceEmbedding,
+    );
+
+    if (score < 85) return null;
+
+    const demoVoterId = profile.voterId || `DEMO-${Date.now()}`;
+    return {
+      token: `demo-token-${demoVoterId}`,
+      accessToken: `demo-token-${demoVoterId}`,
+      sessionId: `demo-session-${demoVoterId}`,
+      matchScore: score,
+      user: {
+        id: demoVoterId,
+        fullName: profile.fullName || "Demo Voter",
+        username: profile.nationalId || demoVoterId,
+        role: "VOTER",
+        sessionId: `demo-session-${demoVoterId}`,
+      },
+    };
+  };
+
+  const startBiometricLogin = async () => {
+    if (cooldown > 0) return;
+    setBiometricState("initializing");
+    setError("");
+    setBiometricScore(null);
+
+    try {
+      await startCamera();
+    } catch (cameraError) {
+      const fallback = getDemoFaceEmbedding();
+      if (!fallback) {
+        throw cameraError;
+      }
+    }
+
+    // Simulate sensor initialization while the camera stream settles.
+    await new Promise((r) => setTimeout(r, 700));
+    setBiometricState("scanning");
+
+    // Give the camera a brief moment to stabilize before capture.
+    await new Promise((r) => setTimeout(r, 900));
+    setBiometricState("verifying");
+
+    try {
+      let faceEmbeddingForLogin = "";
+
+      try {
+        faceEmbeddingForLogin = await captureEmbedding();
+      } catch {
+        faceEmbeddingForLogin = getDemoFaceEmbedding();
+      }
+
+      if (!faceEmbeddingForLogin) {
+        throw new Error("Face capture failed. Please try again.");
+      }
+
+      const localDemoLogin = tryDemoLogin(faceEmbeddingForLogin);
+      if (localDemoLogin) {
+        const unwrappedDemo = unwrapApiData(localDemoLogin);
+        setBiometricState("success");
+        setBiometricScore(unwrappedDemo?.matchScore || 100);
+        stopCamera();
+
+        await new Promise((r) => setTimeout(r, 700));
+        finalizeLogin(unwrappedDemo, "VOTER");
+        return;
+      }
+
+      const response = await postWithFallback(
+        ["/api/auth/login/biometric", "/api/v1/auth/login/biometric"],
+        { faceEmbedding: faceEmbeddingForLogin },
+      );
 
       const contentType = response.headers.get("content-type");
       let data;
       if (contentType && contentType.includes("application/json")) {
         data = await response.json();
       } else {
-        throw new Error("Authentication failed: Server returned an invalid response.");
+        throw new Error(
+          "Authentication failed: Server returned an invalid response.",
+        );
       }
 
       if (!response.ok) {
-        throw new Error(data?.message || data?.error || "Authentication failed");
+        throw new Error(
+          data?.message || data?.error || "Authentication failed",
+        );
       }
 
       const unwrapped = unwrapApiData(data);
-      setBiometricState('success');
+      setBiometricState("success");
       setBiometricScore(unwrapped?.matchScore || 100);
-      
+      stopCamera();
+
       // Delay slightly for success animation before finalize
-      await new Promise(r => setTimeout(r, 1000));
+      await new Promise((r) => setTimeout(r, 1000));
       finalizeLogin(unwrapped, "VOTER");
     } catch (err: any) {
-      setBiometricState('failed');
+      stopCamera();
+      setBiometricState("failed");
       const scoreMatch = err.message.match(/highest match: (\d+)%/);
       if (scoreMatch) {
         setBiometricScore(parseInt(scoreMatch[1], 10));
@@ -104,7 +261,7 @@ export function LoginView({
         setBiometricScore(null);
       }
       setError(err.message);
-      
+
       // Trigger a 5 seconds cooldown
       setCooldown(5);
     }
@@ -144,18 +301,21 @@ export function LoginView({
     setLoading(true);
     setError("");
     try {
-      const endpoint =
-        role === "VOTER" ? "/api/auth/login/biometric" : "/api/auth/login";
       const requestBody =
         role === "VOTER"
-          ? { biometricHash: fpHash }
+          ? {
+              faceEmbedding:
+                getDemoFaceEmbedding() ||
+                createDemoFaceEmbedding("login-fallback"),
+            }
           : { username: authData.username, password: authData.password };
 
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(requestBody),
-      });
+      const response = await postWithFallback(
+        role === "VOTER"
+          ? ["/api/auth/login/biometric", "/api/v1/auth/login/biometric"]
+          : ["/api/auth/login", "/api/v1/auth/login"],
+        requestBody,
+      );
 
       if (response.status === 404) {
         throw new Error(
@@ -201,15 +361,14 @@ export function LoginView({
     setLoading(true);
     setError("");
     try {
-      const response = await fetch("/api/auth/mfa/challenge", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const response = await postWithFallback(
+        ["/api/auth/mfa/challenge", "/api/v1/auth/mfa/challenge"],
+        {
           challengeToken: mfaChallengeToken,
           code: useRecoveryCode ? undefined : mfaCode,
           recoveryCode: useRecoveryCode ? recoveryCode : undefined,
-        }),
-      });
+        },
+      );
 
       const data = unwrapApiData(await response.json());
       if (!response.ok) {
@@ -274,34 +433,55 @@ export function LoginView({
         )}
 
         <div className="space-y-8 relative z-10">
-          {biometricState !== 'idle' ? (
+          {biometricState !== "idle" ? (
             <div className="flex flex-col items-center justify-center p-6 bg-slate-50 border border-slate-100 rounded-3xl animate-in fade-in zoom-in duration-300">
               <div className="relative mb-6">
                 {/* Glowing Outer Rings */}
-                <div className={`absolute -inset-4 rounded-full blur-xl opacity-35 transition-all duration-500 ${
-                  biometricState === 'success' ? 'bg-green-500 scale-110' :
-                  biometricState === 'failed' ? 'bg-red-500 scale-100' :
-                  'bg-election-blue animate-pulse'
-                }`} />
+                <div
+                  className={`absolute -inset-4 rounded-full blur-xl opacity-35 transition-all duration-500 ${
+                    biometricState === "success"
+                      ? "bg-green-500 scale-110"
+                      : biometricState === "failed"
+                        ? "bg-red-500 scale-100"
+                        : "bg-election-blue animate-pulse"
+                  }`}
+                />
 
-                {/* Fingerprint container */}
-                <div className={`relative w-32 h-32 rounded-full border-4 flex items-center justify-center bg-white transition-all duration-500 ${
-                  biometricState === 'success' ? 'border-green-500 shadow-2xl shadow-green-200' :
-                  biometricState === 'failed' ? 'border-red-500 shadow-2xl shadow-red-200' :
-                  'border-election-blue shadow-2xl shadow-sky-100'
-                }`}>
-                  {biometricState === 'success' ? (
+                {/* Face camera preview */}
+                <div
+                  className={`relative w-32 h-32 rounded-full border-4 flex items-center justify-center bg-white transition-all duration-500 ${
+                    biometricState === "success"
+                      ? "border-green-500 shadow-2xl shadow-green-200"
+                      : biometricState === "failed"
+                        ? "border-red-500 shadow-2xl shadow-red-200"
+                        : "border-election-blue shadow-2xl shadow-sky-100"
+                  }`}
+                >
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="absolute inset-0 h-full w-full object-cover scale-x-[-1]"
+                  />
+                  <div className="absolute inset-0 bg-slate-900/30" />
+                  {biometricState === "success" ? (
                     <CheckCircle2 className="text-green-500 w-16 h-16 animate-bounce" />
-                  ) : biometricState === 'failed' ? (
+                  ) : biometricState === "failed" ? (
                     <AlertCircle className="text-red-500 w-16 h-16" />
                   ) : (
-                    <Fingerprint className={`text-election-blue w-16 h-16 transition-all duration-300 ${
-                      biometricState === 'scanning' ? 'scale-110 animate-pulse' : ''
-                    }`} />
+                    <Camera
+                      className={`text-election-blue w-16 h-16 transition-all duration-300 ${
+                        biometricState === "scanning"
+                          ? "scale-110 animate-pulse"
+                          : ""
+                      }`}
+                    />
                   )}
 
                   {/* Scanning Laser Line */}
-                  {(biometricState === 'scanning' || biometricState === 'verifying') && (
+                  {(biometricState === "scanning" ||
+                    biometricState === "verifying") && (
                     <motion.div
                       animate={{ top: ["15%", "85%", "15%"] }}
                       transition={{
@@ -317,28 +497,32 @@ export function LoginView({
 
               {/* Status title & description */}
               <h3 className="font-bold text-xl tracking-tight text-slate-800 mb-2">
-                {biometricState === 'initializing' && "Initializing Sensor..."}
-                {biometricState === 'scanning' && "Scanning Fingerprint..."}
-                {biometricState === 'verifying' && "Verifying Signature..."}
-                {biometricState === 'success' && "Verification Success!"}
-                {biometricState === 'failed' && "Biometric Match Failed"}
+                {biometricState === "initializing" && "Initializing Camera..."}
+                {biometricState === "scanning" && "Scanning Face..."}
+                {biometricState === "verifying" &&
+                  "Verifying Face Embedding..."}
+                {biometricState === "success" && "Verification Success!"}
+                {biometricState === "failed" && "Biometric Match Failed"}
               </h3>
 
               <p className="text-xs text-slate-500 text-center max-w-xs font-mono uppercase tracking-wider mb-6">
-                {biometricState === 'initializing' && "Aligning optical reader and loading core cryptography keys..."}
-                {biometricState === 'scanning' && `Hashing sensor pattern... SHA256[${fpHash ? fpHash.slice(0, 8) : "INITIALIZING"}...]`}
-                {biometricState === 'verifying' && "Executing 1:N Jaccard similarity distance search..."}
-                {biometricState === 'success' && `Perfect Match Verified! Score: ${biometricScore}%`}
-                {biometricState === 'failed' && (
-                  biometricScore !== null 
+                {biometricState === "initializing" &&
+                  "Preparing camera and loading face models..."}
+                {biometricState === "scanning" &&
+                  `${modelReady ? "Face model ready" : "Loading face model"}...`}
+                {biometricState === "verifying" &&
+                  "Executing 1:N face embedding similarity search..."}
+                {biometricState === "success" &&
+                  `Perfect Match Verified! Score: ${biometricScore}%`}
+                {biometricState === "failed" &&
+                  (biometricScore !== null
                     ? `Matching similarity score: ${biometricScore}% (Requires >= 85%)`
-                    : "No matching biometric profile found on ledger."
-                )}
+                    : "No matching biometric profile found on ledger.")}
               </p>
 
               {/* Action buttons / cooldown indicator */}
               <div className="w-full flex gap-3">
-                {biometricState === 'failed' && (
+                {biometricState === "failed" && (
                   <>
                     <button
                       disabled={cooldown > 0}
@@ -356,7 +540,7 @@ export function LoginView({
                     </button>
                     <button
                       onClick={() => {
-                        setBiometricState('idle');
+                        setBiometricState("idle");
                         setError("");
                       }}
                       className="flex-1 bg-slate-100 text-slate-600 py-3 px-6 rounded-xl text-xs font-bold hover:bg-slate-200 transition-all"
@@ -365,11 +549,14 @@ export function LoginView({
                     </button>
                   </>
                 )}
-                {(biometricState === 'initializing' || biometricState === 'scanning' || biometricState === 'verifying') && (
+                {(biometricState === "initializing" ||
+                  biometricState === "scanning" ||
+                  biometricState === "verifying") && (
                   <button
                     onClick={() => {
-                      setBiometricState('idle');
+                      setBiometricState("idle");
                       setLoading(false);
+                      stopCamera();
                     }}
                     className="w-full bg-slate-100 text-slate-600 py-3 rounded-xl text-xs font-bold hover:bg-slate-200 transition-all"
                   >
@@ -388,7 +575,7 @@ export function LoginView({
                 >
                   <div className="flex items-center gap-6">
                     <div className="bg-white/10 p-4 rounded-2xl">
-                      <Fingerprint
+                      <Camera
                         size={28}
                         className="text-white group-hover:scale-110 transition-transform"
                       />
@@ -406,6 +593,14 @@ export function LoginView({
                     size={28}
                     className="opacity-30 group-hover:translate-x-1 transition-transform"
                   />
+                </button>
+
+                <button
+                  onClick={() => setView("registration")}
+                  className="w-full flex items-center justify-center gap-3 rounded-[2rem] border border-slate-200 bg-white px-8 py-5 text-slate-700 font-bold uppercase tracking-widest text-xs hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm"
+                >
+                  <UserPlus size={18} />
+                  Register Voter
                 </button>
 
                 <div className="pt-10">

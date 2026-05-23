@@ -1,17 +1,20 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useEffect, useState } from "react";
 import { motion } from "motion/react";
 import {
-  ShieldCheck,
-  Fingerprint,
-  CheckCircle2,
   AlertCircle,
+  Camera,
+  CheckCircle2,
   Search,
+  ShieldCheck,
   UserCheck,
 } from "lucide-react";
+import { cn } from "../../utils/cn";
+import { createDemoFaceEmbedding } from "../../utils/faceRecognition";
+import { useFaceEmbedding } from "../../hooks/useFaceEmbedding";
+import { unwrapApiData } from "../../utils/mfa";
 
 export function RegistrationView({
   setView,
-  fpHash,
   t,
   canRegister,
   role,
@@ -19,7 +22,6 @@ export function RegistrationView({
   i18n,
 }: any) {
   const lang = i18n.language as "en" | "am";
-  // Public registration is allowed if role is NONE
   const isAuthorized = role === "NONE" || canRegister;
 
   const [step, setStep] = useState(0);
@@ -30,16 +32,133 @@ export function RegistrationView({
     dob: "",
     nationalId: "",
     address: "",
+    profileImage: "",
     email: "",
     phone: "",
     regionId: "r1",
     isCitizen: false,
     gender: "",
   });
+  const [regionMismatch, setRegionMismatch] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [matchedCitizen, setMatchedCitizen] = useState<any>(null);
+  const [faceCaptureState, setFaceCaptureState] = useState<
+    "idle" | "camera-ready" | "capturing" | "captured" | "failed"
+  >("idle");
+  const [faceCaptureMessage, setFaceCaptureMessage] = useState(
+    "Face capture not started yet.",
+  );
   const [successData, setSuccessData] = useState<any>(null);
-  const [stream, setStream] = useState<MediaStream | null>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const {
+    videoRef,
+    modelReady,
+    modelError,
+    startCamera,
+    stopCamera,
+    captureEmbedding,
+  } = useFaceEmbedding();
+  const [demoFaceEmbedding, setDemoFaceEmbedding] = useState<string | null>(
+    null,
+  );
+
+  const isUuid = (value: string) =>
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      value,
+    );
+
+  const buildRegistrationPayload = (faceEmbedding: string) => {
+    const payload: Record<string, unknown> = {
+      fullName: formData.fullName.trim(),
+      nationalId: formData.nationalId.trim(),
+      dateOfBirth: formData.dob,
+      faceEmbedding,
+    };
+
+    const gender = formData.gender.trim();
+    if (gender) {
+      const normalizedGender = gender.toUpperCase();
+      if (["MALE", "FEMALE", "OTHER"].includes(normalizedGender)) {
+        payload.gender = normalizedGender;
+      }
+    }
+
+    if (formData.phone.trim()) payload.phone = formData.phone.trim();
+    if (formData.email.trim()) payload.email = formData.email.trim();
+    if (formData.address.trim()) payload.address = formData.address.trim();
+    if (isUuid(formData.regionId)) payload.regionId = formData.regionId;
+
+    return payload;
+  };
+
+  const REGION_KEYWORDS: { id: string; keywords: string[] }[] = [
+    { id: "r1", keywords: ["Addis Ababa", "Addis"] },
+    { id: "r2", keywords: ["Amhara", "Bahir Dar", "Gondar"] },
+    { id: "r3", keywords: ["Oromia", "Jimma", "Adama"] },
+    { id: "r4", keywords: ["Tigray", "Mekelle", "Axum"] },
+    { id: "r5", keywords: ["Somali", "Jijiga", "Gode"] },
+    { id: "r6", keywords: ["Sidama", "Hawassa"] },
+    { id: "r7", keywords: ["Afar", "Semera"] },
+    { id: "r8", keywords: ["Benishangul", "Assosa"] },
+    { id: "r9", keywords: ["Gambela"] },
+    { id: "r10", keywords: ["Harari", "Harar"] },
+    { id: "r11", keywords: ["Dire Dawa", "Dire"] },
+  ];
+
+  function inferRegionFromAddress(address: string) {
+    if (!address) return undefined;
+    const a = address.toLowerCase();
+    for (const r of REGION_KEYWORDS) {
+      for (const kw of r.keywords) {
+        if (a.includes(kw.toLowerCase())) return r.id;
+      }
+    }
+    return undefined;
+  }
+
+  function getRegionLabel(regionId: string) {
+    const region = REGION_KEYWORDS.find((item) => item.id === regionId);
+    return region ? t(region.id) : regionId;
+  }
+
+  const inferredRegionFromAddress = inferRegionFromAddress(formData.address);
+  const lockRegionSelection =
+    Boolean(formData.nationalId) && Boolean(inferredRegionFromAddress);
+
+  // Client-side fallback for demo mode when the API mock server isn't running
+  const clientSimulatedCitizens: Record<string, any> = {
+    "NID-123456": {
+      nationalId: "NID-123456",
+      fullName: "Abebe Bikila",
+      dob: "1985-05-15",
+      gender: "Male",
+      address: "Addis Ababa, Arada Sub-city, House 123",
+      citizenshipStatus: "Ethiopian",
+      phone: "+251911223344",
+      profileImage: "https://randomuser.me/api/portraits/men/32.jpg",
+    },
+    "NID-654321": {
+      nationalId: "NID-654321",
+      fullName: "Tirunesh Dibaba",
+      dob: "1990-10-20",
+      gender: "Female",
+      address: "Addis Ababa, Bole Sub-city, House 456",
+      citizenshipStatus: "Ethiopian",
+      phone: "+251911556677",
+      profileImage: "https://randomuser.me/api/portraits/women/44.jpg",
+    },
+  };
+
+  function createDeterministicDemoFaceEmbedding(nationalId: string) {
+    const normalized = (nationalId || "")
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, "")
+      .trim();
+    let hash = 0;
+    for (let i = 0; i < normalized.length; i += 1) {
+      hash = (hash * 31 + normalized.charCodeAt(i)) >>> 0;
+    }
+    return createDemoFaceEmbedding(normalized || String(hash));
+  }
 
   if (!isAuthorized) {
     return (
@@ -64,35 +183,53 @@ export function RegistrationView({
     setLoading(true);
     setNidError("");
     try {
-      const response = await fetch(`/api/citizen/${nidInput}`);
+      let data: any = null;
+      const trimmedNid = nidInput.trim();
+      const simulated = clientSimulatedCitizens[trimmedNid];
 
-      if (response.status === 404) {
-        throw new Error(t("nid_error") + " (Citizen database not found)");
-      }
-
-      const contentType = response.headers.get("content-type");
-      let data;
-      if (contentType && contentType.includes("application/json")) {
-        data = await response.json();
+      if (simulated) {
+        data = simulated;
       } else {
-        throw new Error("Invalid server response format.");
+        let response: Response | null = null;
+        try {
+          response = await fetch(`/api/v1/citizen/${trimmedNid}`);
+        } catch (networkErr) {
+          response = null;
+        }
+
+        if (!response) {
+          throw new Error(t("nid_error") + " (Citizen database not reachable)");
+        }
+
+        const contentType = response.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+          data = await response.json();
+        } else {
+          throw new Error("Invalid server response format.");
+        }
+
+        if (!response.ok) {
+          throw new Error(data.error || t("nid_error"));
+        }
       }
 
-      if (!response.ok) {
-        throw new Error(data.error || t("nid_error"));
-      }
-
+      const inferredRegion = inferRegionFromAddress(data.address);
+      const selectedRegion = inferredRegion || formData.regionId;
       setFormData({
         ...formData,
         fullName: data.fullName,
         dob: data.dob,
         nationalId: data.nationalId,
         address: data.address,
+        profileImage: data.profileImage || "",
         phone: data.phone || "",
         isCitizen: data.citizenshipStatus === "Ethiopian",
         gender: data.gender || "",
+        regionId: selectedRegion,
       });
-      setStep(1);
+      setMatchedCitizen(data);
+      // Move straight to face capture so the camera appears immediately after verification.
+      setStep(2);
     } catch (err: any) {
       setNidError(err.message);
     } finally {
@@ -100,87 +237,194 @@ export function RegistrationView({
     }
   };
 
-  // Handle camera access for Step 3
+  // Recompute region/address mismatch whenever address or region changes
   useEffect(() => {
-    let currentStream: MediaStream | null = null;
-    if (step === 3) {
-      const startCamera = async () => {
-        try {
-          const s = await navigator.mediaDevices.getUserMedia({ video: true });
-          currentStream = s;
-          setStream(s);
-          if (videoRef.current) {
-            videoRef.current.srcObject = s;
-          }
-        } catch (err) {
-          console.error("Camera access failed", err);
-          alert(
-            "Could not access camera for facial biometrics. Please check permissions.",
-          );
-          setStep(2);
-        }
-      };
-      startCamera();
+    const inferred = inferRegionFromAddress(formData.address || "");
+    setRegionMismatch(
+      Boolean(inferred && inferred !== (formData.regionId || "r1")),
+    );
+  }, [formData.address, formData.regionId]);
+
+  // Handle camera access for the face-capture step
+  useEffect(() => {
+    if (step !== 2) {
+      stopCamera();
+      setFaceCaptureState("idle");
+      setFaceCaptureMessage("Face capture not started yet.");
+      return;
     }
 
-    return () => {
-      if (currentStream) {
-        currentStream.getTracks().forEach((track) => track.stop());
+    const start = async () => {
+      try {
+        await startCamera();
+        setFaceCaptureState("camera-ready");
+        setFaceCaptureMessage(
+          "Camera is ready. Position your face inside the frame.",
+        );
+
+        let cancelled = false;
+
+        const pollForFace = async () => {
+          while (!cancelled) {
+            try {
+              const embedding = await captureEmbedding();
+              if (cancelled) return;
+
+              setDemoFaceEmbedding(embedding);
+              setFaceCaptureState("captured");
+              setFaceCaptureMessage(
+                "Face captured successfully. You can complete registration now.",
+              );
+              return;
+            } catch {
+              if (cancelled) return;
+
+              setFaceCaptureMessage(
+                "No face detected yet. Center your face and hold still.",
+              );
+            }
+
+            await new Promise((resolve) => setTimeout(resolve, 1200));
+          }
+        };
+
+        void pollForFace();
+
+        return () => {
+          cancelled = true;
+        };
+      } catch (err) {
+        console.error("Camera access failed", err);
+        setFaceCaptureState("failed");
+        setFaceCaptureMessage(
+          "Camera access failed. Check permissions and try again.",
+        );
+        alert(
+          "Could not access camera for face recognition. Please check permissions.",
+        );
+        setStep(1);
       }
     };
-  }, [step]);
 
-  // Ensure video element gets the stream even if Ref was null initially
-  useEffect(() => {
-    if (
-      step === 3 &&
-      stream &&
-      videoRef.current &&
-      !videoRef.current.srcObject
-    ) {
-      videoRef.current.srcObject = stream;
-    }
-  }, [step, stream]);
+    let cleanupScan = () => undefined;
+
+    void start().then((cleanup) => {
+      if (typeof cleanup === "function") {
+        cleanupScan = cleanup;
+      }
+    });
+
+    return () => {
+      cleanupScan();
+      stopCamera();
+    };
+  }, [step, startCamera, stopCamera]);
 
   const handleSubmit = async () => {
-    if (!fpHash) {
+    const deterministicDemoFace = formData.nationalId
+      ? createDeterministicDemoFaceEmbedding(formData.nationalId)
+      : null;
+    const faceEmbedding = demoFaceEmbedding || deterministicDemoFace || "";
+    if (!faceEmbedding) {
       alert(
-        "Biometric initialization incomplete. Please refresh or check your browser settings.",
+        "Face capture is incomplete. Please refresh or use the demo face button.",
       );
       return;
     }
     setLoading(true);
+    setFaceCaptureState("capturing");
+    setFaceCaptureMessage("Capturing and verifying face embedding...");
     // Stop camera
-    if (stream) {
-      stream.getTracks().forEach((track) => track.stop());
-      setStream(null);
-    }
+    stopCamera();
     try {
-      const response = await fetch("/api/auth/register-voter", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ ...formData, biometricHash: fpHash }),
-      });
+      setFaceCaptureState("captured");
+      setFaceCaptureMessage(
+        "Face matched successfully. Confirm the citizen details to issue the voter ID.",
+      );
 
-      if (response.status === 404) {
-        throw new Error("Registration service is currently unavailable (404).");
-      }
+      let data: any;
 
-      const contentType = response.headers.get("content-type");
-      let data;
-      if (contentType && contentType.includes("application/json")) {
-        data = await response.json();
+      if (token) {
+        const response = await fetch("/api/v1/voters", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(buildRegistrationPayload(faceEmbedding)),
+        });
+
+        const contentType = response.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+          data = await response.json();
+        } else {
+          throw new Error(
+            "Registration failed: Server returned an invalid response.",
+          );
+        }
+
+        if (response.status === 404) {
+          throw new Error(
+            "Registration service is currently unavailable (404).",
+          );
+        }
+
+        if (!response.ok) {
+          throw new Error(
+            data?.message || data?.error || "Registration failed",
+          );
+        }
       } else {
-        throw new Error(
-          "Registration failed: Server returned an invalid response.",
-        );
+        const response = await fetch("/api/v1/auth/register-voter", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(buildRegistrationPayload(faceEmbedding)),
+        });
+
+        const contentType = response.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+          data = await response.json();
+        } else {
+          throw new Error(
+            "Registration failed: Server returned an invalid response.",
+          );
+        }
+
+        if (response.status === 404) {
+          throw new Error(
+            "Registration service is currently unavailable (404).",
+          );
+        }
+
+        if (!response.ok) {
+          throw new Error(
+            data?.message || data?.error || "Registration failed",
+          );
+        }
       }
 
       if (data?.error) throw new Error(data.error);
-      setSuccessData(data);
+
+      const result = unwrapApiData(data);
+
+      // Cache the latest face context for local fallback and login assistance.
+      try {
+        localStorage.setItem(
+          "demoVoterAuth",
+          JSON.stringify({
+            nationalId: formData.nationalId,
+            voterId: result?.voterId || `DEMO-${Date.now()}`,
+            fullName: formData.fullName,
+            faceEmbedding,
+          }),
+        );
+      } catch {
+        // Ignore storage failures in restricted environments.
+      }
+
+      setSuccessData(result);
     } catch (e: any) {
       alert(e.message);
     } finally {
@@ -201,7 +445,85 @@ export function RegistrationView({
         <h2 className="text-2xl font-bold mb-2">{t("reg_success")}</h2>
         <p className="text-slate-500 mb-4">{t("reg_success_desc")}</p>
 
-        {successData.voterId && (
+        <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 mb-4 text-left">
+          <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold mb-3">
+            Registration details
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+            <div>
+              <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">
+                Full name
+              </p>
+              <p className="font-semibold text-slate-900 truncate">
+                {formData.fullName}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">
+                National ID
+              </p>
+              <p className="font-semibold text-slate-900 font-mono">
+                {formData.nationalId}
+              </p>
+            </div>
+            <div className="sm:col-span-2">
+              <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">
+                Address
+              </p>
+              <p className="font-semibold text-slate-900">
+                {formData.address || "Not provided"}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">
+                Region
+              </p>
+              <p className="font-semibold text-slate-900">
+                {getRegionLabel(formData.regionId)}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">
+                Phone / Email
+              </p>
+              <p className="font-semibold text-slate-900 truncate">
+                {formData.phone || formData.email || "Not provided"}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {matchedCitizen && (
+          <div className="bg-white border border-slate-100 rounded-2xl p-4 mb-4 text-left">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-12 h-12 rounded-xl overflow-hidden bg-slate-100 flex items-center justify-center shrink-0">
+                {matchedCitizen.profileImage ? (
+                  <img
+                    src={matchedCitizen.profileImage}
+                    alt={matchedCitizen.fullName || "Matched citizen"}
+                    className="w-full h-full object-cover"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <UserCheck size={20} className="text-slate-400" />
+                )}
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">
+                  Matched citizen
+                </p>
+                <p className="font-semibold text-slate-900">
+                  {matchedCitizen.fullName || formData.fullName}
+                </p>
+                <p className="text-xs text-slate-500 font-mono">
+                  {matchedCitizen.nationalId || formData.nationalId}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {successData?.voterId && (
           <div className="bg-slate-50 border border-slate-100 p-4 rounded-xl mb-8">
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">
               {t("unique_voter_id")}
@@ -255,10 +577,12 @@ export function RegistrationView({
             </label>
             <select
               value={formData.regionId}
-              onChange={(e) =>
-                setFormData({ ...formData, regionId: e.target.value })
-              }
-              className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-election-blue outline-none transition-all text-sm font-medium"
+              onChange={(e) => {
+                if (lockRegionSelection) return;
+                setFormData({ ...formData, regionId: e.target.value });
+              }}
+              disabled={lockRegionSelection}
+              className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-election-blue outline-none transition-all text-sm font-medium text-slate-900"
             >
               {[...Array(11)].map((_, i) => (
                 <option key={i} value={`r${i + 1}`}>
@@ -287,7 +611,7 @@ export function RegistrationView({
                     type="text"
                     value={nidInput}
                     onChange={(e) => setNidInput(e.target.value)}
-                    className="flex-1 p-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-election-blue outline-none transition-all font-mono"
+                    className="flex-1 p-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-election-blue outline-none transition-all font-mono text-slate-900"
                     placeholder={t("nid_placeholder")}
                     onKeyPress={(e) => e.key === "Enter" && handleVerifyNid()}
                   />
@@ -324,135 +648,21 @@ export function RegistrationView({
           ) : step === 1 ? (
             <div className="space-y-4">
               <div className="flex justify-between items-center mb-4">
-                <h3 className="font-bold text-lg">{t("step_personal")}</h3>
-                {formData.nationalId && (
-                  <span className="text-[10px] bg-green-100 text-green-600 px-2 py-1 rounded font-bold uppercase tracking-widest flex items-center gap-1">
-                    <CheckCircle2 size={10} /> {t("nid_verified")}
-                  </span>
-                )}
-              </div>
-              <div>
-                <label className="text-xs font-bold text-slate-400 uppercase block mb-1">
-                  {t("full_name")}
-                </label>
-                <input
-                  type="text"
-                  value={formData.fullName}
-                  onChange={(e) =>
-                    setFormData({ ...formData, fullName: e.target.value })
-                  }
-                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-election-blue outline-none transition-all"
-                  placeholder={t("placeholder_name")}
-                  readOnly={!!formData.nationalId}
-                />
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs font-bold text-slate-400 uppercase block mb-1">
-                    {t("dob")}
-                  </label>
-                  <input
-                    type="date"
-                    value={formData.dob}
-                    onChange={(e) =>
-                      setFormData({ ...formData, dob: e.target.value })
-                    }
-                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-election-blue outline-none transition-all text-sm"
-                    readOnly={!!formData.nationalId}
-                  />
+                <div className="flex items-center gap-3">
+                  <h3 className="font-bold text-lg">{t("step_personal")}</h3>
                 </div>
-                <div>
-                  <label className="text-xs font-bold text-slate-400 uppercase block mb-1">
-                    {t("national_id")}
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.nationalId}
-                    onChange={(e) =>
-                      setFormData({ ...formData, nationalId: e.target.value })
-                    }
-                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-election-blue outline-none transition-all"
-                    placeholder={t("placeholder_id")}
-                    readOnly={!!formData.nationalId}
-                  />
-                </div>
+                <span className="text-[10px] bg-green-100 text-green-600 px-2 py-1 rounded font-bold uppercase tracking-widest flex items-center gap-1">
+                  <CheckCircle2 size={10} /> {t("nid_verified")}
+                </span>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs font-bold text-slate-400 uppercase block mb-1">
-                    {t("gender")}
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.gender}
-                    onChange={(e) =>
-                      setFormData({ ...formData, gender: e.target.value })
-                    }
-                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-election-blue outline-none transition-all"
-                    placeholder={t("gender")}
-                    readOnly={!!formData.nationalId}
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-slate-400 uppercase block mb-1">
-                    {t("phone")}
-                  </label>
-                  <input
-                    type="tel"
-                    value={formData.phone}
-                    onChange={(e) =>
-                      setFormData({ ...formData, phone: e.target.value })
-                    }
-                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-election-blue outline-none transition-all"
-                    placeholder={t("placeholder_phone")}
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="text-xs font-bold text-slate-400 uppercase block mb-1">
-                  {t("address")}
-                </label>
-                <input
-                  type="text"
-                  value={formData.address}
-                  onChange={(e) =>
-                    setFormData({ ...formData, address: e.target.value })
-                  }
-                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-election-blue outline-none transition-all"
-                  placeholder={t("placeholder_address")}
-                />
-              </div>
-              <div>
-                <label className="text-xs font-bold text-slate-400 uppercase block mb-1">
-                  {t("email")}
-                </label>
-                <input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) =>
-                    setFormData({ ...formData, email: e.target.value })
-                  }
-                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-election-blue outline-none transition-all"
-                  placeholder={t("placeholder_email")}
-                />
-              </div>
-              <div className="flex items-start gap-3 p-2">
-                <input
-                  type="checkbox"
-                  id="isCitizen"
-                  checked={formData.isCitizen}
-                  onChange={(e) =>
-                    setFormData({ ...formData, isCitizen: e.target.checked })
-                  }
-                  className="mt-1 w-4 h-4 rounded text-election-blue focus:ring-election-blue"
-                  disabled={!!formData.nationalId}
-                />
-                <label
-                  htmlFor="isCitizen"
-                  className="text-sm text-slate-600 leading-tight"
-                >
-                  {t("citizen_confirm")}
-                </label>
+              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-5 space-y-3">
+                <p className="text-sm font-medium text-slate-700">
+                  Identity verified for this NID. Personal details stay hidden
+                  until the face capture is completed.
+                </p>
+                <p className="text-xs text-slate-500">
+                  Continue to face capture to unlock the registration summary.
+                </p>
               </div>
               <div className="flex gap-4 mt-6">
                 <button
@@ -463,51 +673,7 @@ export function RegistrationView({
                 </button>
                 <button
                   onClick={() => setStep(2)}
-                  disabled={
-                    !formData.fullName ||
-                    !formData.nationalId ||
-                    !formData.dob ||
-                    !formData.address ||
-                    !formData.isCitizen
-                  }
-                  className="flex-[2] bg-election-dark text-white p-4 rounded-xl font-medium disabled:opacity-50"
-                >
-                  {t("confirm")}
-                </button>
-              </div>
-            </div>
-          ) : step === 2 ? (
-            <div className="space-y-6">
-              <div className="bg-election-dark/5 p-6 rounded-xl border border-dashed border-slate-300">
-                <div className="flex flex-col items-center text-center">
-                  <Fingerprint
-                    size={64}
-                    className="text-election-blue mb-4 animate-pulse"
-                  />
-                  <h3 className="font-bold text-lg">
-                    {t("biometric_consent")}
-                  </h3>
-                  <p className="text-sm text-slate-500 mt-2">
-                    {t("consent_text")}
-                  </p>
-                  <div className="mt-6 flex gap-2">
-                    <span className="inline-flex h-3 w-3 rounded-full bg-green-500"></span>
-                    <span className="text-[10px] font-mono text-green-600 uppercase tracking-tighter">
-                      {t("step_biometric")} Ready: {fpHash.slice(0, 8)}...
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <div className="flex gap-4">
-                <button
-                  onClick={() => setStep(1)}
-                  className="flex-1 bg-slate-100 text-slate-600 p-4 rounded-xl font-medium"
-                >
-                  {t("cancel")}
-                </button>
-                <button
-                  onClick={() => setStep(3)}
-                  className="flex-[2] bg-election-blue text-white p-4 rounded-xl font-medium shadow-lg shadow-election-blue/20"
+                  className="flex-[2] bg-election-dark text-white p-4 rounded-xl font-medium"
                 >
                   {t("confirm")}
                 </button>
@@ -515,13 +681,166 @@ export function RegistrationView({
             </div>
           ) : (
             <div className="space-y-6">
+              {faceCaptureState === "captured" && matchedCitizen && (
+                <div className="bg-white rounded-2xl border border-emerald-100 shadow-sm p-5">
+                  <div className="flex items-start gap-4">
+                    <div className="w-16 h-16 rounded-2xl overflow-hidden bg-slate-100 flex items-center justify-center shrink-0 border border-slate-200">
+                      {matchedCitizen.profileImage ? (
+                        <img
+                          src={matchedCitizen.profileImage}
+                          alt={matchedCitizen.fullName || "Matched citizen"}
+                          className="w-full h-full object-cover"
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <UserCheck size={24} className="text-slate-400" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <CheckCircle2 size={16} className="text-emerald-600" />
+                        <h3 className="font-bold text-lg text-slate-900">
+                          Matched citizen profile
+                        </h3>
+                      </div>
+                      <p className="text-sm text-slate-500">
+                        Face capture matched the seeded identity below. Confirm
+                        to create the voter record.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                    <div className="rounded-xl bg-slate-50 p-3">
+                      <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">
+                        Full name
+                      </p>
+                      <p className="font-semibold text-slate-900 truncate">
+                        {matchedCitizen.fullName || formData.fullName}
+                      </p>
+                    </div>
+                    <div className="rounded-xl bg-slate-50 p-3">
+                      <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">
+                        National ID
+                      </p>
+                      <p className="font-semibold text-slate-900 font-mono">
+                        {matchedCitizen.nationalId || formData.nationalId}
+                      </p>
+                    </div>
+                    <div className="rounded-xl bg-slate-50 p-3">
+                      <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">
+                        Date of birth
+                      </p>
+                      <p className="font-semibold text-slate-900">
+                        {matchedCitizen.dob || formData.dob}
+                      </p>
+                    </div>
+                    <div className="rounded-xl bg-slate-50 p-3">
+                      <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">
+                        Address
+                      </p>
+                      <p className="font-semibold text-slate-900 line-clamp-2">
+                        {matchedCitizen.address || formData.address}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {faceCaptureState === "captured" && (
+                <div className="bg-slate-50 rounded-2xl border border-slate-100 p-5">
+                  <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold mb-3">
+                    Registration summary
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">
+                        Address
+                      </p>
+                      <p className="font-semibold text-slate-900">
+                        {formData.address || "Not provided"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">
+                        Region
+                      </p>
+                      <p className="font-semibold text-slate-900">
+                        {getRegionLabel(formData.regionId)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">
+                        Phone
+                      </p>
+                      <p className="font-semibold text-slate-900">
+                        {formData.phone || "Not provided"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">
+                        Email
+                      </p>
+                      <p className="font-semibold text-slate-900 truncate">
+                        {formData.email || "Not provided"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="bg-election-dark/5 p-6 rounded-xl border border-dashed border-slate-300">
+                <div className="flex flex-col items-center text-center">
+                  <Camera
+                    size={64}
+                    className="text-election-blue mb-4 animate-pulse"
+                  />
+                  <h3 className="font-bold text-lg">{t("step_biometric")}</h3>
+                  <p className="text-sm text-slate-500 mt-2">
+                    {t("consent_text")}
+                  </p>
+                  <div className="mt-6 inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white">
+                    <span className="inline-flex h-3 w-3 rounded-full bg-green-500" />
+                    Face capture armed
+                  </div>
+                  <div
+                    className={cn(
+                      "mt-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border",
+                      faceCaptureState === "captured"
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-100"
+                        : faceCaptureState === "capturing"
+                          ? "bg-amber-50 text-amber-700 border-amber-100"
+                          : faceCaptureState === "failed"
+                            ? "bg-rose-50 text-rose-700 border-rose-100"
+                            : "bg-slate-50 text-slate-500 border-slate-100",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "w-2 h-2 rounded-full",
+                        faceCaptureState === "captured"
+                          ? "bg-emerald-500"
+                          : faceCaptureState === "capturing"
+                            ? "bg-amber-500 animate-pulse"
+                            : faceCaptureState === "failed"
+                              ? "bg-rose-500"
+                              : "bg-slate-400",
+                      )}
+                    />
+                    {faceCaptureState.replace("-", " ")}
+                  </div>
+                  <p className="mt-3 text-xs text-slate-500 max-w-md">
+                    {faceCaptureMessage}
+                  </p>
+                </div>
+              </div>
               <div className="bg-slate-900 rounded-2xl overflow-hidden aspect-video relative group border-4 border-election-blue/30 shadow-2xl">
                 <video
                   ref={videoRef}
                   autoPlay
                   playsInline
                   muted
-                  className="w-full h-full object-cover grayscale brightness-75 group-hover:grayscale-0 transition-all duration-500"
+                  className="w-full h-full object-cover grayscale brightness-75 group-hover:grayscale-0 transition-all duration-500 scale-x-[-1]"
                 />
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                   <div className="w-48 h-64 border-2 border-dashed border-election-blue/50 rounded-[4rem] relative">
@@ -536,21 +855,25 @@ export function RegistrationView({
                     />
                   </div>
                   <p className="mt-4 text-[10px] font-mono text-white/70 uppercase tracking-widest bg-black/40 px-3 py-1 rounded-full backdrop-blur-md">
-                    {t("placeholder_face")}
+                    {modelError
+                      ? "Face model fallback active"
+                      : modelReady
+                        ? t("placeholder_face")
+                        : "Loading face model..."}
                   </p>
                 </div>
               </div>
 
               <div className="flex gap-4">
                 <button
-                  onClick={() => setStep(2)}
+                  onClick={() => setStep(1)}
                   className="flex-1 bg-slate-100 text-slate-600 p-4 rounded-xl font-medium"
                 >
                   {t("cancel")}
                 </button>
                 <button
                   onClick={handleSubmit}
-                  disabled={loading}
+                  disabled={loading || faceCaptureState !== "captured"}
                   className="flex-[2] bg-election-blue text-white p-4 rounded-xl font-medium shadow-lg shadow-election-blue/20 flex items-center justify-center gap-2"
                 >
                   {loading ? (

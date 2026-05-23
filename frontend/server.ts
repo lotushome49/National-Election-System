@@ -11,7 +11,14 @@ import helmet from "helmet";
 import crypto from "crypto";
 import dotenv from "dotenv";
 import { db, isConnected } from "./src/db";
-import { users, voters, candidates, votes, auditLogs, electionSettings } from "./src/db/schema";
+import {
+  users,
+  voters,
+  candidates,
+  votes,
+  auditLogs,
+  electionSettings,
+} from "./src/db/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
 
@@ -19,7 +26,10 @@ dotenv.config();
 
 const JWT_SECRET = process.env.JWT_SECRET || "super-secret-key";
 const JWT_EXPIRES_IN = "1h";
-const ENCRYPTION_KEY = Buffer.from(process.env.DB_ENCRYPTION_KEY || "db_secret_key_32_bytes_long_12345", "utf8").slice(0, 32);
+const ENCRYPTION_KEY = Buffer.from(
+  process.env.DB_ENCRYPTION_KEY || "db_secret_key_32_bytes_long_12345",
+  "utf8",
+).slice(0, 32);
 const IV_LENGTH = 16;
 
 // Biometric Template Encryption Helpers (AES-256-CBC)
@@ -45,7 +55,10 @@ function decryptBiometric(ciphertext: string): string {
 }
 
 function normalizeBiometricSample(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]/g, "").trim();
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "")
+    .trim();
 }
 
 function computeDeterministicBiometricScore(
@@ -61,7 +74,9 @@ function computeDeterministicBiometricScore(
   const probeGrams = buildBigrams(p);
   const refGrams = buildBigrams(r);
 
-  const intersection = [...probeGrams].filter((gram) => refGrams.has(gram)).length;
+  const intersection = [...probeGrams].filter((gram) =>
+    refGrams.has(gram),
+  ).length;
   const union = new Set([...probeGrams, ...refGrams]).size;
   const jaccard = union > 0 ? intersection / union : 0;
 
@@ -119,19 +134,23 @@ const lookupLimiter = rateLimit({
 
 // Global security middleware
 const setupSecurity = (app: express.Application) => {
-  app.use(helmet({
-    contentSecurityPolicy: {
-      directives: {
-        ...helmet.contentSecurityPolicy.getDefaultDirectives(),
-        "img-src": ["'self'", "data:", "https:", "http:"],
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        directives: {
+          ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+          "img-src": ["'self'", "data:", "https:", "http:"],
+        },
       },
-    },
-  }));
-  app.use(cors({
-    origin: process.env.CORS_ORIGIN || "*",
-    methods: ["GET", "POST", "PUT", "DELETE"],
-    allowedHeaders: ["Content-Type", "Authorization"]
-  }));
+    }),
+  );
+  app.use(
+    cors({
+      origin: process.env.CORS_ORIGIN || "*",
+      methods: ["GET", "POST", "PUT", "DELETE"],
+      allowedHeaders: ["Content-Type", "Authorization"],
+    }),
+  );
 };
 
 const simulatedCitizens = [
@@ -142,7 +161,8 @@ const simulatedCitizens = [
     gender: "Male",
     address: "Addis Ababa, Arada Sub-city, House 123",
     citizenshipStatus: "Ethiopian",
-    phone: "+251911223344"
+    phone: "+251911223344",
+    profileImage: "https://randomuser.me/api/portraits/men/32.jpg",
   },
   {
     nationalId: "NID-654321",
@@ -151,7 +171,8 @@ const simulatedCitizens = [
     gender: "Female",
     address: "Addis Ababa, Bole Sub-city, House 456",
     citizenshipStatus: "Ethiopian",
-    phone: "+251911556677"
+    phone: "+251911556677",
+    profileImage: "https://randomuser.me/api/portraits/women/44.jpg",
   },
   {
     nationalId: "NID-111222",
@@ -160,7 +181,8 @@ const simulatedCitizens = [
     gender: "Male",
     address: "Foreign St., London",
     citizenshipStatus: "UK",
-    phone: "+44123456789"
+    phone: "+44123456789",
+    profileImage: "https://randomuser.me/api/portraits/men/52.jpg",
   },
   {
     nationalId: "NID-333444",
@@ -168,8 +190,9 @@ const simulatedCitizens = [
     dob: "2015-01-01",
     gender: "Male",
     address: "School Rd., Addis",
-    citizenshipStatus: "Ethiopian"
-  }
+    citizenshipStatus: "Ethiopian",
+    profileImage: "https://randomuser.me/api/portraits/lego/2.jpg",
+  },
 ];
 
 const ROLES = {
@@ -178,7 +201,7 @@ const ROLES = {
   DISTRICT_ADMIN: "DISTRICT_ADMIN",
   STAFF: "STAFF",
   OBSERVER: "OBSERVER",
-  VOTER: "VOTER"
+  VOTER: "VOTER",
 };
 
 const PERMISSIONS = {
@@ -195,16 +218,41 @@ const PERMISSIONS = {
   MANAGE_DISTRICT_OPERATIONS: [ROLES.ADMIN, ROLES.REGIONAL_ADMIN],
 
   // District Administrator
-  VIEW_DISTRICT_STATS: [ROLES.ADMIN, ROLES.REGIONAL_ADMIN, ROLES.DISTRICT_ADMIN],
+  VIEW_DISTRICT_STATS: [
+    ROLES.ADMIN,
+    ROLES.REGIONAL_ADMIN,
+    ROLES.DISTRICT_ADMIN,
+  ],
   MANAGE_STAFF: [ROLES.ADMIN, ROLES.DISTRICT_ADMIN],
 
   // Registration Staff
-  REGISTER_VOTER: [ROLES.ADMIN, ROLES.STAFF, ROLES.REGIONAL_ADMIN, ROLES.DISTRICT_ADMIN],
-  VIEW_VOTERS: [ROLES.ADMIN, ROLES.STAFF, ROLES.REGIONAL_ADMIN, ROLES.DISTRICT_ADMIN],
+  REGISTER_VOTER: [
+    ROLES.ADMIN,
+    ROLES.STAFF,
+    ROLES.REGIONAL_ADMIN,
+    ROLES.DISTRICT_ADMIN,
+  ],
+  VIEW_VOTERS: [
+    ROLES.ADMIN,
+    ROLES.STAFF,
+    ROLES.REGIONAL_ADMIN,
+    ROLES.DISTRICT_ADMIN,
+  ],
 
   // Election Observer
-  VIEW_RESULTS: [ROLES.ADMIN, ROLES.REGIONAL_ADMIN, ROLES.DISTRICT_ADMIN, ROLES.STAFF, ROLES.OBSERVER],
-  MONITOR_ELECTION: [ROLES.ADMIN, ROLES.REGIONAL_ADMIN, ROLES.DISTRICT_ADMIN, ROLES.OBSERVER]
+  VIEW_RESULTS: [
+    ROLES.ADMIN,
+    ROLES.REGIONAL_ADMIN,
+    ROLES.DISTRICT_ADMIN,
+    ROLES.STAFF,
+    ROLES.OBSERVER,
+  ],
+  MONITOR_ELECTION: [
+    ROLES.ADMIN,
+    ROLES.REGIONAL_ADMIN,
+    ROLES.DISTRICT_ADMIN,
+    ROLES.OBSERVER,
+  ],
 };
 
 async function startServer() {
@@ -249,7 +297,8 @@ async function startServer() {
         password: bcrypt.hashSync("admin123", 10),
         role: "ADMIN",
         fullName: "System Admin",
-        status: "ACTIVE"
+        status: "ACTIVE",
+        profileImage: "https://randomuser.me/api/portraits/men/12.jpg",
       },
       {
         id: "regional-1",
@@ -258,7 +307,8 @@ async function startServer() {
         role: "REGIONAL_ADMIN",
         fullName: "Regional Administrator",
         assignedRegion: "r1",
-        status: "ACTIVE"
+        status: "ACTIVE",
+        profileImage: "https://randomuser.me/api/portraits/women/12.jpg",
       },
       {
         id: "staff-1",
@@ -267,7 +317,8 @@ async function startServer() {
         role: "STAFF",
         fullName: "Registration Staff",
         assignedRegion: "r1",
-        status: "ACTIVE"
+        status: "ACTIVE",
+        profileImage: "https://randomuser.me/api/portraits/men/45.jpg",
       },
       {
         id: "observer-1",
@@ -275,7 +326,8 @@ async function startServer() {
         password: bcrypt.hashSync("admin123", 10),
         role: ROLES.OBSERVER,
         fullName: "Election Observer",
-        status: "ACTIVE"
+        status: "ACTIVE",
+        profileImage: "https://randomuser.me/api/portraits/women/65.jpg",
       },
       {
         id: "district-1",
@@ -285,8 +337,9 @@ async function startServer() {
         fullName: "District Administrator",
         assignedRegion: "r1",
         assignedDistrict: "Bole",
-        status: "ACTIVE"
-      }
+        status: "ACTIVE",
+        profileImage: "https://randomuser.me/api/portraits/men/67.jpg",
+      },
     ] as any[],
     voters: [
       {
@@ -300,11 +353,12 @@ async function startServer() {
         email: "abebe@election.gov.et",
         regionId: "r1",
         districtId: "Bole",
-        biometricTemplate: "encrypted_template_1",
-        biometricHash: "c3a8b9f0e1d2c3b4a5f6e7",
+        faceEmbedding: "encrypted_template_1",
+        faceEmbeddingHash: "c3a8b9f0e1d2c3b4a5f6e7",
         hasVoted: false,
         isVerified: true,
-        registrationDate: new Date()
+        registrationDate: new Date(),
+        profileImage: "https://randomuser.me/api/portraits/men/32.jpg",
       },
       {
         id: "voter-2",
@@ -317,25 +371,27 @@ async function startServer() {
         email: "tirunesh@election.gov.et",
         regionId: "r1",
         districtId: "Bole",
-        biometricTemplate: "encrypted_template_2",
-        biometricHash: "a1b2c3d4e5f6a1b2c3d4e5",
+        faceEmbedding: "encrypted_template_2",
+        faceEmbeddingHash: "a1b2c3d4e5f6a1b2c3d4e5",
         hasVoted: false,
         isVerified: false,
-        registrationDate: new Date()
-      }
+        registrationDate: new Date(),
+        profileImage: "https://randomuser.me/api/portraits/women/44.jpg",
+      },
     ] as any[],
     votes: [] as any[],
     auditLogs: [] as any[],
-    electionSettings: [{ id: 1, phase: 'REGISTRATION' }]
+    electionSettings: [{ id: 1, phase: "REGISTRATION" }],
   };
 
   const logAudit = async (event: string, details: any) => {
     try {
       const logEntry = {
         event,
-        userId: details.adminId || details.userId || details.voterId || "SYSTEM",
+        userId:
+          details.adminId || details.userId || details.voterId || "SYSTEM",
         details: JSON.stringify(details),
-        timestamp: new Date()
+        timestamp: new Date(),
       };
 
       if (isConnected) {
@@ -357,30 +413,39 @@ async function startServer() {
       name: "Dr. Abiy Ahmed",
       party: "Prosperity Party",
       symbol: "💡",
-      photoUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/c/cd/Prime_Minister_of_Ethiopia_Abiy_Ahmed_Ali_%28cropped%29.jpg/500px-Prime_Minister_of_Ethiopia_Abiy_Ahmed_Ali_%28cropped%29.jpg?v=2',
+      photoUrl:
+        "https://upload.wikimedia.org/wikipedia/commons/thumb/c/cd/Prime_Minister_of_Ethiopia_Abiy_Ahmed_Ali_%28cropped%29.jpg/500px-Prime_Minister_of_Ethiopia_Abiy_Ahmed_Ali_%28cropped%29.jpg?v=2",
       bio: "Dr. Abiy Ahmed has served as the Prime Minister of Ethiopia since 2018. He was awarded the 2019 Nobel Peace Prize for his work in ending the 20-year post-war territorial stalemate between Ethiopia and Eritrea.",
-      manifesto: "To build a prosperous, stable, and united Ethiopia through institutional reforms and economic liberalization.",
-      platform: "Economic modernization, expansion of infrastructure, and national reconciliation."
+      manifesto:
+        "To build a prosperous, stable, and united Ethiopia through institutional reforms and economic liberalization.",
+      platform:
+        "Economic modernization, expansion of infrastructure, and national reconciliation.",
     },
     {
       id: "c2",
       name: "Jawar Mohammed",
       party: "OFN",
       symbol: "⛰️",
-      photoUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/6/62/Jawar_Mohammed_%28cropped%29.jpg/500px-Jawar_Mohammed_%28cropped%29.jpg",
+      photoUrl:
+        "https://upload.wikimedia.org/wikipedia/commons/thumb/6/62/Jawar_Mohammed_%28cropped%29.jpg/500px-Jawar_Mohammed_%28cropped%29.jpg",
       bio: "Jawar Mohammed is a prominent political activist and the former director of the Oromia Media Network. He is a key figure in the Oromo Federalist Congress.",
-      manifesto: "Advocating for true federalism and the self-determination of the Oromo people.",
-      platform: "Reform of the federal structure, social justice, and linguistic rights."
+      manifesto:
+        "Advocating for true federalism and the self-determination of the Oromo people.",
+      platform:
+        "Reform of the federal structure, social justice, and linguistic rights.",
     },
     {
       id: "c3",
       name: "Berhanu Nega",
       party: "EZEMA",
       symbol: "🛡️",
-      photoUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8b/Minister_of_Education_Birhanu_Nega.jpg/500px-Minister_of_Education_Birhanu_Nega.jpg",
+      photoUrl:
+        "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8b/Minister_of_Education_Birhanu_Nega.jpg/500px-Minister_of_Education_Birhanu_Nega.jpg",
       bio: "Berhanu Nega is a professor of economics and the leader of the Ethiopian Citizens for Social Justice (EZEMA). He was formerly the mayor-elect of Addis Ababa.",
-      manifesto: "Establishing a system of social justice and ensuring the rule of law for all Ethiopian citizens.",
-      platform: "Academic freedom, economic justice, and institutional integrity."
+      manifesto:
+        "Establishing a system of social justice and ensuring the rule of law for all Ethiopian citizens.",
+      platform:
+        "Academic freedom, economic justice, and institutional integrity.",
     },
     {
       id: "c4",
@@ -389,8 +454,10 @@ async function startServer() {
       symbol: "🦅",
       photoUrl: "https://picsum.photos/seed/independent/400/400",
       bio: "A grassroots movement representing the voices of Ethiopia's youth and their desire for change and participation in the political process.",
-      manifesto: "Empowering the youth through education, employment, and political representation.",
-      platform: "Job creation, digital transformation, and transparency in governance."
+      manifesto:
+        "Empowering the youth through education, employment, and political representation.",
+      platform:
+        "Job creation, digital transformation, and transparency in governance.",
     },
   ];
 
@@ -404,7 +471,10 @@ async function startServer() {
           console.log("Database seeded with initial candidates.");
         }
 
-        const existingAdmins = await db.select().from(users).where(eq(users.role, "ADMIN"));
+        const existingAdmins = await db
+          .select()
+          .from(users)
+          .where(eq(users.role, "ADMIN"));
         if (existingAdmins.length === 0) {
           await db.insert(users).values([
             {
@@ -413,7 +483,7 @@ async function startServer() {
               password: bcrypt.hashSync("admin123", 10),
               role: "ADMIN",
               fullName: "System Admin",
-              status: "ACTIVE"
+              status: "ACTIVE",
             },
             {
               id: "regional-1",
@@ -422,7 +492,7 @@ async function startServer() {
               role: "REGIONAL_ADMIN",
               fullName: "Regional Admin",
               assignedRegion: "r1",
-              status: "ACTIVE"
+              status: "ACTIVE",
             },
             {
               id: "staff-1",
@@ -431,7 +501,7 @@ async function startServer() {
               role: "STAFF",
               fullName: "Reg Staff",
               assignedRegion: "r1",
-              status: "ACTIVE"
+              status: "ACTIVE",
             },
             {
               id: "observer-1",
@@ -439,7 +509,7 @@ async function startServer() {
               password: bcrypt.hashSync("admin123", 10),
               role: "OBSERVER",
               fullName: "Election Observer",
-              status: "ACTIVE"
+              status: "ACTIVE",
             },
             {
               id: "district-1",
@@ -449,8 +519,8 @@ async function startServer() {
               fullName: "Dist Admin",
               assignedRegion: "r1",
               assignedDistrict: "Bole",
-              status: "ACTIVE"
-            }
+              status: "ACTIVE",
+            },
           ] as any[]);
           console.log("Database seeded with default administrative users.");
         }
@@ -458,7 +528,9 @@ async function startServer() {
         console.error("Database seeding failed:", e);
       }
     } else {
-      console.log("Running in DEMO mode with in-memory data (MySQL not connected).");
+      console.log(
+        "Running in DEMO mode with in-memory data (MySQL not connected).",
+      );
     }
   };
 
@@ -493,31 +565,57 @@ async function startServer() {
         const isAuthorized = allowedRoles.includes(ticket.role);
 
         if (!isAuthorized) {
-          console.warn(`Access denied for role ${ticket.role} attempting permission ${permission}`);
-          return res.status(403).json({ error: `Forbidden: Requires ${permission} permission` });
+          console.warn(
+            `Access denied for role ${ticket.role} attempting permission ${permission}`,
+          );
+          return res
+            .status(403)
+            .json({ error: `Forbidden: Requires ${permission} permission` });
         }
 
         // Hierarchical Admin Scoping
-        if (ticket.role === ROLES.REGIONAL_ADMIN || ticket.role === ROLES.DISTRICT_ADMIN) {
-          if (permission === 'MANAGE_ELECTION' || permission === 'MANAGE_USERS') {
-            return res.status(403).json({ error: "Forbidden: Global actions restricted to System Administrator" });
+        if (
+          ticket.role === ROLES.REGIONAL_ADMIN ||
+          ticket.role === ROLES.DISTRICT_ADMIN
+        ) {
+          if (
+            permission === "MANAGE_ELECTION" ||
+            permission === "MANAGE_USERS"
+          ) {
+            return res.status(403).json({
+              error:
+                "Forbidden: Global actions restricted to System Administrator",
+            });
           }
         }
 
         // Data Scoping
-        if (ticket.role === ROLES.REGIONAL_ADMIN && req.body.regionId && req.body.regionId !== ticket.regionId) {
-          return res.status(403).json({ error: "Forbidden: Cannot access data outside your assigned region" });
+        if (
+          ticket.role === ROLES.REGIONAL_ADMIN &&
+          req.body.regionId &&
+          req.body.regionId !== ticket.regionId
+        ) {
+          return res.status(403).json({
+            error: "Forbidden: Cannot access data outside your assigned region",
+          });
         }
 
-        if (ticket.role === ROLES.DISTRICT_ADMIN && req.body.districtId && req.body.districtId !== ticket.districtId) {
-          return res.status(403).json({ error: "Forbidden: Cannot access data outside your assigned district" });
+        if (
+          ticket.role === ROLES.DISTRICT_ADMIN &&
+          req.body.districtId &&
+          req.body.districtId !== ticket.districtId
+        ) {
+          return res.status(403).json({
+            error:
+              "Forbidden: Cannot access data outside your assigned district",
+          });
         }
 
         await logAudit("PERMISSION_AUTHORIZED", {
           userId: ticket.id || ticket.role,
           role: ticket.role,
           permission,
-          time: new Date()
+          time: new Date(),
         });
 
         next();
@@ -554,14 +652,30 @@ async function startServer() {
       }
 
       const staticRegions = [
-        { id: "r1", name: "Addis Ababa", districts: ["Kirkos", "Bole", "Arada", "Lideta"] },
-        { id: "r2", name: "Amhara", districts: ["Gondar", "Bahir Dar", "Dessie"] },
+        {
+          id: "r1",
+          name: "Addis Ababa",
+          districts: ["Kirkos", "Bole", "Arada", "Lideta"],
+        },
+        {
+          id: "r2",
+          name: "Amhara",
+          districts: ["Gondar", "Bahir Dar", "Dessie"],
+        },
         { id: "r3", name: "Oromia", districts: ["Adama", "Jimma", "Bishoftu"] },
         { id: "r4", name: "Tigray", districts: ["Mekelle", "Adigrat", "Axum"] },
-        { id: "r5", name: "Somali", districts: ["Jijiga", "Gode", "Kebridahar"] },
+        {
+          id: "r5",
+          name: "Somali",
+          districts: ["Jijiga", "Gode", "Kebridahar"],
+        },
         { id: "r6", name: "Sidama", districts: ["Hawassa", "Yirgalem"] },
         { id: "r7", name: "Afar", districts: ["Semera", "Asaita"] },
-        { id: "r8", name: "Benishangul-Gumuz", districts: ["Assosa", "Kamashi"] },
+        {
+          id: "r8",
+          name: "Benishangul-Gumuz",
+          districts: ["Assosa", "Kamashi"],
+        },
         { id: "r9", name: "Gambela", districts: ["Gambela Town", "Itang"] },
         { id: "r10", name: "Harari", districts: ["Harar City"] },
         { id: "r11", name: "Dire Dawa", districts: ["Dire Dawa Town"] },
@@ -574,17 +688,19 @@ async function startServer() {
       const total = allVotes.length;
 
       // Regional breakdown
-      const regional = staticRegions.map(r => {
+      const regional = staticRegions.map((r) => {
         const regionVotes = allVotes.filter((v: any) => v.regionId === r.id);
         const candidatesRes = allCandidates.map((c: any) => ({
           id: c.id,
           name: c.name,
-          votes: regionVotes.filter((v: any) => v.candidateId === c.id).length
+          votes: regionVotes.filter((v: any) => v.candidateId === c.id).length,
         }));
 
         // District Breakdown
-        const districts = r.districts.map(dName => {
-          const districtVotes = regionVotes.filter((v: any) => v.districtId === dName);
+        const districts = r.districts.map((dName) => {
+          const districtVotes = regionVotes.filter(
+            (v: any) => v.districtId === dName,
+          );
           return {
             id: dName,
             name: dName,
@@ -592,8 +708,9 @@ async function startServer() {
             candidates: allCandidates.map((c: any) => ({
               id: c.id,
               name: c.name,
-              votes: districtVotes.filter((v: any) => v.candidateId === c.id).length
-            }))
+              votes: districtVotes.filter((v: any) => v.candidateId === c.id)
+                .length,
+            })),
           };
         });
 
@@ -602,22 +719,22 @@ async function startServer() {
           name: r.name,
           total: regionVotes.length,
           candidates: candidatesRes,
-          districts
+          districts,
         };
       });
 
       // If scoped to a region, return national-level counts replaced by regional data
       if (scopeRegionId) {
-        const sr = regional.find(r => r.id === scopeRegionId);
+        const sr = regional.find((r) => r.id === scopeRegionId);
         if (sr) {
           return {
-            counts: allCandidates.map(c => ({
+            counts: allCandidates.map((c) => ({
               ...c,
-              votes: sr.candidates.find(rc => rc.id === c.id)?.votes || 0
+              votes: sr.candidates.find((rc) => rc.id === c.id)?.votes || 0,
             })),
             total: sr.total,
             regional: [sr],
-            electionDate: "DEC 31, 2026"
+            electionDate: "DEC 31, 2026",
           };
         }
       }
@@ -643,60 +760,83 @@ async function startServer() {
     }
   });
 
-  app.patch("/api/admin/voters/:id/verify", authorize("REGISTER_VOTER"), async (req, res) => {
-    try {
-      const { id } = req.params;
-      const { verified } = req.body;
+  app.patch(
+    "/api/admin/voters/:id/verify",
+    authorize("REGISTER_VOTER"),
+    async (req, res) => {
+      try {
+        const { id } = req.params;
+        const { verified } = req.body;
 
-      if (isConnected) {
-        // Fallback or Drizzle update if Drizzle is connected
-        await db.update(voters).set({ isVerified: Boolean(verified) }).where(eq(voters.id, id));
-      } else {
-        const voter = memoryDb.voters.find(v => v.id === id);
-        if (voter) {
-          voter.isVerified = Boolean(verified);
+        if (isConnected) {
+          // Fallback or Drizzle update if Drizzle is connected
+          await db
+            .update(voters)
+            .set({ isVerified: Boolean(verified) })
+            .where(eq(voters.id, id));
+        } else {
+          const voter = memoryDb.voters.find((v) => v.id === id);
+          if (voter) {
+            voter.isVerified = Boolean(verified);
+          }
         }
-      }
 
-      await logAudit("VOTER_VERIFICATION_UPDATED", {
-        voterId: id,
-        verified: Boolean(verified),
+        await logAudit("VOTER_VERIFICATION_UPDATED", {
+          voterId: id,
+          verified: Boolean(verified),
+          adminId: (req as any).user.id || "ADMIN",
+        });
+
+        res.json({ success: true, verified: Boolean(verified) });
+      } catch (e) {
+        res
+          .status(500)
+          .json({ error: "Failed to update voter verification status" });
+      }
+    },
+  );
+
+  app.get(
+    "/api/admin/audit-logs",
+    authorize("VIEW_AUDIT_LOGS"),
+    async (req, res) => {
+      try {
+        if (isConnected) {
+          const logs = await db.select().from(auditLogs);
+          res.json(logs);
+        } else {
+          res.json(memoryDb.auditLogs);
+        }
+      } catch (e) {
+        res.status(500).json({ error: "Failed to fetch audit logs" });
+      }
+    },
+  );
+
+  app.post(
+    "/api/admin/force-finalize",
+    authorize("MANAGE_ELECTION"),
+    async (req, res) => {
+      await logAudit("ELECTION_FORCE_FINALIZED", {
         adminId: (req as any).user.id || "ADMIN",
+        time: new Date(),
       });
 
-      res.json({ success: true, verified: Boolean(verified) });
-    } catch (e) {
-      res.status(500).json({ error: "Failed to update voter verification status" });
-    }
-  });
+      // Notify all clients to jump to results if needed, or update stats
+      const fullResults = await getVoteCounts();
+      io.to("national").to("public").emit("results-update", fullResults);
 
-  app.get("/api/admin/audit-logs", authorize("VIEW_AUDIT_LOGS"), async (req, res) => {
-    try {
-      if (isConnected) {
-        const logs = await db.select().from(auditLogs);
-        res.json(logs);
-      } else {
-        res.json(memoryDb.auditLogs);
+      // Targeted regional updates for admins in regional rooms
+      for (const region of REGIONS) {
+        io.to(`region:${region.id}`).emit(
+          "results-update",
+          await getVoteCounts(region.id),
+        );
       }
-    } catch (e) {
-      res.status(500).json({ error: "Failed to fetch audit logs" });
-    }
-  });
 
-  app.post("/api/admin/force-finalize", authorize("MANAGE_ELECTION"), async (req, res) => {
-    await logAudit("ELECTION_FORCE_FINALIZED", { adminId: (req as any).user.id || "ADMIN", time: new Date() });
-
-    // Notify all clients to jump to results if needed, or update stats
-    const fullResults = await getVoteCounts();
-    io.to("national").to("public").emit("results-update", fullResults);
-
-    // Targeted regional updates for admins in regional rooms
-    for (const region of REGIONS) {
-      io.to(`region:${region.id}`).emit("results-update", await getVoteCounts(region.id));
-    }
-
-    res.json({ success: true });
-  });
+      res.json({ success: true });
+    },
+  );
 
   // Admin User Management
   app.get("/api/admin/users", authorize("MANAGE_USERS"), async (req, res) => {
@@ -715,18 +855,25 @@ async function startServer() {
   });
 
   app.post("/api/admin/users", authorize("MANAGE_USERS"), async (req, res) => {
-    const { username, password, role, regionId, districtId, fullName } = req.body;
+    const { username, password, role, regionId, districtId, fullName } =
+      req.body;
 
     if (!username || !password || !role) {
-      return res.status(400).json({ error: "Username, password and role constitute required fields" });
+      return res.status(400).json({
+        error: "Username, password and role constitute required fields",
+      });
     }
 
     let existingUser: any = null;
     if (isConnected) {
-      const results = await db.select().from(users).where(eq(users.username, username)).limit(1);
+      const results = await db
+        .select()
+        .from(users)
+        .where(eq(users.username, username))
+        .limit(1);
       existingUser = results[0];
     } else {
-      existingUser = memoryDb.users.find(u => u.username === username);
+      existingUser = memoryDb.users.find((u) => u.username === username);
     }
 
     if (existingUser) {
@@ -750,61 +897,95 @@ async function startServer() {
       memoryDb.users.push(newUser);
     }
 
-    await logAudit("ADMIN_USER_CREATED", { creatorId: (req as any).user.id, targetUsername: username, assignedRole: role });
+    await logAudit("ADMIN_USER_CREATED", {
+      creatorId: (req as any).user.id,
+      targetUsername: username,
+      assignedRole: role,
+    });
 
-    res.json({ success: true, user: { id: newUser.id, username: newUser.username, role: newUser.role, regionId, districtId } });
+    res.json({
+      success: true,
+      user: {
+        id: newUser.id,
+        username: newUser.username,
+        role: newUser.role,
+        regionId,
+        districtId,
+      },
+    });
   });
 
-  app.put("/api/admin/users/:id", authorize("MANAGE_USERS"), async (req, res) => {
-    const { id } = req.params;
-    const { role, regionId, districtId, username, password } = req.body;
+  app.put(
+    "/api/admin/users/:id",
+    authorize("MANAGE_USERS"),
+    async (req, res) => {
+      const { id } = req.params;
+      const { role, regionId, districtId, username, password } = req.body;
 
-    let userToUpdate: any = null;
-    if (isConnected) {
-      const results = await db.select().from(users).where(eq(users.id, id)).limit(1);
-      userToUpdate = results[0];
-    } else {
-      userToUpdate = memoryDb.users.find((u: any) => u.id === id);
-    }
+      let userToUpdate: any = null;
+      if (isConnected) {
+        const results = await db
+          .select()
+          .from(users)
+          .where(eq(users.id, id))
+          .limit(1);
+        userToUpdate = results[0];
+      } else {
+        userToUpdate = memoryDb.users.find((u: any) => u.id === id);
+      }
 
-    if (!userToUpdate) {
-      return res.status(404).json({ error: "User not found" });
-    }
+      if (!userToUpdate) {
+        return res.status(404).json({ error: "User not found" });
+      }
 
-    const updates: any = {};
-    if (role) updates.role = role;
-    if (regionId) updates.assignedRegion = regionId;
-    if (districtId) updates.assignedDistrict = districtId;
-    if (username) updates.username = username;
-    if (password) updates.password = bcrypt.hashSync(password, 10);
+      const updates: any = {};
+      if (role) updates.role = role;
+      if (regionId) updates.assignedRegion = regionId;
+      if (districtId) updates.assignedDistrict = districtId;
+      if (username) updates.username = username;
+      if (password) updates.password = bcrypt.hashSync(password, 10);
 
-    if (isConnected) {
-      await db.update(users).set(updates).where(eq(users.id, id));
-    } else {
-      Object.assign(userToUpdate, updates);
-    }
+      if (isConnected) {
+        await db.update(users).set(updates).where(eq(users.id, id));
+      } else {
+        Object.assign(userToUpdate, updates);
+      }
 
-    await logAudit("ADMIN_USER_UPDATED", { adminId: (req as any).user.id, targetUserId: id, details: updates });
-    res.json({ success: true, message: "User updated successfully" })
-  });
+      await logAudit("ADMIN_USER_UPDATED", {
+        adminId: (req as any).user.id,
+        targetUserId: id,
+        details: updates,
+      });
+      res.json({ success: true, message: "User updated successfully" });
+    },
+  );
 
-  app.delete("/api/admin/users/:id", authorize("MANAGE_USERS"), async (req, res) => {
-    const { id } = req.params;
+  app.delete(
+    "/api/admin/users/:id",
+    authorize("MANAGE_USERS"),
+    async (req, res) => {
+      const { id } = req.params;
 
-    if (id === (req as any).user.id) {
-      return res.status(400).json({ error: "Cannot delete your own account" });
-    }
+      if (id === (req as any).user.id) {
+        return res
+          .status(400)
+          .json({ error: "Cannot delete your own account" });
+      }
 
-    if (isConnected) {
-      await db.delete(users).where(eq(users.id, id));
-    } else {
-      const idx = memoryDb.users.findIndex((u: any) => u.id === id);
-      if (idx !== -1) memoryDb.users.splice(idx, 1);
-    }
+      if (isConnected) {
+        await db.delete(users).where(eq(users.id, id));
+      } else {
+        const idx = memoryDb.users.findIndex((u: any) => u.id === id);
+        if (idx !== -1) memoryDb.users.splice(idx, 1);
+      }
 
-    await logAudit("ADMIN_USER_DELETED", { adminId: (req as any).user.id, targetUserId: id });
-    res.json({ success: true });
-  });
+      await logAudit("ADMIN_USER_DELETED", {
+        adminId: (req as any).user.id,
+        targetUserId: id,
+      });
+      res.json({ success: true });
+    },
+  );
 
   // Citizen Lookup for Auto-Fill (Simulation Mode)
   app.get("/api/citizen/:nationalId", lookupLimiter, (req, res) => {
@@ -813,14 +994,18 @@ async function startServer() {
     // Validate ID format (Simulated rule)
     if (!nationalId.startsWith("NID-")) {
       logAudit("CITIZEN_LOOKUP_INVALID_FORMAT", { nationalId });
-      return res.status(400).json({ error: "Invalid National ID format. Use format NID-XXXXXX" });
+      return res
+        .status(400)
+        .json({ error: "Invalid National ID format. Use format NID-XXXXXX" });
     }
 
-    const citizen = simulatedCitizens.find(c => c.nationalId === nationalId);
+    const citizen = simulatedCitizens.find((c) => c.nationalId === nationalId);
 
     if (!citizen) {
       logAudit("CITIZEN_LOOKUP_NOT_FOUND", { nationalId });
-      return res.status(404).json({ error: "No citizen found with this National ID." });
+      return res
+        .status(404)
+        .json({ error: "No citizen found with this National ID." });
     }
 
     // Eligibility Check
@@ -828,7 +1013,9 @@ async function startServer() {
     const today = new Date();
     let age = today.getFullYear() - birthDate.getFullYear();
     const m = today.getMonth() - birthDate.getMonth();
-    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) { age--; }
+    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
 
     const isEligible = age >= 18 && citizen.citizenshipStatus === "Ethiopian";
 
@@ -836,13 +1023,17 @@ async function startServer() {
       nationalId,
       isEligible,
       age,
-      status: citizen.citizenshipStatus
+      status: citizen.citizenshipStatus,
     });
 
     if (!isEligible) {
       return res.status(403).json({
         error: `Ineligible to register: ${age < 18 ? "Underage (18+ required)" : "Non-Ethiopian citizenship"}`,
-        citizen: { fullName: citizen.fullName, citizenshipStatus: citizen.citizenshipStatus, dob: citizen.dob }
+        citizen: {
+          fullName: citizen.fullName,
+          citizenshipStatus: citizen.citizenshipStatus,
+          dob: citizen.dob,
+        },
       });
     }
 
@@ -852,7 +1043,9 @@ async function startServer() {
   app.post("/api/auth/register-voter", async (req, res) => {
     try {
       if (electionPhase !== "REGISTRATION") {
-        return res.status(403).json({ error: "Voter registration is not currently active." });
+        return res
+          .status(403)
+          .json({ error: "Voter registration is not currently active." });
       }
 
       // Check for authorization manually to allow public registration
@@ -875,28 +1068,48 @@ async function startServer() {
         phone,
         email,
         regionId,
-        biometricHash,
-        isCitizen
+        faceEmbedding,
+        isCitizen,
       } = req.body;
 
-      if (!fullName || !dob || !nationalId || !address || !biometricHash) {
-        return res.status(400).json({ error: "Missing required registration fields." });
+      if (!fullName || !dob || !nationalId || !address || !faceEmbedding) {
+        return res
+          .status(400)
+          .json({ error: "Missing required registration fields." });
       }
 
       // Validate Uniqueness
       let nidVoter: any = null;
-      const bHash = crypto.createHash('sha256').update(biometricHash.toString().trim()).digest('hex');
+      const bHash = crypto
+        .createHash("sha256")
+        .update(faceEmbedding.toString().trim())
+        .digest("hex");
 
       if (isConnected) {
-        const results = await db.select().from(voters).where(eq(voters.nationalId, nationalId)).limit(1);
+        const results = await db
+          .select()
+          .from(voters)
+          .where(eq(voters.nationalId, nationalId))
+          .limit(1);
         nidVoter = results[0];
       } else {
-        nidVoter = memoryDb.voters.find(v => v.nationalId === nationalId);
+        nidVoter = memoryDb.voters.find((v) => v.nationalId === nationalId);
       }
 
       if (nidVoter) {
-        await logAudit("REGISTRATION_REJECTED_DUPLICATE", { nationalId, email, phone });
-        return res.status(400).json({ error: "A voter with this National ID is already registered." });
+        // For demo mode, return the existing voterId instead of rejecting,
+        // so users entering simulated NIDs (e.g., NID-123456, NID-654321)
+        // receive a unique voter identifier and can proceed to use it later.
+        await logAudit("REGISTRATION_ALREADY_EXISTS", {
+          nationalId,
+          voterId: nidVoter.voterId,
+        });
+        return res.json({
+          success: true,
+          voterId: nidVoter.voterId,
+          message:
+            "National ID already registered (demo) - returning existing voterId.",
+        });
       }
 
       // Fetch all voters and check fuzzy biometric match
@@ -911,10 +1124,19 @@ async function startServer() {
         if (v.biometricTemplate) {
           try {
             const decrypted = decryptBiometric(v.biometricTemplate);
-            const score = computeDeterministicBiometricScore(biometricHash.toString().trim(), decrypted);
+            const score = computeDeterministicBiometricScore(
+              faceEmbedding.toString().trim(),
+              decrypted,
+            );
             if (score >= 85) {
-              await logAudit("REGISTRATION_REJECTED_DUPLICATE", { nationalId, email, phone });
-              return res.status(400).json({ error: `Biometric duplicate detected: matches existing voter "${v.fullName}" with score of ${score}%` });
+              await logAudit("REGISTRATION_REJECTED_DUPLICATE", {
+                nationalId,
+                email,
+                phone,
+              });
+              return res.status(400).json({
+                error: `Biometric duplicate detected: matches existing voter "${v.fullName}" with score of ${score}%`,
+              });
             }
           } catch (e) {
             // Ignore decryption failure for legacy records
@@ -931,12 +1153,21 @@ async function startServer() {
       }
 
       if (age < 18 || !isCitizen) {
-        await logAudit("REGISTRATION_REJECTED_INELIGIBLE", { fullName, age, isCitizen });
-        return res.status(403).json({ error: "Applicant does not meet eligibility requirements (Age 18+ and Citizenship)." });
+        await logAudit("REGISTRATION_REJECTED_INELIGIBLE", {
+          fullName,
+          age,
+          isCitizen,
+        });
+        return res.status(403).json({
+          error:
+            "Applicant does not meet eligibility requirements (Age 18+ and Citizenship).",
+        });
       }
 
       // Secure Biometric Processing
-      const encryptedTemplate = encryptBiometric(biometricHash.toString().trim());
+      const encryptedTemplate = encryptBiometric(
+        faceEmbedding.toString().trim(),
+      );
 
       const year = new Date().getFullYear();
       const randomSuffix = Math.floor(1000 + Math.random() * 9000);
@@ -953,10 +1184,10 @@ async function startServer() {
         email,
         regionId: regionId || "r1",
         biometricTemplate: encryptedTemplate,
-        biometricHash: bHash,
+        faceEmbeddingHash: bHash,
         hasVoted: false,
         isVerified: false,
-        registrationDate: new Date()
+        registrationDate: new Date(),
       };
 
       if (isConnected) {
@@ -968,23 +1199,26 @@ async function startServer() {
       await logAudit("VOTER_REGISTERED", {
         voterId: newVoter.voterId,
         registrar: user ? user.role : "SELF_SERVICE",
-        regionId: newVoter.regionId
+        regionId: newVoter.regionId,
       });
 
       res.json({
         success: true,
         voterId: newVoter.voterId,
-        message: "Voter registered successfully. Biometric template secured."
+        message: "Voter registered successfully. Biometric template secured.",
       });
     } catch (error) {
       console.error("Critical Registration Error:", error);
-      res.status(500).json({ error: "Internal server error during registration." });
+      res
+        .status(500)
+        .json({ error: "Internal server error during registration." });
     }
   });
 
   app.post("/api/auth/login/biometric", authLimiter, async (req, res) => {
-    const { biometricHash } = req.body;
-    if (!biometricHash) return res.status(400).json({ error: "Biometric hash required" });
+    const { faceEmbedding } = req.body;
+    if (!faceEmbedding)
+      return res.status(400).json({ error: "Face embedding required" });
 
     let allVoters: any[] = [];
     if (isConnected) {
@@ -1000,7 +1234,10 @@ async function startServer() {
       if (v.biometricTemplate) {
         try {
           const decrypted = decryptBiometric(v.biometricTemplate);
-          const score = computeDeterministicBiometricScore(biometricHash, decrypted);
+          const score = computeDeterministicBiometricScore(
+            faceEmbedding,
+            decrypted,
+          );
           if (score > highestScore) {
             highestScore = score;
             bestVoter = v;
@@ -1012,26 +1249,46 @@ async function startServer() {
     }
 
     if (!bestVoter || highestScore < 85) {
-      await logAudit("VOTER_LOGIN_FAILED", { biometricHash });
-      return res.status(401).json({ error: `Biometric authentication failed${highestScore > 0 ? ` (highest match: ${highestScore}%)` : ""}` });
+      await logAudit("VOTER_LOGIN_FAILED", { faceEmbedding });
+      return res.status(401).json({
+        error: `Biometric authentication failed${highestScore > 0 ? ` (highest match: ${highestScore}%)` : ""}`,
+      });
     }
 
     const voter = bestVoter;
     if (!voter.isVerified) {
       await logAudit("VOTER_LOGIN_UNVERIFIED", { voterId: voter.id });
-      return res.status(403).json({ error: "Voter registration is awaiting verification approval." });
+      return res.status(403).json({
+        error: "Voter registration is awaiting verification approval.",
+      });
     }
-    const token = jwt.sign({ id: voter.id, role: ROLES.VOTER }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
-    await logAudit("VOTER_LOGIN_SUCCESS", { voterId: voter.id, matchScore: highestScore });
-    return res.json({ token, user: { id: voter.id, fullName: voter.fullName, hasVoted: voter.hasVoted, role: ROLES.VOTER }, matchScore: highestScore });
+    const token = jwt.sign({ id: voter.id, role: ROLES.VOTER }, JWT_SECRET, {
+      expiresIn: JWT_EXPIRES_IN,
+    });
+    await logAudit("VOTER_LOGIN_SUCCESS", {
+      voterId: voter.id,
+      matchScore: highestScore,
+    });
+    return res.json({
+      token,
+      user: {
+        id: voter.id,
+        fullName: voter.fullName,
+        hasVoted: voter.hasVoted,
+        role: ROLES.VOTER,
+      },
+      matchScore: highestScore,
+    });
   });
 
   app.post("/api/auth/login", authLimiter, async (req, res) => {
-    const { role, username, password, biometricHash, regionId, districtId } = req.body;
+    const { role, username, password, faceEmbedding, regionId, districtId } =
+      req.body;
 
     // Voter login with Biometrics
     if (role === ROLES.VOTER) {
-      if (!biometricHash) return res.status(400).json({ error: "Biometric hash required" });
+      if (!faceEmbedding)
+        return res.status(400).json({ error: "Face embedding required" });
 
       let allVoters: any[] = [];
       if (isConnected) {
@@ -1047,7 +1304,10 @@ async function startServer() {
         if (v.biometricTemplate) {
           try {
             const decrypted = decryptBiometric(v.biometricTemplate);
-            const score = computeDeterministicBiometricScore(biometricHash, decrypted);
+            const score = computeDeterministicBiometricScore(
+              faceEmbedding,
+              decrypted,
+            );
             if (score > highestScore) {
               highestScore = score;
               bestVoter = v;
@@ -1059,18 +1319,36 @@ async function startServer() {
       }
 
       if (!bestVoter || highestScore < 85) {
-        await logAudit("VOTER_LOGIN_FAILED", { biometricHash });
-        return res.status(401).json({ error: `Biometric authentication failed${highestScore > 0 ? ` (highest match: ${highestScore}%)` : ""}` });
+        await logAudit("VOTER_LOGIN_FAILED", { faceEmbedding });
+        return res.status(401).json({
+          error: `Biometric authentication failed${highestScore > 0 ? ` (highest match: ${highestScore}%)` : ""}`,
+        });
       }
 
       const voter = bestVoter;
       if (!voter.isVerified) {
         await logAudit("VOTER_LOGIN_UNVERIFIED", { voterId: voter.id });
-        return res.status(403).json({ error: "Voter registration is awaiting verification approval." });
+        return res.status(403).json({
+          error: "Voter registration is awaiting verification approval.",
+        });
       }
-      const token = jwt.sign({ id: voter.id, role: ROLES.VOTER }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
-      await logAudit("VOTER_LOGIN_SUCCESS", { voterId: voter.id, matchScore: highestScore });
-      return res.json({ token, user: { id: voter.id, fullName: voter.fullName, hasVoted: voter.hasVoted, role: ROLES.VOTER }, matchScore: highestScore });
+      const token = jwt.sign({ id: voter.id, role: ROLES.VOTER }, JWT_SECRET, {
+        expiresIn: JWT_EXPIRES_IN,
+      });
+      await logAudit("VOTER_LOGIN_SUCCESS", {
+        voterId: voter.id,
+        matchScore: highestScore,
+      });
+      return res.json({
+        token,
+        user: {
+          id: voter.id,
+          fullName: voter.fullName,
+          hasVoted: voter.hasVoted,
+          role: ROLES.VOTER,
+        },
+        matchScore: highestScore,
+      });
     }
 
     // Role-based login with Username/Password
@@ -1080,21 +1358,32 @@ async function startServer() {
 
     let user: any = null;
     if (isConnected) {
-      const results = await db.select().from(users).where(eq(users.username, username)).limit(1);
+      const results = await db
+        .select()
+        .from(users)
+        .where(eq(users.username, username))
+        .limit(1);
       user = results[0];
     } else {
       user = memoryDb.users.find((u: any) => u.username === username);
     }
 
     if (!user) {
-      await logAudit("ADMIN_LOGIN_FAILED", { username, reason: "User not found" });
+      await logAudit("ADMIN_LOGIN_FAILED", {
+        username,
+        reason: "User not found",
+      });
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
     // Check if account is locked
     if (user.lockUntil && user.lockUntil > new Date()) {
-      const waitTime = Math.ceil((user.lockUntil.getTime() - Date.now()) / 60000);
-      return res.status(403).json({ error: `Account locked. Please try again in ${waitTime} minutes.` });
+      const waitTime = Math.ceil(
+        (user.lockUntil.getTime() - Date.now()) / 60000,
+      );
+      return res.status(403).json({
+        error: `Account locked. Please try again in ${waitTime} minutes.`,
+      });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
@@ -1108,7 +1397,11 @@ async function startServer() {
         updates.failedAttempts = 0;
         await logAudit("ACCOUNT_LOCKED", { username, role: user.role });
       } else {
-        await logAudit("ADMIN_LOGIN_FAILED", { username, reason: "Incorrect password", attempt: newAttempts });
+        await logAudit("ADMIN_LOGIN_FAILED", {
+          username,
+          reason: "Incorrect password",
+          attempt: newAttempts,
+        });
       }
 
       if (isConnected) {
@@ -1121,16 +1414,24 @@ async function startServer() {
 
     // Success
     if (isConnected) {
-      await db.update(users).set({ failedAttempts: 0, lockUntil: null }).where(eq(users.id, user.id));
+      await db
+        .update(users)
+        .set({ failedAttempts: 0, lockUntil: null })
+        .where(eq(users.id, user.id));
     } else {
       user.failedAttempts = 0;
       user.lockUntil = null;
     }
 
     const token = jwt.sign(
-      { id: user.id, role: user.role, regionId: user.assignedRegion || regionId, districtId: user.assignedDistrict || districtId },
+      {
+        id: user.id,
+        role: user.role,
+        regionId: user.assignedRegion || regionId,
+        districtId: user.assignedDistrict || districtId,
+      },
       JWT_SECRET,
-      { expiresIn: JWT_EXPIRES_IN }
+      { expiresIn: JWT_EXPIRES_IN },
     );
 
     await logAudit("ADMIN_LOGIN_SUCCESS", { username, role: user.role });
@@ -1141,8 +1442,8 @@ async function startServer() {
         username: user.username,
         role: user.role,
         regionId: user.assignedRegion || regionId,
-        districtId: user.assignedDistrict || districtId
-      }
+        districtId: user.assignedDistrict || districtId,
+      },
     });
   });
 
@@ -1152,16 +1453,26 @@ async function startServer() {
 
     let voter: any = null;
     if (isConnected) {
-      const results = await db.select().from(voters).where(eq(voters.id, user.id)).limit(1);
+      const results = await db
+        .select()
+        .from(voters)
+        .where(eq(voters.id, user.id))
+        .limit(1);
       voter = results[0];
     } else {
       voter = memoryDb.voters.find((v: any) => v.id === user.id);
     }
 
-    if (!voter || voter.hasVoted) return res.status(400).json({ error: "Voter not found or already voted" });
+    if (!voter || voter.hasVoted)
+      return res
+        .status(400)
+        .json({ error: "Voter not found or already voted" });
 
     if (electionPhase !== "VOTING") {
-      await logAudit("VOTE_REJECTED_PHASE", { voterId: voter.id, phase: electionPhase });
+      await logAudit("VOTE_REJECTED_PHASE", {
+        voterId: voter.id,
+        phase: electionPhase,
+      });
       return res.status(403).json({ error: "Voting is not currently active." });
     }
 
@@ -1170,7 +1481,7 @@ async function startServer() {
       candidateId,
       regionId: voter.regionId || "r1",
       districtId: voter.districtId || "d1",
-      timestamp: new Date()
+      timestamp: new Date(),
     };
 
     if (isConnected) {
@@ -1181,7 +1492,10 @@ async function startServer() {
 
     // Mark voter as voted
     if (isConnected) {
-      await db.update(voters).set({ hasVoted: true }).where(eq(voters.id, voter.id));
+      await db
+        .update(voters)
+        .set({ hasVoted: true })
+        .where(eq(voters.id, voter.id));
     } else {
       voter.hasVoted = true;
     }
@@ -1205,18 +1519,25 @@ async function startServer() {
     res.json(await getVoteCounts());
   });
 
-  app.get("/api/results/export/csv", authorize("VIEW_RESULTS"), async (req, res) => {
-    const data = await getVoteCounts();
-    let csv = "Candidate,Party,Votes\n";
-    data.counts.forEach((c: any) => {
-      csv += `"${c.name}","${c.party}",${c.votes}\n`;
-    });
-    csv += `\nTotal Votes,${data.total}\n`;
+  app.get(
+    "/api/results/export/csv",
+    authorize("VIEW_RESULTS"),
+    async (req, res) => {
+      const data = await getVoteCounts();
+      let csv = "Candidate,Party,Votes\n";
+      data.counts.forEach((c: any) => {
+        csv += `"${c.name}","${c.party}",${c.votes}\n`;
+      });
+      csv += `\nTotal Votes,${data.total}\n`;
 
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', 'attachment; filename="election-results.csv"');
-    res.send(csv);
-  });
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader(
+        "Content-Disposition",
+        'attachment; filename="election-results.csv"',
+      );
+      res.send(csv);
+    },
+  );
 
   // Election Phase Management
   app.get("/api/election/phase", (req, res) => {
@@ -1224,16 +1545,23 @@ async function startServer() {
     res.json({ phase: electionPhase, systemTime: new Date() });
   });
 
-  app.post("/api/election/phase", authorize("MANAGE_ELECTION"), async (req, res) => {
-    const { phase } = req.body;
-    if (!["REGISTRATION", "VOTING", "CLOSED"].includes(phase)) {
-      return res.status(400).json({ error: "Invalid phase" });
-    }
-    electionPhase = phase;
-    await logAudit("ELECTION_PHASE_CHANGED", { newPhase: phase, adminId: (req as any).user.id });
-    io.emit("phase-update", { phase });
-    res.json({ success: true, phase });
-  });
+  app.post(
+    "/api/election/phase",
+    authorize("MANAGE_ELECTION"),
+    async (req, res) => {
+      const { phase } = req.body;
+      if (!["REGISTRATION", "VOTING", "CLOSED"].includes(phase)) {
+        return res.status(400).json({ error: "Invalid phase" });
+      }
+      electionPhase = phase;
+      await logAudit("ELECTION_PHASE_CHANGED", {
+        newPhase: phase,
+        adminId: (req as any).user.id,
+      });
+      io.emit("phase-update", { phase });
+      res.json({ success: true, phase });
+    },
+  );
 
   // Global Error Handler to prevent HTML responses for API errors
   app.use((err: any, req: any, res: any, next: any) => {
@@ -1263,7 +1591,7 @@ async function startServer() {
   });
 }
 
-startServer().catch(err => {
+startServer().catch((err) => {
   console.error("CRITICAL SERVER ERROR:", err);
   process.exit(1);
 });
