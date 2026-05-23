@@ -1,10 +1,11 @@
 export type Role =
-  | 'VOTER'
+  | 'SUPER_ADMIN'
   | 'ADMIN'
   | 'REGIONAL_ADMIN'
   | 'DISTRICT_ADMIN'
   | 'STAFF'
   | 'OBSERVER'
+  | 'VOTER'
   | 'NONE';
 
 export type ElectionPhase = 'REGISTRATION' | 'VOTING' | 'CLOSED';

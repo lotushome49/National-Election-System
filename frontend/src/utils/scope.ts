@@ -23,8 +23,8 @@ export function getScopeAccessModel(user?: ScopedUser | null) {
     role,
     regionId,
     districtId,
-    canPickRegion: role === 'ADMIN',
-    canPickDistrict: role === 'ADMIN' || role === 'REGIONAL_ADMIN',
+    canPickRegion: role === 'SUPER_ADMIN' || role === 'ADMIN',
+    canPickDistrict: role === 'SUPER_ADMIN' || role === 'ADMIN' || role === 'REGIONAL_ADMIN',
     isRegionLocked: role === 'REGIONAL_ADMIN' || role === 'DISTRICT_ADMIN',
     isDistrictLocked: role === 'DISTRICT_ADMIN',
     summaryLabel:

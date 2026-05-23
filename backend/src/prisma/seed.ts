@@ -129,6 +129,39 @@ async function main() {
     console.log(`  ✅ Super admin created: ${adminEmail}`);
   }
 
+  // ---------------------------------------------------------
+  // MOCK USERS FOR LOCAL DEVELOPMENT/TESTING
+  // ---------------------------------------------------------
+  const mockPasswordHash = await bcrypt.hash("Admin@123", 12);
+  const mockUsers = [
+    { code: "ADMIN", name: "System Admin", email: "admin@election.gov.et", username: "sysadmin" },
+    { code: "REGIONAL_ADMIN", name: "Regional Admin Addis", email: "regional@election.gov.et", username: "regadmin" },
+    { code: "DISTRICT_ADMIN", name: "District Admin Bole", email: "district@election.gov.et", username: "distadmin" },
+    { code: "STAFF", name: "Staff Member", email: "staff@election.gov.et", username: "staff1" },
+    { code: "OBSERVER", name: "Observer One", email: "observer@election.gov.et", username: "observer1" },
+    { code: "VOTER", name: "Voter One", email: "voter@election.gov.et", username: "voter1" },
+  ];
+
+  for (const mu of mockUsers) {
+    const roleRecord = await prisma.role.findUnique({ where: { code: mu.code as any } });
+    if (roleRecord) {
+      await prisma.user.upsert({
+        where: { username: mu.username },
+        update: { passwordHash: mockPasswordHash },
+        create: {
+          id: uuidv4(),
+          roleId: roleRecord.id,
+          fullName: mu.name,
+          username: mu.username,
+          email: mu.email,
+          passwordHash: mockPasswordHash,
+          status: "ACTIVE",
+        },
+      });
+      console.log(`  ✅ Mock User created: ${mu.email} (${mu.code})`);
+    }
+  }
+
   // Create dev test voter for dummy face login
   if (process.env.DUMMY_BIO_HASH) {
     const testVoter = await prisma.voter.upsert({

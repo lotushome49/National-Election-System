@@ -173,7 +173,7 @@ export default function AppShell() {
   const lang = i18n.language as "en" | "am";
   const { results, electionPhase, setElectionPhase } =
     useElectionRealtime(token);
-  const canManageObserverEvidence = role === "OBSERVER" || role === "ADMIN";
+  const canManageObserverEvidence = role === "OBSERVER" || role === "ADMIN" || role === "SUPER_ADMIN";
 
   useEffect(() => {
     document.documentElement.dir = i18n.dir();
@@ -252,7 +252,7 @@ export default function AppShell() {
               <span className="text-sm tracking-tight">{t("dashboard")}</span>
             </button>
 
-            {checkPerm(role, "VIEW_VOTERS") && (
+            {checkPerm(role, "MANAGE_VOTERS") && (
               <button
                 onClick={() => setView("voters")}
                 className={cn(
@@ -269,7 +269,7 @@ export default function AppShell() {
               </button>
             )}
 
-            {checkPerm(role, "REGISTER_VOTER") && (
+            {checkPerm(role, "MANAGE_VOTERS") && (
               <button
                 onClick={() => setView("registration")}
                 className={cn(
@@ -303,7 +303,7 @@ export default function AppShell() {
               </button>
             )}
 
-            {checkPerm(role, "MANAGE_ELECTION") && (
+            {checkPerm(role, "MANAGE_ELECTIONS") && (
               <button
                 onClick={() => setView("elections")}
                 className={cn(
@@ -320,7 +320,7 @@ export default function AppShell() {
               </button>
             )}
 
-            {checkPerm(role, "MANAGE_ELECTION") && (
+            {checkPerm(role, "MANAGE_CANDIDATES") && (
               <button
                 onClick={() => setView("candidates")}
                 className={cn(
@@ -522,7 +522,7 @@ export default function AppShell() {
             >
               {t("dashboard")}
             </button>
-            {checkPerm(role, "VIEW_VOTERS") && (
+            {checkPerm(role, "MANAGE_VOTERS") && (
               <button
                 onClick={() => {
                   setView("voters");
@@ -533,7 +533,7 @@ export default function AppShell() {
                 {t("voter_registry")}
               </button>
             )}
-            {checkPerm(role, "REGISTER_VOTER") && (
+            {checkPerm(role, "MANAGE_VOTERS") && (
               <button
                 onClick={() => {
                   setView("registration");
@@ -555,7 +555,7 @@ export default function AppShell() {
                 {t("user_management")}
               </button>
             )}
-            {checkPerm(role, "MANAGE_ELECTION") && (
+            {checkPerm(role, "MANAGE_ELECTIONS") && (
               <button
                 onClick={() => {
                   setView("elections");
@@ -566,7 +566,7 @@ export default function AppShell() {
                 {lang === "en" ? "Elections" : "ምርጫዎች"}
               </button>
             )}
-            {checkPerm(role, "MANAGE_ELECTION") && (
+            {checkPerm(role, "MANAGE_CANDIDATES") && (
               <button
                 onClick={() => {
                   setView("candidates");
@@ -724,7 +724,7 @@ export default function AppShell() {
             {view === "history" && (
               <HistoryView setView={setView} role={role} t={t} i18n={i18n} />
             )}
-            {view === "voters" && checkPerm(role, "VIEW_VOTERS") && (
+            {view === "voters" && checkPerm(role, "MANAGE_VOTERS") && (
               <VoterRegistryView
                 setView={setView}
                 token={token}
@@ -742,14 +742,14 @@ export default function AppShell() {
                 user={user}
               />
             )}
-            {view === "elections" && checkPerm(role, "MANAGE_ELECTION") && (
+            {view === "elections" && checkPerm(role, "MANAGE_ELECTIONS") && (
               <ElectionManagementView
                 setView={setView}
                 token={token}
                 user={user}
               />
             )}
-            {view === "candidates" && checkPerm(role, "MANAGE_ELECTION") && (
+            {view === "candidates" && checkPerm(role, "MANAGE_CANDIDATES") && (
               <CandidateManagementView
                 setView={setView}
                 token={token}
@@ -819,7 +819,7 @@ export default function AppShell() {
                   key="reg"
                   setView={setView}
                   t={t}
-                  canRegister={checkPerm(role, "REGISTER_VOTER")}
+                  canRegister={checkPerm(role, "MANAGE_VOTERS")}
                   role={role}
                   token={token}
                   i18n={i18n}
@@ -850,7 +850,7 @@ export default function AppShell() {
                 </div>
               ))}
             {view === "voting-booth" &&
-              (role === "VOTER" || checkPerm(role, "MANAGE_ELECTION")) &&
+              (role === "VOTER" || checkPerm(role, "MANAGE_ELECTIONS")) &&
               (electionPhase === "VOTING" || role === "ADMIN" ? (
                 <VotingBoothView
                   key="booth"
