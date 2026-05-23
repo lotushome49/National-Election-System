@@ -2,9 +2,23 @@ import React from "react";
 import { motion } from "motion/react";
 import { BarChart3, MapPinned, ShieldAlert, Store, Users } from "lucide-react";
 import { StatCard } from "../results/StatCard";
+import { useEffect, useState } from "react";
+import { fetchOverview } from "../../services/api/reports";
 
-export function DistrictDashboard({ setView, t, i18n, user }: any) {
+export function DistrictDashboard({ setView, t, i18n, user, token }: any) {
   const lang = i18n.language as "en" | "am";
+  const [overview, setOverview] = useState<any>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    if (!token) return;
+    fetchOverview(token)
+      .then((d) => mounted && setOverview(d))
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, [token]);
   const cards = [
     {
       title: "District Summary",
@@ -20,7 +34,7 @@ export function DistrictDashboard({ setView, t, i18n, user }: any) {
     },
     {
       title: "Registry Tasks",
-      value: "11",
+      value: overview?.registryTasks ?? "11",
       sub: "Open queue items",
       icon: <Users size={24} />,
     },

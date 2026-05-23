@@ -8,9 +8,23 @@ import {
   ListChecks,
 } from "lucide-react";
 import { StatCard } from "../results/StatCard";
+import { useEffect, useState } from "react";
+import { fetchOverview } from "../../services/api/reports";
 
-export function StaffDashboard({ setView, t, i18n }: any) {
+export function StaffDashboard({ setView, t, i18n, token }: any) {
   const lang = i18n.language as "en" | "am";
+  const [overview, setOverview] = useState<any>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    if (!token) return;
+    fetchOverview(token)
+      .then((d) => mounted && setOverview(d))
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, [token]);
   const cards = [
     {
       title: "Fast Search",
@@ -26,7 +40,7 @@ export function StaffDashboard({ setView, t, i18n }: any) {
     },
     {
       title: "Today’s Registrations",
-      value: "124",
+      value: overview?.todaysRegistrations ?? "124",
       sub: "Completed sessions",
       icon: <Fingerprint size={24} />,
     },

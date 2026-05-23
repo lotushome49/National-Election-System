@@ -28,7 +28,27 @@ type RegionalBreakdown = {
 };
 
 export const reportsService = {
+  // Simple in-memory cache to reduce load for expensive aggregation queries.
+  // Keyed by electionId + region/district/polling scope.
+  // TTL in ms
+  _cache: new Map<string, { ts: number; value: any }>(),
+  _cacheTtl: 15 * 1000, // 15s default for dev; tune in prod or replace with Redis
+
   async getOverview(query: ReportsQuery, requester?: JwtPayload) {
+    const cacheKey = (() => {
+      const id = query.electionId ?? "latest";
+      const scope = applyUserScope<ReportScope>({ regionId: undefined, districtId: undefined, pollingStationId: undefined }, requester);
+      return `overview:${id}:r:${scope.regionId ?? "_"}:d:${scope.districtId ?? "_"}:p:${scope.pollingStationId ?? "_"}`;
+    })();
+
+    const cached = (reportsService as any)._cache.get(cacheKey);
+    if (cached && Date.now() - cached.ts < (reportsService as any)._cacheTtl) {
+      return cached.value;
+    }
+
+    // fallthrough to compute the overview and then cache it below
+
+    async function compute(): Promise<any> {
     const election = query.electionId
       ? await reportsRepository.findElectionById(query.electionId)
       : await reportsRepository.findLatestElection();
@@ -112,7 +132,7 @@ export const reportsService = {
         ? Math.round((totalBallots / totalRegisteredVoters) * 10000) / 100
         : 0;
 
-    return {
+    const result = {
       election,
       totalBallots,
       totalRegisteredVoters,
@@ -120,6 +140,9 @@ export const reportsService = {
       candidateStandings,
       regionalBreakdown,
     };
+
+    (reportsService as any)._cache.set(cacheKey, { ts: Date.now(), value: result });
+    return result;
   },
 
   buildOverviewCsv(overview: {

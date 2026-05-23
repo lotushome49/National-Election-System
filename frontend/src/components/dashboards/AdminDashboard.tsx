@@ -10,9 +10,24 @@ import {
   Vote,
 } from "lucide-react";
 import { StatCard } from "../results/StatCard";
+import { useEffect, useState } from "react";
+import { fetchOverview } from "../../services/api/reports";
 
-export function AdminDashboard({ setView, t, i18n, results }: any) {
+export function AdminDashboard({ setView, t, i18n, results, token }: any) {
   const lang = i18n.language as "en" | "am";
+  const [overview, setOverview] = useState<any>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    if (!token) return;
+    fetchOverview(token)
+      .then((d) => mounted && setOverview(d))
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, [token]);
+
   const cards = [
     {
       title: "Active Elections",
@@ -34,7 +49,7 @@ export function AdminDashboard({ setView, t, i18n, results }: any) {
     },
     {
       title: "Live Voters",
-      value: (results?.total ?? 0).toLocaleString(),
+      value: (overview?.totalBallots ?? results?.total ?? 0).toLocaleString(),
       sub: "Captured in the current tally",
       icon: <Users size={24} />,
     },

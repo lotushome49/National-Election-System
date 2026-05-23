@@ -9,9 +9,23 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { StatCard } from "../results/StatCard";
+import { useEffect, useState } from "react";
+import { fetchOverview } from "../../services/api/reports";
 
-export function ObserverDashboard({ setView, t, i18n }: any) {
+export function ObserverDashboard({ setView, t, i18n, token }: any) {
   const lang = i18n.language as "en" | "am";
+  const [overview, setOverview] = useState<any>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    if (!token) return;
+    fetchOverview(token)
+      .then((d) => mounted && setOverview(d))
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, [token]);
   const cards = [
     {
       title: "Current Status",
@@ -21,19 +35,19 @@ export function ObserverDashboard({ setView, t, i18n }: any) {
     },
     {
       title: "Submissions",
-      value: "36",
+      value: overview?.observerSubmissions ?? "36",
       sub: "Observer notes received",
       icon: <FileCheck size={24} />,
     },
     {
       title: "Evidence Items",
-      value: "88",
+      value: overview?.observerEvidence ?? "88",
       sub: "Media and reports attached",
       icon: <Camera size={24} />,
     },
     {
       title: "Open Incidents",
-      value: "14",
+      value: overview?.openIncidents ?? "14",
       sub: "Requires follow-up",
       icon: <AlertTriangle size={24} />,
     },

@@ -2,9 +2,24 @@ import React from "react";
 import { motion } from "motion/react";
 import { BarChart3, Building2, MapPinned, Users, Vote } from "lucide-react";
 import { StatCard } from "../results/StatCard";
+import { useEffect, useState } from "react";
+import { fetchOverview } from "../../services/api/reports";
 
-export function RegionalDashboard({ setView, t, i18n, user }: any) {
+export function RegionalDashboard({ setView, t, i18n, user, token }: any) {
   const lang = i18n.language as "en" | "am";
+  const [overview, setOverview] = useState<any>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    if (!token) return;
+    fetchOverview(token)
+      .then((d) => mounted && setOverview(d))
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, [token]);
+
   const cards = [
     {
       title: "Region Summary",
@@ -20,7 +35,9 @@ export function RegionalDashboard({ setView, t, i18n, user }: any) {
     },
     {
       title: "Registered Voters",
-      value: "286,410",
+      value:
+        (overview?.totalRegisteredVoters ?? "286,410").toLocaleString?.() ??
+        String(overview?.totalRegisteredVoters ?? "286,410"),
       sub: "Regional registry total",
       icon: <Users size={24} />,
     },
