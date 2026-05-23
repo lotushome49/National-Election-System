@@ -19,6 +19,7 @@ import {
   BarChart3,
   Clock,
   HelpCircle,
+  History,
   Search,
   X,
   ArrowLeft,
@@ -176,6 +177,146 @@ export default function AppShell() {
   const canManageObserverEvidence =
     role === "OBSERVER" || role === "ADMIN" || role === "SUPER_ADMIN";
 
+  type SidebarItem = {
+    key: string;
+    label: string;
+    icon: React.ReactNode;
+    view: string;
+  };
+
+  const sidebarItems: SidebarItem[] = (() => {
+    if (!token) return [];
+
+    const items: SidebarItem[] = [];
+
+    if (role === "VOTER") {
+      items.push({
+        key: "voter-hub",
+        label: t("voter_hub"),
+        icon: <User size={18} />,
+        view: "voter-hub",
+      });
+    } else if (role !== "NONE") {
+      items.push({
+        key: "dashboard",
+        label: t("dashboard"),
+        icon: <LayoutDashboard size={18} />,
+        view: "dashboard",
+      });
+    }
+
+    if (checkPerm(role, "MANAGE_VOTERS")) {
+      items.push({
+        key: "registration",
+        label: t("registration"),
+        icon: <UserPlus size={18} />,
+        view: "registration",
+      });
+      items.push({
+        key: "voters",
+        label: t("voter_registry"),
+        icon: <UserCheck size={18} />,
+        view: "voters",
+      });
+    }
+
+    if (checkPerm(role, "MANAGE_USERS")) {
+      items.push({
+        key: "users",
+        label: t("user_management"),
+        icon: <Lock size={18} />,
+        view: "users",
+      });
+    }
+
+    if (checkPerm(role, "MANAGE_ELECTIONS")) {
+      items.push({
+        key: "elections",
+        label: lang === "en" ? "Elections" : "ምርጫዎች",
+        icon: <Vote size={18} />,
+        view: "elections",
+      });
+      items.push({
+        key: "candidates",
+        label: lang === "en" ? "Candidates" : "ዕጩዎች",
+        icon: <Boxes size={18} />,
+        view: "candidates",
+      });
+    }
+
+    if (checkPerm(role, "VIEW_AUDIT_LOGS")) {
+      items.push({
+        key: "audit-logs",
+        label: t("audit_logs"),
+        icon: <Activity size={18} />,
+        view: "audit-logs",
+      });
+    }
+
+    if (checkPerm(role, "VIEW_RESULTS")) {
+      items.push({
+        key: "results-dashboard",
+        label: t("results_console"),
+        icon: <PieChart size={18} />,
+        view: "results-dashboard",
+      });
+    }
+
+    if (
+      checkPerm(role, "MANAGE_REGIONS") ||
+      checkPerm(role, "MANAGE_DISTRICTS") ||
+      checkPerm(role, "MANAGE_POLLING_STATIONS")
+    ) {
+      items.push({
+        key: "geography",
+        label: "Geography",
+        icon: <Globe size={18} />,
+        view: "geography",
+      });
+    }
+
+    if (canManageObserverEvidence) {
+      items.push({
+        key: "observer-evidence",
+        label: "Evidence",
+        icon: <ShieldCheck size={18} />,
+        view: "observer-evidence",
+      });
+    }
+
+    if (isMfaEligibleRole(role)) {
+      items.push({
+        key: "security",
+        label: "Security",
+        icon: <Shield size={18} />,
+        view: "security",
+      });
+    }
+
+    items.push({
+      key: "sessions",
+      label: "Sessions",
+      icon: <Clock size={18} />,
+      view: "sessions",
+    });
+
+    items.push({
+      key: "help",
+      label: t("help"),
+      icon: <HelpCircle size={18} />,
+      view: "help",
+    });
+
+    items.push({
+      key: "history",
+      label: t("history"),
+      icon: <History size={18} />,
+      view: "history",
+    });
+
+    return items;
+  })();
+
   useEffect(() => {
     document.documentElement.dir = i18n.dir();
     document.documentElement.lang = i18n.language;
@@ -241,159 +382,21 @@ export default function AppShell() {
           </div>
           <div className="flex-1 space-y-1.5">
             {/* Render deterministic sidebar from role -> menu mapping */}
-            {(() => {
-              const map: Record<
-                string,
-                Array<{ key: string; label: string; icon: any; view: string }>
-              > = {
-                SUPER_ADMIN: [
-                  {
-                    key: "dashboard",
-                    label: t("dashboard"),
-                    icon: <LayoutDashboard size={18} />,
-                    view: "dashboard",
-                  },
-                  {
-                    key: "users",
-                    label: t("user_management"),
-                    icon: <UserCheck size={18} />,
-                    view: "users",
-                  },
-                  {
-                    key: "geography",
-                    label: "Geography",
-                    icon: <Globe size={18} />,
-                    view: "geography",
-                  },
-                  {
-                    key: "results-dashboard",
-                    label: t("results_console"),
-                    icon: <PieChart size={18} />,
-                    view: "results-dashboard",
-                  },
-                ],
-                ADMIN: [
-                  {
-                    key: "dashboard",
-                    label: t("dashboard"),
-                    icon: <LayoutDashboard size={18} />,
-                    view: "dashboard",
-                  },
-                  {
-                    key: "voters",
-                    label: t("voter_registry"),
-                    icon: <UserCheck size={18} />,
-                    view: "voters",
-                  },
-                  {
-                    key: "users",
-                    label: t("user_management"),
-                    icon: <Lock size={18} />,
-                    view: "users",
-                  },
-                  {
-                    key: "geography",
-                    label: "Geography",
-                    icon: <Globe size={18} />,
-                    view: "geography",
-                  },
-                  {
-                    key: "results-dashboard",
-                    label: t("results_console"),
-                    icon: <PieChart size={18} />,
-                    view: "results-dashboard",
-                  },
-                ],
-                REGIONAL_ADMIN: [
-                  {
-                    key: "dashboard",
-                    label: t("dashboard"),
-                    icon: <LayoutDashboard size={18} />,
-                    view: "dashboard",
-                  },
-                  {
-                    key: "voters",
-                    label: t("voter_registry"),
-                    icon: <UserCheck size={18} />,
-                    view: "voters",
-                  },
-                  {
-                    key: "geography",
-                    label: "Geography",
-                    icon: <Globe size={18} />,
-                    view: "geography",
-                  },
-                ],
-                DISTRICT_ADMIN: [
-                  {
-                    key: "dashboard",
-                    label: t("dashboard"),
-                    icon: <LayoutDashboard size={18} />,
-                    view: "dashboard",
-                  },
-                  {
-                    key: "voters",
-                    label: t("voter_registry"),
-                    icon: <UserCheck size={18} />,
-                    view: "voters",
-                  },
-                ],
-                STAFF: [
-                  {
-                    key: "dashboard",
-                    label: t("dashboard"),
-                    icon: <LayoutDashboard size={18} />,
-                    view: "dashboard",
-                  },
-                  {
-                    key: "voters",
-                    label: t("voter_registry"),
-                    icon: <UserCheck size={18} />,
-                    view: "voters",
-                  },
-                ],
-                OBSERVER: [
-                  {
-                    key: "dashboard",
-                    label: t("dashboard"),
-                    icon: <LayoutDashboard size={18} />,
-                    view: "dashboard",
-                  },
-                  {
-                    key: "observer-evidence",
-                    label: "Evidence",
-                    icon: <ShieldCheck size={18} />,
-                    view: "observer-evidence",
-                  },
-                ],
-                VOTER: [
-                  {
-                    key: "voter-hub",
-                    label: t("voter_hub"),
-                    icon: <User size={18} />,
-                    view: "voter-hub",
-                  },
-                ],
-                NONE: [],
-              };
-
-              const items = map[role] || [];
-              return items.map((it) => (
-                <button
-                  key={it.key}
-                  onClick={() => setView(it.view)}
-                  className={cn(
-                    "w-full flex items-center gap-3 px-5 py-3.5 rounded-2xl font-bold transition-all duration-300",
-                    view === it.view
-                      ? "bg-slate-900 text-white shadow-lg shadow-slate-200"
-                      : "text-slate-400 hover:text-slate-600 hover:bg-slate-50",
-                  )}
-                >
-                  {it.icon}
-                  <span className="text-sm tracking-tight">{it.label}</span>
-                </button>
-              ));
-            })()}
+            {sidebarItems.map((it) => (
+              <button
+                key={it.key}
+                onClick={() => setView(it.view)}
+                className={cn(
+                  "w-full flex items-center gap-3 px-5 py-3.5 rounded-2xl font-bold transition-all duration-300",
+                  view === it.view
+                    ? "bg-slate-900 text-white shadow-lg shadow-slate-200"
+                    : "text-slate-400 hover:text-slate-600 hover:bg-slate-50",
+                )}
+              >
+                {it.icon}
+                <span className="text-sm tracking-tight">{it.label}</span>
+              </button>
+            ))}
 
             <div className="pt-6 border-t border-slate-100 mt-6 space-y-4">
               <button
@@ -460,151 +463,19 @@ export default function AppShell() {
             animate={{ opacity: 1, y: 0 }}
             className="lg:hidden bg-white border-b border-slate-200 p-6 space-y-4 z-30"
           >
-            <button
-              onClick={() => {
-                setView("dashboard");
-                setMobileMenuOpen(false);
-              }}
-              className="w-full text-left font-bold text-slate-700 p-3 hover:bg-slate-50 rounded-xl"
-            >
-              {t("dashboard")}
-            </button>
-            {checkPerm(role, "MANAGE_VOTERS") && (
+            {sidebarItems.map((item) => (
               <button
+                key={item.key}
                 onClick={() => {
-                  setView("voters");
+                  setView(item.view);
                   setMobileMenuOpen(false);
                 }}
-                className="w-full text-left font-bold text-slate-700 p-3 hover:bg-slate-50 rounded-xl"
+                className="w-full text-left font-bold text-slate-700 p-3 hover:bg-slate-50 rounded-xl flex items-center gap-3"
               >
-                {t("voter_registry")}
+                {item.icon}
+                <span>{item.label}</span>
               </button>
-            )}
-            {checkPerm(role, "MANAGE_VOTERS") && (
-              <button
-                onClick={() => {
-                  setView("registration");
-                  setMobileMenuOpen(false);
-                }}
-                className="w-full text-left font-bold text-slate-700 p-3 hover:bg-slate-50 rounded-xl"
-              >
-                {t("registration")}
-              </button>
-            )}
-            {checkPerm(role, "MANAGE_USERS") && (
-              <button
-                onClick={() => {
-                  setView("users");
-                  setMobileMenuOpen(false);
-                }}
-                className="w-full text-left font-bold text-slate-700 p-3 hover:bg-slate-50 rounded-xl"
-              >
-                {t("user_management")}
-              </button>
-            )}
-            {checkPerm(role, "MANAGE_ELECTIONS") && (
-              <button
-                onClick={() => {
-                  setView("elections");
-                  setMobileMenuOpen(false);
-                }}
-                className="w-full text-left font-bold text-slate-700 p-3 hover:bg-slate-50 rounded-xl"
-              >
-                {lang === "en" ? "Elections" : "ምርጫዎች"}
-              </button>
-            )}
-            {checkPerm(role, "MANAGE_CANDIDATES") && (
-              <button
-                onClick={() => {
-                  setView("candidates");
-                  setMobileMenuOpen(false);
-                }}
-                className="w-full text-left font-bold text-slate-700 p-3 hover:bg-slate-50 rounded-xl"
-              >
-                {lang === "en" ? "Candidates" : "ዕጩዎች"}
-              </button>
-            )}
-            {checkPerm(role, "VIEW_AUDIT_LOGS") && (
-              <button
-                onClick={() => {
-                  setView("audit-logs");
-                  setMobileMenuOpen(false);
-                }}
-                className="w-full text-left font-bold text-slate-700 p-3 hover:bg-slate-50 rounded-xl"
-              >
-                {t("audit_logs")}
-              </button>
-            )}
-            {checkPerm(role, "VIEW_RESULTS") && (
-              <button
-                onClick={() => {
-                  setView("results-dashboard");
-                  setMobileMenuOpen(false);
-                }}
-                className="w-full text-left font-bold text-slate-700 p-3 hover:bg-slate-50 rounded-xl"
-              >
-                {t("results_console")}
-              </button>
-            )}
-            {token && (
-              <button
-                onClick={() => {
-                  {
-                    canManageObserverEvidence && (
-                      <button
-                        onClick={() => {
-                          setView("observer-evidence");
-                          setMobileMenuOpen(false);
-                        }}
-                        className="w-full text-left font-bold text-slate-700 p-3 hover:bg-slate-50 rounded-xl"
-                      >
-                        Evidence
-                      </button>
-                    );
-                  }
-                  setView("sessions");
-                  setMobileMenuOpen(false);
-                }}
-                className="w-full text-left font-bold text-slate-700 p-3 hover:bg-slate-50 rounded-xl"
-              >
-                Sessions
-              </button>
-            )}
-            {(checkPerm(role, "MANAGE_REGIONS") ||
-              checkPerm(role, "MANAGE_DISTRICTS") ||
-              checkPerm(role, "MANAGE_POLLING_STATIONS")) && (
-              <button
-                onClick={() => {
-                  setView("geography");
-                  setMobileMenuOpen(false);
-                }}
-                className="w-full text-left font-bold text-slate-700 p-3 hover:bg-slate-50 rounded-xl"
-              >
-                Geography
-              </button>
-            )}
-            {isMfaEligibleRole(role) && (
-              <button
-                onClick={() => {
-                  setView("security");
-                  setMobileMenuOpen(false);
-                }}
-                className="w-full text-left font-bold text-slate-700 p-3 hover:bg-slate-50 rounded-xl"
-              >
-                Security
-              </button>
-            )}
-            {role === "VOTER" && (
-              <button
-                onClick={() => {
-                  setView("voter-hub");
-                  setMobileMenuOpen(false);
-                }}
-                className="w-full text-left font-bold text-slate-700 p-3 hover:bg-slate-50 rounded-xl"
-              >
-                {t("voter_hub")}
-              </button>
-            )}
+            ))}
             <button
               onClick={() => {
                 handleLogout();

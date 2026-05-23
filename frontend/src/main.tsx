@@ -7,6 +7,28 @@ import "./i18n";
 // ── CSRF Fetch Interceptor ───────────────────────────────────────────────────
 const originalFetch = window.fetch;
 
+function normalizeApiPath(input: RequestInfo | URL): RequestInfo | URL {
+  if (
+    typeof input === "string" &&
+    input.startsWith("/api/") &&
+    !input.startsWith("/api/v1/")
+  ) {
+    return input.replace(/^\/api\//, "/api/v1/");
+  }
+
+  if (
+    input instanceof URL &&
+    input.pathname.startsWith("/api/") &&
+    !input.pathname.startsWith("/api/v1/")
+  ) {
+    const next = new URL(input.toString());
+    next.pathname = next.pathname.replace(/^\/api\//, "/api/v1/");
+    return next;
+  }
+
+  return input;
+}
+
 function getCookie(name: string): string | null {
   const value = `; ${document.cookie}`;
   const parts = value.split(`; ${name}=`);
@@ -31,6 +53,8 @@ window.fetch = async function (
   input: RequestInfo | URL,
   init?: RequestInit,
 ): Promise<Response> {
+  input = normalizeApiPath(input);
+
   const method = init?.method?.toUpperCase() || "GET";
   const isSafeMethod = ["GET", "HEAD", "OPTIONS"].includes(method);
 
