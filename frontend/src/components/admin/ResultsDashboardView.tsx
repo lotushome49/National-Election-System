@@ -1,6 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { motion } from "motion/react";
-import { ShieldCheck, Users, PieChart, Download, BarChart3 } from "lucide-react";
+import {
+  ShieldCheck,
+  Users,
+  PieChart,
+  Download,
+  BarChart3,
+} from "lucide-react";
 import { StatCard } from "../results/StatCard";
 
 export function ResultsDashboardView({ setView, token, t, i18n }: any) {
@@ -18,16 +24,28 @@ export function ResultsDashboardView({ setView, token, t, i18n }: any) {
       })
       .then((payload) => {
         const overview = payload?.data;
+        const rawStandings = Array.isArray(overview?.candidateStandings)
+          ? overview.candidateStandings
+          : [];
+
         setResults({
           electionId: overview?.election?.id,
           total: overview?.totalBallots ?? 0,
-          counts:
-            overview?.candidateStandings?.map((candidate: any) => ({
-              id: candidate.candidateId,
-              displayName: candidate.fullName,
-              party: candidate.party,
-              votes: candidate.votes,
-            })) ?? [],
+          counts: rawStandings.map((candidate: any) => ({
+            id: candidate.candidateId,
+            // candidate object shape varies; normalize to safe strings
+            displayName:
+              candidate.fullName ??
+              candidate.name ??
+              String(candidate.candidateId ?? "Unknown"),
+            party:
+              typeof candidate.party === "string"
+                ? candidate.party
+                : (candidate.party?.name ??
+                  candidate.party?.code ??
+                  String(candidate.party ?? "")),
+            votes: Number(candidate.votes ?? 0),
+          })),
         });
         setLoading(false);
       })
@@ -101,9 +119,12 @@ export function ResultsDashboardView({ setView, token, t, i18n }: any) {
               const electionQuery = results?.electionId
                 ? `?electionId=${encodeURIComponent(results.electionId)}`
                 : "";
-              const response = await fetch(`/api/reports/export/csv${electionQuery}`, {
-                headers: { Authorization: `Bearer ${token}` },
-              });
+              const response = await fetch(
+                `/api/reports/export/csv${electionQuery}`,
+                {
+                  headers: { Authorization: `Bearer ${token}` },
+                },
+              );
               if (!response.ok) throw new Error("Failed to export");
               const blob = await response.blob();
               const url = window.URL.createObjectURL(blob);
