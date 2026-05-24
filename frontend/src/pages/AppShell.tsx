@@ -172,8 +172,17 @@ export default function AppShell() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { t, i18n } = useTranslation();
   const lang = i18n.language as "en" | "am";
-  const { results, electionPhase, setElectionPhase } =
-    useElectionRealtime(token);
+  const realtimeEnabled = [
+    "dashboard",
+    "registration",
+    "voter-hub",
+    "voting-booth",
+    "results-dashboard",
+  ].includes(view);
+  const { results, electionPhase, setElectionPhase } = useElectionRealtime(
+    token,
+    realtimeEnabled,
+  );
   const canManageObserverEvidence =
     role === "OBSERVER" || role === "ADMIN" || role === "SUPER_ADMIN";
 

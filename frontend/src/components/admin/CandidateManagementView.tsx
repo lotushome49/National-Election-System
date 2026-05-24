@@ -17,7 +17,11 @@ import {
 import { motion } from "motion/react";
 import { fetchJson } from "../../services/api/client";
 import { cn } from "../../utils/cn";
-import { getScopeAccessModel, getUserRegionId, getUserDistrictId } from "../../utils/scope";
+import {
+  getScopeAccessModel,
+  getUserRegionId,
+  getUserDistrictId,
+} from "../../utils/scope";
 
 type Candidate = {
   id: string;
@@ -52,6 +56,15 @@ type District = {
   name: string;
 };
 
+type CandidateDocument = {
+  id?: string;
+  publicUrl?: string;
+  checksum?: string;
+  originalName?: string;
+  fileSize?: number;
+  uploadedAt?: string;
+};
+
 interface Props {
   setView: (view: string) => void;
   token: string | null;
@@ -73,6 +86,19 @@ async function apiRequest<T>(
   });
 }
 
+function parseCandidateDocuments(
+  documentsJson?: string | null,
+): CandidateDocument[] {
+  if (!documentsJson) return [];
+
+  try {
+    const parsed = JSON.parse(documentsJson);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 export function CandidateManagementView({ setView, token, user }: Props) {
   const scopeAccess = getScopeAccessModel(user);
 
@@ -87,7 +113,8 @@ export function CandidateManagementView({ setView, token, user }: Props) {
   const [modalMode, setModalMode] = useState<"create" | "edit">("create");
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  const [selectedCandidateForDocs, setSelectedCandidateForDocs] = useState<Candidate | null>(null);
+  const [selectedCandidateForDocs, setSelectedCandidateForDocs] =
+    useState<Candidate | null>(null);
   const [uploadingDocs, setUploadingDocs] = useState(false);
   const [docUploadError, setDocUploadError] = useState<string | null>(null);
 
@@ -103,18 +130,21 @@ export function CandidateManagementView({ setView, token, user }: Props) {
   });
 
   const filteredDistricts = useMemo(() => {
-    return districts.filter((d) => !form.regionId || d.regionId === form.regionId);
+    return districts.filter(
+      (d) => !form.regionId || d.regionId === form.regionId,
+    );
   }, [districts, form.regionId]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [candidatesRes, electionsRes, regionsRes, districtsRes] = await Promise.all([
-        apiRequest<{ data: Candidate[] }>("/candidates", token),
-        apiRequest<{ data: Election[] }>("/elections", token),
-        apiRequest<{ data: Region[] }>("/regions", token),
-        apiRequest<{ data: District[] }>("/districts", token),
-      ]);
+      const [candidatesRes, electionsRes, regionsRes, districtsRes] =
+        await Promise.all([
+          apiRequest<{ data: Candidate[] }>("/candidates", token),
+          apiRequest<{ data: Election[] }>("/elections", token),
+          apiRequest<{ data: Region[] }>("/regions", token),
+          apiRequest<{ data: District[] }>("/districts", token),
+        ]);
 
       setCandidates(candidatesRes.data || []);
       setElections(electionsRes.data || []);
@@ -145,7 +175,9 @@ export function CandidateManagementView({ setView, token, user }: Props) {
         ...form,
         regionId: form.regionId || undefined,
         districtId: form.districtId || undefined,
-        photoUrl: form.photoUrl || "https://images.unsplash.com/photo-1540910419892-4a36d2c3266c?w=150",
+        photoUrl:
+          form.photoUrl ||
+          "https://images.unsplash.com/photo-1540910419892-4a36d2c3266c?w=150",
       };
 
       if (modalMode === "create") {
@@ -168,7 +200,10 @@ export function CandidateManagementView({ setView, token, user }: Props) {
     }
   };
 
-  const handleStatusChange = async (id: string, status: Candidate["status"]) => {
+  const handleStatusChange = async (
+    id: string,
+    status: Candidate["status"],
+  ) => {
     try {
       await apiRequest(`/candidates/${id}/status`, token, {
         method: "PATCH",
@@ -181,7 +216,8 @@ export function CandidateManagementView({ setView, token, user }: Props) {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to disqualify/delete this candidate?")) return;
+    if (!confirm("Are you sure you want to disqualify/delete this candidate?"))
+      return;
     try {
       await apiRequest(`/candidates/${id}`, token, { method: "DELETE" });
       await loadData();
@@ -241,7 +277,8 @@ export function CandidateManagementView({ setView, token, user }: Props) {
             Candidates Registry
           </h2>
           <p className="text-slate-400 text-sm font-medium uppercase tracking-widest max-w-2xl leading-relaxed">
-            Verify party symbols, register contestants, and audit candidacy credentials per regional jurisdiction.
+            Verify party symbols, register contestants, and audit candidacy
+            credentials per regional jurisdiction.
           </p>
         </div>
 
@@ -287,7 +324,10 @@ export function CandidateManagementView({ setView, token, user }: Props) {
                 {/* Left Profile */}
                 <div className="flex gap-6 items-start">
                   <img
-                    src={cand.photoUrl || "https://images.unsplash.com/photo-1540910419892-4a36d2c3266c?w=150"}
+                    src={
+                      cand.photoUrl ||
+                      "https://images.unsplash.com/photo-1540910419892-4a36d2c3266c?w=150"
+                    }
                     alt={cand.fullName}
                     onError={(e) => {
                       (e.target as HTMLImageElement).src =
@@ -303,10 +343,15 @@ export function CandidateManagementView({ setView, token, user }: Props) {
                       <span
                         className={cn(
                           "px-2.5 py-0.5 rounded text-[8px] font-black uppercase tracking-widest border",
-                          cand.status === "APPROVED" && "bg-green-50 text-green-600 border-green-200",
-                          cand.status === "PENDING" && "bg-amber-50 text-amber-600 border-amber-200",
-                          cand.status === "DISQUALIFIED" && "bg-rose-50 text-rose-600 border-rose-200",
-                          !["APPROVED", "PENDING", "DISQUALIFIED"].includes(cand.status) && "bg-slate-50 text-slate-500",
+                          cand.status === "APPROVED" &&
+                            "bg-green-50 text-green-600 border-green-200",
+                          cand.status === "PENDING" &&
+                            "bg-amber-50 text-amber-600 border-amber-200",
+                          cand.status === "DISQUALIFIED" &&
+                            "bg-rose-50 text-rose-600 border-rose-200",
+                          !["APPROVED", "PENDING", "DISQUALIFIED"].includes(
+                            cand.status,
+                          ) && "bg-slate-50 text-slate-500",
                         )}
                       >
                         {cand.status}
@@ -316,26 +361,30 @@ export function CandidateManagementView({ setView, token, user }: Props) {
                       {cand.fullName}
                     </h4>
                     <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest flex items-center gap-1.5">
-                      <Globe size={12} /> {cand.election?.title || "National Ballot"}
+                      <Globe size={12} />{" "}
+                      {cand.election?.title || "National Ballot"}
                     </p>
                     <p className="text-[9px] text-slate-300 font-black uppercase">
-                      ID: {cand.id} · Region: {cand.regionId || "National Scope"}
+                      ID: {cand.id} · Region:{" "}
+                      {cand.regionId || "National Scope"}
                     </p>
-                    {cand.documentsJson && JSON.parse(cand.documentsJson).length > 0 && (
+                    {parseCandidateDocuments(cand.documentsJson).length > 0 && (
                       <div className="flex flex-wrap gap-2 mt-2">
-                        {JSON.parse(cand.documentsJson).map((doc: any) => (
-                          <a
-                            key={doc.id}
-                            href={doc.publicUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-1 px-2 py-0.5 bg-slate-50 hover:bg-slate-100 text-slate-500 rounded border border-slate-100 text-[8px] font-bold uppercase tracking-wider transition-colors"
-                            title={`Checksum: ${doc.checksum}`}
-                          >
-                            <FileText size={10} className="text-slate-400" />
-                            {doc.originalName}
-                          </a>
-                        ))}
+                        {parseCandidateDocuments(cand.documentsJson).map(
+                          (doc: CandidateDocument) => (
+                            <a
+                              key={doc.id || doc.publicUrl || doc.originalName}
+                              href={doc.publicUrl || "#"}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-1 px-2 py-0.5 bg-slate-50 hover:bg-slate-100 text-slate-500 rounded border border-slate-100 text-[8px] font-bold uppercase tracking-wider transition-colors"
+                              title={`Checksum: ${doc.checksum || "Unknown"}`}
+                            >
+                              <FileText size={10} className="text-slate-400" />
+                              {doc.originalName || "Document"}
+                            </a>
+                          ),
+                        )}
                       </div>
                     )}
                   </div>
@@ -352,7 +401,9 @@ export function CandidateManagementView({ setView, token, user }: Props) {
                         Approve
                       </button>
                       <button
-                        onClick={() => handleStatusChange(cand.id, "DISQUALIFIED")}
+                        onClick={() =>
+                          handleStatusChange(cand.id, "DISQUALIFIED")
+                        }
                         className="px-4 py-2 bg-rose-50 text-rose-600 hover:bg-rose-650 hover:text-white rounded-lg text-[9px] font-black uppercase tracking-widest transition-all"
                       >
                         Disqualify
@@ -397,7 +448,9 @@ export function CandidateManagementView({ setView, token, user }: Props) {
           >
             <div className="flex items-center justify-between">
               <h3 className="font-display font-black text-2xl text-slate-900 uppercase tracking-tighter">
-                {modalMode === "create" ? "Register Candidate" : "Edit Candidate"}
+                {modalMode === "create"
+                  ? "Register Candidate"
+                  : "Edit Candidate"}
               </h3>
               <button
                 onClick={() => setShowModal(false)}
@@ -415,12 +468,16 @@ export function CandidateManagementView({ setView, token, user }: Props) {
                 <select
                   required
                   value={form.electionId}
-                  onChange={(e) => setForm({ ...form, electionId: e.target.value })}
+                  onChange={(e) =>
+                    setForm({ ...form, electionId: e.target.value })
+                  }
                   className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-bold text-slate-900 focus:outline-none"
                 >
                   <option value="">Select an election</option>
                   {elections.map((el) => (
-                    <option key={el.id} value={el.id}>{el.title}</option>
+                    <option key={el.id} value={el.id}>
+                      {el.title}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -433,7 +490,9 @@ export function CandidateManagementView({ setView, token, user }: Props) {
                   <input
                     required
                     value={form.fullName}
-                    onChange={(e) => setForm({ ...form, fullName: e.target.value })}
+                    onChange={(e) =>
+                      setForm({ ...form, fullName: e.target.value })
+                    }
                     placeholder="e.g. Haile Gebrselassie"
                     className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-bold text-slate-900 focus:outline-none"
                   />
@@ -446,7 +505,9 @@ export function CandidateManagementView({ setView, token, user }: Props) {
                   <input
                     required
                     value={form.party}
-                    onChange={(e) => setForm({ ...form, party: e.target.value })}
+                    onChange={(e) =>
+                      setForm({ ...form, party: e.target.value })
+                    }
                     placeholder="e.g. Unity Alliance"
                     className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-bold text-slate-900 focus:outline-none"
                   />
@@ -472,13 +533,24 @@ export function CandidateManagementView({ setView, token, user }: Props) {
                   </label>
                   <select
                     value={form.regionId}
-                    onChange={(e) => setForm({ ...form, regionId: e.target.value, districtId: "" })}
-                    disabled={!scopeAccess.canPickRegion && scopeAccess.regionId !== null}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        regionId: e.target.value,
+                        districtId: "",
+                      })
+                    }
+                    disabled={
+                      !scopeAccess.canPickRegion &&
+                      scopeAccess.regionId !== null
+                    }
                     className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-bold text-slate-900 focus:outline-none"
                   >
                     <option value="">National Scope</option>
                     {regions.map((rg) => (
-                      <option key={rg.id} value={rg.id}>{rg.name}</option>
+                      <option key={rg.id} value={rg.id}>
+                        {rg.name}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -489,13 +561,20 @@ export function CandidateManagementView({ setView, token, user }: Props) {
                   </label>
                   <select
                     value={form.districtId}
-                    onChange={(e) => setForm({ ...form, districtId: e.target.value })}
-                    disabled={!scopeAccess.canPickDistrict && scopeAccess.districtId !== null}
+                    onChange={(e) =>
+                      setForm({ ...form, districtId: e.target.value })
+                    }
+                    disabled={
+                      !scopeAccess.canPickDistrict &&
+                      scopeAccess.districtId !== null
+                    }
                     className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-bold text-slate-900 focus:outline-none"
                   >
                     <option value="">Regional/Global Scope</option>
                     {filteredDistricts.map((ds) => (
-                      <option key={ds.id} value={ds.id}>{ds.name}</option>
+                      <option key={ds.id} value={ds.id}>
+                        {ds.name}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -507,7 +586,9 @@ export function CandidateManagementView({ setView, token, user }: Props) {
                 </label>
                 <input
                   value={form.photoUrl}
-                  onChange={(e) => setForm({ ...form, photoUrl: e.target.value })}
+                  onChange={(e) =>
+                    setForm({ ...form, photoUrl: e.target.value })
+                  }
                   placeholder="https://images.unsplash.com/photo-..."
                   className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-medium text-slate-950 focus:outline-none"
                 />
@@ -518,7 +599,9 @@ export function CandidateManagementView({ setView, token, user }: Props) {
                 disabled={submitting}
                 className="w-full py-5 bg-slate-900 hover:bg-slate-800 text-white rounded-[1.75rem] text-[10px] font-black uppercase tracking-[0.3em] transition-all disabled:opacity-50"
               >
-                {modalMode === "create" ? "Register Contestant" : "Save Changes"}
+                {modalMode === "create"
+                  ? "Register Contestant"
+                  : "Save Changes"}
               </button>
             </form>
           </motion.div>
@@ -539,7 +622,8 @@ export function CandidateManagementView({ setView, token, user }: Props) {
                   Candidacy Credentials
                 </h3>
                 <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">
-                  Contestant: {selectedCandidateForDocs.fullName} · Party: {selectedCandidateForDocs.party}
+                  Contestant: {selectedCandidateForDocs.fullName} · Party:{" "}
+                  {selectedCandidateForDocs.party}
                 </p>
               </div>
               <button
@@ -558,7 +642,9 @@ export function CandidateManagementView({ setView, token, user }: Props) {
                 <ShieldCheck size={12} /> Compliance Requirements
               </h4>
               <p className="text-[10px] text-amber-700/80 leading-relaxed font-medium">
-                Please upload academic certificates, endorsement letters, and clean record audits in secure PDF format. Maximum size per file is 25MB.
+                Please upload academic certificates, endorsement letters, and
+                clean record audits in secure PDF format. Maximum size per file
+                is 25MB.
               </p>
             </div>
 
@@ -569,23 +655,24 @@ export function CandidateManagementView({ setView, token, user }: Props) {
               </h4>
 
               {(() => {
-                const docs = selectedCandidateForDocs.documentsJson
-                  ? JSON.parse(selectedCandidateForDocs.documentsJson)
-                  : [];
+                const docs = parseCandidateDocuments(
+                  selectedCandidateForDocs.documentsJson,
+                );
 
                 if (docs.length === 0) {
                   return (
                     <div className="p-8 text-center border-2 border-dashed border-slate-100 rounded-2xl text-slate-400 text-[10px] font-bold uppercase tracking-wider">
-                      No credentials uploaded yet. Please use the section below to upload.
+                      No credentials uploaded yet. Please use the section below
+                      to upload.
                     </div>
                   );
                 }
 
                 return (
                   <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                    {docs.map((doc: any) => (
+                    {docs.map((doc: CandidateDocument) => (
                       <div
-                        key={doc.id}
+                        key={doc.id || doc.publicUrl || doc.originalName}
                         className="p-4 rounded-xl border border-slate-100 hover:bg-slate-50/50 flex items-center justify-between gap-4 transition-all"
                       >
                         <div className="flex items-center gap-3 min-w-0">
@@ -594,19 +681,28 @@ export function CandidateManagementView({ setView, token, user }: Props) {
                           </div>
                           <div className="min-w-0">
                             <p className="font-bold text-xs text-slate-900 truncate uppercase tracking-tight">
-                              {doc.originalName}
+                              {doc.originalName || "Document"}
                             </p>
                             <p className="text-[8px] text-slate-400 font-medium uppercase mt-0.5">
-                              {Math.round(doc.fileSize / 1024)} KB · Uploaded {new Date(doc.uploadedAt).toLocaleDateString()}
+                              {doc.fileSize
+                                ? `${Math.round(doc.fileSize / 1024)} KB`
+                                : "Size unknown"}{" "}
+                              · Uploaded{" "}
+                              {doc.uploadedAt
+                                ? new Date(doc.uploadedAt).toLocaleDateString()
+                                : "Unknown"}
                             </p>
-                            <p className="text-[7px] font-mono text-slate-300 truncate mt-0.5" title={`SHA-256: ${doc.checksum}`}>
-                              SHA-256: {doc.checksum}
+                            <p
+                              className="text-[7px] font-mono text-slate-300 truncate mt-0.5"
+                              title={`SHA-256: ${doc.checksum || "Unknown"}`}
+                            >
+                              SHA-256: {doc.checksum || "Unknown"}
                             </p>
                           </div>
                         </div>
 
                         <a
-                          href={doc.publicUrl}
+                          href={doc.publicUrl || "#"}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="p-2.5 bg-slate-50 hover:bg-slate-900 hover:text-white rounded-lg text-slate-500 transition-all flex items-center justify-center shrink-0"
@@ -642,18 +738,23 @@ export function CandidateManagementView({ setView, token, user }: Props) {
                       const formData = new FormData();
                       for (let i = 0; i < files.length; i++) {
                         if (files[i].type !== "application/pdf") {
-                          throw new Error("Only secure PDF documents are permitted.");
+                          throw new Error(
+                            "Only secure PDF documents are permitted.",
+                          );
                         }
                         formData.append("files", files[i]);
                       }
 
-                      const res = await fetchJson<any>(`/api/v1/candidates/${selectedCandidateForDocs.id}/documents`, {
-                        method: "POST",
-                        body: formData,
-                        headers: {
-                          Authorization: `Bearer ${token}`,
+                      const res = await fetchJson<any>(
+                        `/api/v1/candidates/${selectedCandidateForDocs.id}/documents`,
+                        {
+                          method: "POST",
+                          body: formData,
+                          headers: {
+                            Authorization: `Bearer ${token}`,
+                          },
                         },
-                      });
+                      );
 
                       // Re-load the main candidate list
                       await loadData();
@@ -663,7 +764,9 @@ export function CandidateManagementView({ setView, token, user }: Props) {
                         setSelectedCandidateForDocs(res.data);
                       }
                     } catch (err: any) {
-                      setDocUploadError(err.message || "Failed to upload document");
+                      setDocUploadError(
+                        err.message || "Failed to upload document",
+                      );
                     } finally {
                       setUploadingDocs(false);
                     }
@@ -671,13 +774,15 @@ export function CandidateManagementView({ setView, token, user }: Props) {
                   disabled={uploadingDocs}
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
                 />
-                
+
                 <div className="space-y-2 pointer-events-none">
                   <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto text-slate-400 group-hover:scale-110 transition-transform">
                     <Upload size={18} />
                   </div>
                   <div className="text-[10px] font-black uppercase tracking-widest text-slate-600">
-                    {uploadingDocs ? "Uploading credentials..." : "Drag & drop or click to upload PDF"}
+                    {uploadingDocs
+                      ? "Uploading credentials..."
+                      : "Drag & drop or click to upload PDF"}
                   </div>
                   <div className="text-[8px] text-slate-400 font-medium uppercase">
                     Verification documents, certificates, letters (Max 25MB)

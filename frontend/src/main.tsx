@@ -57,6 +57,48 @@ window.fetch = async function (
 
   const method = init?.method?.toUpperCase() || "GET";
   const isSafeMethod = ["GET", "HEAD", "OPTIONS"].includes(method);
+  // Ensure headers is a Headers instance so we can mutate safely
+  const headers = new Headers(init?.headers || undefined);
+
+  // Dev-only: auto-attach Authorization header from persisted token when missing
+  try {
+    if (
+      process.env.NODE_ENV === "development" &&
+      !headers.has("Authorization")
+    ) {
+      // Only auto-attach for same-origin API requests to avoid leaking Authorization
+      // to external CDNs or third-party hosts which will break CORS preflight.
+      let shouldAttach = false;
+      try {
+        if (typeof input === "string") {
+          if (input.startsWith("/api/")) shouldAttach = true;
+          else {
+            const u = new URL(input, window.location.href);
+            if (
+              u.origin === window.location.origin &&
+              u.pathname.startsWith("/api/")
+            )
+              shouldAttach = true;
+          }
+        } else if (input instanceof URL) {
+          if (
+            input.origin === window.location.origin &&
+            input.pathname.startsWith("/api/")
+          )
+            shouldAttach = true;
+        }
+      } catch (e) {
+        shouldAttach = false;
+      }
+
+      if (shouldAttach) {
+        const stored = localStorage.getItem("nehs_token");
+        if (stored) headers.set("Authorization", `Bearer ${stored}`);
+      }
+    }
+  } catch (e) {
+    // ignore localStorage errors
+  }
 
   if (!isSafeMethod) {
     let token = getCookie("csrf_token");
@@ -66,19 +108,24 @@ window.fetch = async function (
     }
 
     if (token) {
-      const headers = new Headers(init?.headers);
       headers.set("x-csrf-token", token);
-
-      init = {
-        ...init,
-        headers,
-        credentials: init?.credentials || "include",
-      };
     }
+
+    init = {
+      ...init,
+      headers,
+      credentials: init?.credentials || "include",
+    };
   } else {
     if (init && !init.credentials) {
       init.credentials = "include";
     }
+
+    // Ensure headers is carried forward even for safe methods
+    init = {
+      ...init,
+      headers,
+    };
   }
 
   return originalFetch(input, init);

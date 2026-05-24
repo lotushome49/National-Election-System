@@ -3,14 +3,25 @@ import { io } from "socket.io-client";
 import { fetchJson } from "../services/api/client";
 import type { ElectionPhase, VoteResults } from "../types/election";
 
-export function useElectionRealtime(token: string | null) {
+export function useElectionRealtime(token: string | null, enabled = true) {
   const [results, setResults] = useState<VoteResults | null>(null);
   const [electionPhase, setElectionPhase] =
     useState<ElectionPhase>("REGISTRATION");
   const currentElectionIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!token) {
+    if (!enabled) {
+      setResults(null);
+      return;
+    }
+
+    const effectiveToken =
+      token ??
+      (typeof window !== "undefined"
+        ? localStorage.getItem("nehs_token")
+        : null);
+
+    if (!effectiveToken) {
       setResults(null);
       return;
     }
@@ -18,8 +29,9 @@ export function useElectionRealtime(token: string | null) {
     if (process.env.NODE_ENV === "development") {
       try {
         // mask token for logs (show only last 6 chars)
-        const masked = token ? `***${String(token).slice(-6)}` : "null";
-        // eslint-disable-next-line no-console
+        const masked = effectiveToken
+          ? `***${String(effectiveToken).slice(-6)}`
+          : "null";
         console.debug(
           "[useElectionRealtime] initializing socket.io with token:",
           masked,
@@ -30,7 +42,7 @@ export function useElectionRealtime(token: string | null) {
     }
 
     const socket = io({
-      auth: { token },
+      auth: { token: effectiveToken },
       reconnection: true,
       reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
@@ -80,7 +92,7 @@ export function useElectionRealtime(token: string | null) {
           // eslint-disable-next-line no-console
           console.debug(
             "[useElectionRealtime] socket connect_error, token masked:",
-            token ? `***${String(token).slice(-6)}` : "null",
+            effectiveToken ? `***${String(effectiveToken).slice(-6)}` : "null",
             "error:",
             error,
           );
@@ -100,7 +112,7 @@ export function useElectionRealtime(token: string | null) {
     });
 
     fetchJson<any>("/api/reports/overview", {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { Authorization: `Bearer ${effectiveToken}` },
     })
       .then((response) => {
         const overview = response?.data;
@@ -157,7 +169,7 @@ export function useElectionRealtime(token: string | null) {
       socket.off("connect_error");
       socket.close();
     };
-  }, [token]);
+  }, [token, enabled]);
 
   return {
     electionPhase,
