@@ -3,6 +3,7 @@ import { authenticate } from "../../middleware/authenticate";
 import { requirePermission, scopeGuard } from "../../middleware/rbac";
 import { validate } from "../../middleware/validate";
 import { regionController } from "./region.controller";
+import { geographyLimiter } from "../../middleware/rateLimiter";
 import {
   createRegionSchema,
   regionQuerySchema,
@@ -12,6 +13,7 @@ import {
 const router = Router();
 
 router.use(authenticate);
+router.use(geographyLimiter);
 router.use(requirePermission("MANAGE_REGIONS"));
 
 router.get(

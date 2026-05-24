@@ -130,59 +130,75 @@ async function main() {
   }
 
   // ---------------------------------------------------------
-  // MOCK USERS FOR LOCAL DEVELOPMENT/TESTING
   // ---------------------------------------------------------
-  const mockPasswordHash = await bcrypt.hash("Admin@123", 12);
-  const mockUsers = [
-    { code: "ADMIN", name: "System Admin", email: "admin@election.gov.et", username: "sysadmin" },
-    { code: "REGIONAL_ADMIN", name: "Regional Admin Addis", email: "regional@election.gov.et", username: "regadmin" },
-    { code: "DISTRICT_ADMIN", name: "District Admin Bole", email: "district@election.gov.et", username: "distadmin" },
-    { code: "STAFF", name: "Staff Member", email: "staff@election.gov.et", username: "staff1" },
-    { code: "OBSERVER", name: "Observer One", email: "observer@election.gov.et", username: "observer1" },
-    { code: "VOTER", name: "Voter One", email: "voter@election.gov.et", username: "voter1" },
+  // SAMPLE GEOGRAPHY DATA (Regions, Districts, Polling Stations)
+  // ---------------------------------------------------------
+  const sampleRegions = [
+    { name: "Addis Ababa", code: "AA", description: "Capital city" },
+    { name: "Oromia", code: "OR", description: "Largest region" },
   ];
 
-  for (const mu of mockUsers) {
-    const roleRecord = await prisma.role.findUnique({ where: { code: mu.code as any } });
-    if (roleRecord) {
-      await prisma.user.upsert({
-        where: { username: mu.username },
-        update: { passwordHash: mockPasswordHash },
-        create: {
-          id: uuidv4(),
-          roleId: roleRecord.id,
-          fullName: mu.name,
-          username: mu.username,
-          email: mu.email,
-          passwordHash: mockPasswordHash,
-          status: "ACTIVE",
-        },
-      });
-      console.log(`  ✅ Mock User created: ${mu.email} (${mu.code})`);
-    }
-  }
+  const regionMap = {} as Record<string, string>; // code -> id
 
-  // Create dev test voter for dummy face login
-  if (process.env.DUMMY_BIO_HASH) {
-    const testVoter = await prisma.voter.upsert({
-      where: { voterId: "DEVVOTER001" },
-      update: {},
+  for (const region of sampleRegions) {
+    const created = await prisma.region.upsert({
+      where: { code: region.code },
+      update: { name: region.name, description: region.description },
       create: {
         id: uuidv4(),
-        voterId: "DEVVOTER001",
-        nationalId: "DEVNATID001",
-        fullName: "Dev Test Voter",
-        dateOfBirth: new Date("1990-01-01T00:00:00.000Z"),
-        email: "dev@example.com",
-        faceEmbedding: createDemoFaceEmbedding(process.env.DUMMY_BIO_HASH),
-        faceEmbeddingHash: process.env.DUMMY_BIO_HASH,
-        isVerified: true,
+        name: region.name,
+        code: region.code,
+        description: region.description,
       },
     });
-    console.log(`  ✅ Test voter created: ${testVoter.email}`);
+    regionMap[region.code] = created.id;
+    console.log(`  ✅ Region created: ${region.name}`);
   }
 
-  console.log("✅ Seeding complete");
+  const sampleDistricts = [
+    { name: "Bole", code: "BO", regionCode: "AA" },
+    { name: "Nifas Silk", code: "NS", regionCode: "AA" },
+    { name: "Arsi", code: "AR", regionCode: "OR" },
+  ];
+
+  const districtMap = {} as Record<string, string>; // code -> id
+
+  for (const district of sampleDistricts) {
+    const created = await prisma.district.upsert({
+      where: { code: district.code },
+      update: { name: district.name },
+      create: {
+        id: uuidv4(),
+        name: district.name,
+        code: district.code,
+        regionId: regionMap[district.regionCode],
+      },
+    });
+    districtMap[district.code] = created.id;
+    console.log(`  ✅ District created: ${district.name}`);
+  }
+
+  const samplePollingStations = [
+    { name: "Bole Center", code: "BOC1", districtCode: "BO", regionCode: "AA" },
+    { name: "Nifas Silk Center", code: "NSC1", districtCode: "NS", regionCode: "AA" },
+    { name: "Arsi Central", code: "ARC1", districtCode: "AR", regionCode: "OR" },
+  ];
+
+  for (const ps of samplePollingStations) {
+    await prisma.pollingStation.upsert({
+      where: { code: ps.code },
+      update: { name: ps.name },
+      create: {
+        id: uuidv4(),
+        name: ps.name,
+        code: ps.code,
+        districtId: districtMap[ps.districtCode],
+        regionId: regionMap[ps.regionCode],
+      },
+    });
+    console.log(`  ✅ Polling Station created: ${ps.name}`);
+  }
+
 }
 
 main()

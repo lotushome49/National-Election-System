@@ -3,6 +3,7 @@ import { observerRepository } from "./observer.repository";
 import { NotFoundError, ForbiddenError } from "../../errors/AppError";
 import { buildPaginationMeta } from "../../utils/response";
 import { auditService } from "../audit/audit.service";
+import { ROLES, type JwtPayload } from "../../types";
 import type {
   CreateReportDto,
   UpdateReportStatusDto,
@@ -10,14 +11,22 @@ import type {
 } from "./observer.schema";
 
 export const observerService = {
-  async list(q: ReportQuery) {
-    const { data, total } = await observerRepository.findAll(q);
+  async list(q: ReportQuery, viewer?: JwtPayload) {
+    const nextQuery =
+      viewer?.role === ROLES.OBSERVER ? { ...q, observerId: viewer.sub } : q;
+
+    const { data, total } = await observerRepository.findAll(nextQuery);
     return { data, meta: buildPaginationMeta(total, q.page, q.limit) };
   },
 
-  async getById(id: string) {
+  async getById(id: string, viewer?: JwtPayload) {
     const report = await observerRepository.findById(id);
     if (!report) throw new NotFoundError("Observer report");
+
+    if (viewer?.role === ROLES.OBSERVER && report.observerId !== viewer.sub) {
+      throw new ForbiddenError("You can only view your own reports");
+    }
+
     return report;
   },
 
@@ -102,12 +111,16 @@ export const observerService = {
     return updated;
   },
 
-  async remove(id: string, actorId: string, ip: string) {
+  async remove(id: string, actorId: string, actorRole: string, ip: string) {
     const existing = await observerRepository.findById(id);
     if (!existing) throw new NotFoundError("Observer report");
 
     // Only the submitting observer or an admin can delete
-    if (existing.observerId !== actorId) {
+    if (
+      existing.observerId !== actorId &&
+      actorRole !== ROLES.ADMIN &&
+      actorRole !== ROLES.SUPER_ADMIN
+    ) {
       throw new ForbiddenError("You can only delete your own reports");
     }
 

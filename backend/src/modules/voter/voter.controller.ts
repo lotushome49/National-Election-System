@@ -11,7 +11,10 @@ import type { AuthRequest } from "../../types";
 export const voterController = {
   list: async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
-      const { data, meta } = await voterService.list(req.query as any, req.user);
+      const { data, meta } = await voterService.list(
+        req.query as any,
+        req.user,
+      );
       sendPaginated(res, data, meta);
     } catch (err) {
       next(err);
@@ -81,7 +84,26 @@ export const voterController = {
         req.ip ?? "",
         req.user,
       );
-      sendSuccess(res, result, "Voter verification status updated successfully");
+      sendSuccess(
+        res,
+        result,
+        "Voter verification status updated successfully",
+      );
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  exportCsv: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const csv = await voterService.exportCsv(req.query as any, req.user);
+      const filename = `voter_registry_${new Date().toISOString().slice(0, 10)}.csv`;
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${filename}"`,
+      );
+      res.send(csv);
     } catch (err) {
       next(err);
     }

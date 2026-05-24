@@ -25,4 +25,20 @@ router.get(
   reportsController.exportCsv,
 );
 
+router.get(
+  "/export/turnout",
+  requirePermission("VIEW_RESULTS"),
+  scopeGuard,
+  validate(reportsQuerySchema, "query"),
+  reportsController.exportTurnout,
+);
+
+router.get(
+  "/export/demographics",
+  requirePermission("VIEW_RESULTS"),
+  scopeGuard,
+  validate(reportsQuerySchema, "query"),
+  reportsController.exportDemographics,
+);
+
 export default router;

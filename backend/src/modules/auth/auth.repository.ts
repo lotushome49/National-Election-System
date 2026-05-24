@@ -12,7 +12,6 @@ export const authRepository = {
         // ignore and fallback to prisma
       }
     }
-
     return prisma.user.findFirst({
       where: {
         deletedAt: null,
@@ -21,6 +20,8 @@ export const authRepository = {
       include: { role: { include: { permissions: true } } },
     });
   },
+
+
 
   /** Backwards-compatible username lookup */
   findByUsername: (username: string) =>

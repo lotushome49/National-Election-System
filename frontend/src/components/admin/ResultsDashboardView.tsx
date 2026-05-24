@@ -112,7 +112,77 @@ export function ResultsDashboardView({ setView, token, t, i18n }: any) {
           sub={t("real_time_calc")}
           icon={<PieChart size={24} />}
         />
+        <div className="flex flex-col gap-3">
+          <button
+            onClick={async () => {
+              try {
+                const electionQuery = results?.electionId
+                  ? `?electionId=${encodeURIComponent(results.electionId)}`
+                  : "";
+                const resp = await fetch(
+                  `/api/reports/export/turnout${electionQuery}`,
+                  {
+                    headers: { Authorization: `Bearer ${token}` },
+                  },
+                );
+                if (!resp.ok) throw new Error("Failed to export turnout");
+                const blob = await resp.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `nehs_turnout_${Date.now()}.csv`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(url);
+              } catch (e) {
+                console.error(e);
+                alert("Error exporting turnout CSV");
+              }
+            }}
+            className="px-6 py-4 bg-white text-slate-900 rounded-[2rem] text-[10px] font-black uppercase tracking-widest shadow-sm flex items-center gap-3"
+          >
+            <Download size={16} />
+            {t("export_csv")}
+            <span className="text-[9px] text-slate-400 ml-2">(Turnout)</span>
+          </button>
 
+          <button
+            onClick={async () => {
+              try {
+                const electionQuery = results?.electionId
+                  ? `?electionId=${encodeURIComponent(results.electionId)}`
+                  : "";
+                const resp = await fetch(
+                  `/api/reports/export/demographics${electionQuery}`,
+                  {
+                    headers: { Authorization: `Bearer ${token}` },
+                  },
+                );
+                if (!resp.ok) throw new Error("Failed to export demographics");
+                const blob = await resp.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `nehs_demographics_${Date.now()}.csv`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(url);
+              } catch (e) {
+                console.error(e);
+                alert("Error exporting demographics CSV");
+              }
+            }}
+            className="px-6 py-4 bg-white text-slate-900 rounded-[2rem] text-[10px] font-black uppercase tracking-widest shadow-sm flex items-center gap-3"
+          >
+            <Download size={16} />
+            {t("export_csv")}
+            <span className="text-[9px] text-slate-400 ml-2">
+              (Demographics)
+            </span>
+          </button>
+        </div>
         <button
           onClick={async () => {
             try {

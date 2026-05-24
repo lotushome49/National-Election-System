@@ -41,6 +41,27 @@ type ReportDraft = {
   description: string;
 };
 
+type ReportRecord = {
+  id: string;
+  electionId: string;
+  pollingStationId?: string | null;
+  observerId: string;
+  type: ReportDraft["type"];
+  status: "SUBMITTED" | "UNDER_REVIEW" | "RESOLVED" | "DISMISSED";
+  title: string;
+  description: string;
+  resolution?: string | null;
+  resolvedAt?: string | null;
+  observer?: { id: string; fullName: string };
+  evidenceItems?: Array<{
+    id: string;
+    originalName: string;
+    publicUrl: string;
+  }>;
+  createdAt: string;
+  updatedAt: string;
+};
+
 interface Props {
   token: string | null;
   role: string;
@@ -49,6 +70,11 @@ interface Props {
 
 type EvidenceListResponse = {
   data: EvidenceRecord[];
+  meta?: { total: number; page: number; limit: number; totalPages: number };
+};
+
+type ReportListResponse = {
+  data: ReportRecord[];
   meta?: { total: number; page: number; limit: number; totalPages: number };
 };
 
@@ -103,12 +129,22 @@ function previewKind(mimeType: string) {
 
 export function ObserverEvidenceView({ token, role, setView }: Props) {
   const [evidence, setEvidence] = useState<EvidenceRecord[]>([]);
+  const [reports, setReports] = useState<ReportRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [reportsLoading, setReportsLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [statusSavingId, setStatusSavingId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [selectedEvidenceIds, setSelectedEvidenceIds] = useState<string[]>([]);
+  const [reportStatusFilter, setReportStatusFilter] = useState<string>("ALL");
+  const [reportStatusDrafts, setReportStatusDrafts] = useState<
+    Record<string, string>
+  >({});
+  const [reportResolutionDrafts, setReportResolutionDrafts] = useState<
+    Record<string, string>
+  >({});
   const [files, setFiles] = useState<File[]>([]);
   const [report, setReport] = useState<ReportDraft>({
     electionId: "",
@@ -138,9 +174,51 @@ export function ObserverEvidenceView({ token, role, setView }: Props) {
     }
   };
 
+  const loadReports = async () => {
+    if (!token) return;
+
+    setReportsLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (reportStatusFilter !== "ALL") {
+        params.set("status", reportStatusFilter);
+      }
+
+      const payload = await fetchAuthedRaw<ReportListResponse>(
+        `/api/observer${params.toString() ? `?${params.toString()}` : ""}`,
+        token,
+      );
+
+      setReports(payload.data ?? []);
+      setReportStatusDrafts((current) => {
+        const next = { ...current };
+        for (const item of payload.data ?? []) {
+          if (!next[item.id]) next[item.id] = item.status;
+        }
+        return next;
+      });
+      setReportResolutionDrafts((current) => {
+        const next = { ...current };
+        for (const item of payload.data ?? []) {
+          if (next[item.id] === undefined)
+            next[item.id] = item.resolution ?? "";
+        }
+        return next;
+      });
+    } catch (err: any) {
+      setError(err.message ?? "Failed to load reports");
+    } finally {
+      setReportsLoading(false);
+    }
+  };
+
   useEffect(() => {
     void loadEvidence();
   }, [token, ownedOnly]);
+
+  useEffect(() => {
+    void loadReports();
+  }, [token, reportStatusFilter, role]);
 
   const selectedCount = selectedEvidenceIds.length;
   const evidenceCount = evidence.length;
@@ -235,12 +313,42 @@ export function ObserverEvidenceView({ token, role, setView }: Props) {
       });
       setSelectedEvidenceIds([]);
       setMessage("Report submitted with attached evidence");
+      await loadReports();
     } catch (err: any) {
       setError(err.message ?? "Failed to submit report");
     } finally {
       setSubmitting(false);
     }
   };
+
+  const updateReportStatus = async (reportId: string) => {
+    if (!token) return;
+
+    setStatusSavingId(reportId);
+    setError("");
+    setMessage("");
+    try {
+      const nextStatus = reportStatusDrafts[reportId] ?? "SUBMITTED";
+      const resolution = reportResolutionDrafts[reportId]?.trim() ?? "";
+
+      await fetchAuthed(`/api/observer/${reportId}/status`, token, {
+        method: "PATCH",
+        body: JSON.stringify({
+          status: nextStatus,
+          resolution: resolution || undefined,
+        }),
+      });
+
+      setMessage("Report status updated");
+      await loadReports();
+    } catch (err: any) {
+      setError(err.message ?? "Failed to update report status");
+    } finally {
+      setStatusSavingId(null);
+    }
+  };
+
+  const isAdminViewer = role === "ADMIN" || role === "SUPER_ADMIN";
 
   return (
     <motion.div
@@ -647,6 +755,160 @@ export function ObserverEvidenceView({ token, role, setView }: Props) {
                       {item.originalName}
                     </button>
                   ))}
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-[2.5rem] border border-slate-100 bg-white p-8 space-y-5 shadow-sm">
+              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                <div>
+                  <h3 className="text-xl font-display font-black tracking-tighter uppercase text-slate-900">
+                    Report ledger
+                  </h3>
+                  <p className="text-sm text-slate-400 font-medium uppercase tracking-widest mt-1">
+                    Track submitted reports and review their resolution state.
+                  </p>
+                </div>
+
+                <select
+                  value={reportStatusFilter}
+                  onChange={(event) =>
+                    setReportStatusFilter(event.target.value)
+                  }
+                  className="px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 text-sm font-semibold text-slate-700 outline-none focus:ring-4 focus:ring-slate-900/5 focus:border-slate-900"
+                >
+                  <option value="ALL">All statuses</option>
+                  <option value="SUBMITTED">Submitted</option>
+                  <option value="UNDER_REVIEW">Under review</option>
+                  <option value="RESOLVED">Resolved</option>
+                  <option value="DISMISSED">Dismissed</option>
+                </select>
+              </div>
+
+              {reportsLoading ? (
+                <div className="text-slate-300 font-display font-black uppercase tracking-[0.3em]">
+                  Loading reports...
+                </div>
+              ) : reports.length === 0 ? (
+                <div className="rounded-[2rem] border border-slate-100 bg-slate-50 p-8 text-slate-500 text-sm">
+                  No reports found for the current filter.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-4">
+                  {reports.map((item) => {
+                    const canEdit = isAdminViewer;
+                    const currentStatus =
+                      reportStatusDrafts[item.id] ?? item.status;
+                    const currentResolution =
+                      reportResolutionDrafts[item.id] ?? item.resolution ?? "";
+
+                    return (
+                      <article
+                        key={item.id}
+                        className="rounded-[2rem] border border-slate-100 bg-slate-50/80 p-5 space-y-4"
+                      >
+                        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
+                          <div className="space-y-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="px-3 py-2 rounded-xl bg-slate-900 text-white text-[10px] font-black uppercase tracking-[0.25em]">
+                                {item.status}
+                              </span>
+                              <span className="px-3 py-2 rounded-xl bg-white text-slate-500 text-[10px] font-black uppercase tracking-[0.25em]">
+                                {item.type}
+                              </span>
+                            </div>
+                            <h4 className="text-lg font-bold text-slate-900">
+                              {item.title}
+                            </h4>
+                            <p className="text-sm text-slate-600 leading-relaxed">
+                              {item.description}
+                            </p>
+                            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-400">
+                              {item.observer?.fullName || item.observerId} ·{" "}
+                              {new Date(item.createdAt).toLocaleString()}
+                            </p>
+                          </div>
+
+                          {canEdit ? (
+                            <div className="min-w-[280px] space-y-3">
+                              <select
+                                value={currentStatus}
+                                onChange={(event) =>
+                                  setReportStatusDrafts((current) => ({
+                                    ...current,
+                                    [item.id]: event.target.value,
+                                  }))
+                                }
+                                className="w-full px-4 py-3 rounded-2xl border border-slate-200 bg-white text-sm font-semibold text-slate-700 outline-none focus:ring-4 focus:ring-slate-900/5 focus:border-slate-900"
+                              >
+                                <option value="SUBMITTED">Submitted</option>
+                                <option value="UNDER_REVIEW">
+                                  Under review
+                                </option>
+                                <option value="RESOLVED">Resolved</option>
+                                <option value="DISMISSED">Dismissed</option>
+                              </select>
+                              <textarea
+                                value={currentResolution}
+                                onChange={(event) =>
+                                  setReportResolutionDrafts((current) => ({
+                                    ...current,
+                                    [item.id]: event.target.value,
+                                  }))
+                                }
+                                placeholder="Resolution or review notes"
+                                className="w-full min-h-28 px-4 py-3 rounded-2xl border border-slate-200 bg-white text-sm text-slate-700 outline-none focus:ring-4 focus:ring-slate-900/5 focus:border-slate-900 resize-y"
+                              />
+                              <button
+                                onClick={() => updateReportStatus(item.id)}
+                                disabled={statusSavingId === item.id}
+                                className="w-full px-4 py-3 rounded-2xl bg-slate-900 text-white text-[10px] font-black uppercase tracking-[0.25em] disabled:opacity-50"
+                              >
+                                {statusSavingId === item.id
+                                  ? "Saving..."
+                                  : "Update status"}
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="min-w-[280px] rounded-[1.5rem] bg-white border border-slate-100 p-4 space-y-3">
+                              <div className="flex items-center justify-between gap-3">
+                                <span className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-400">
+                                  Resolution
+                                </span>
+                                <span className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-400">
+                                  {item.resolvedAt
+                                    ? new Date(
+                                        item.resolvedAt,
+                                      ).toLocaleDateString()
+                                    : "Pending"}
+                                </span>
+                              </div>
+                              <p className="text-sm text-slate-600 leading-relaxed">
+                                {item.resolution ||
+                                  "No resolution has been recorded yet."}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+
+                        {item.evidenceItems?.length ? (
+                          <div className="flex flex-wrap gap-2 pt-1">
+                            {item.evidenceItems.map((evidenceItem) => (
+                              <a
+                                key={evidenceItem.id}
+                                href={evidenceItem.publicUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="px-3 py-2 rounded-xl bg-white border border-slate-100 text-[10px] font-black uppercase tracking-[0.25em] text-slate-500 hover:text-slate-900 transition-colors"
+                              >
+                                {evidenceItem.originalName}
+                              </a>
+                            ))}
+                          </div>
+                        ) : null}
+                      </article>
+                    );
+                  })}
                 </div>
               )}
             </div>

@@ -30,10 +30,38 @@ export function VoterRegistryView({ setView, token, t, i18n, user }: any) {
   >(null);
   const [auditSuccess, setAuditSuccess] = useState(false);
 
+  const handleExport = async () => {
+    try {
+      const resp = await fetch(`/api/v1/voters/export`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!resp.ok) throw new Error(`Export failed: ${resp.status}`);
+      const blob = await resp.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const disposition = resp.headers.get("content-disposition");
+      let filename = "voter_registry.csv";
+      if (disposition) {
+        const m = /filename="(?<name>.+)"/.exec(disposition);
+        if (m && m.groups && m.groups.name)
+          filename = decodeURIComponent(m.groups.name);
+      }
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error(err);
+      alert(t("export_failed") || "Export failed");
+    }
+  };
+
   useEffect(() => {
     const fetchVoters = async () => {
       try {
-        const response = await fetch("/api/v1/voters", {
+        const response = await fetch("/api/v1/voters?page=1&limit=1000", {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!response.ok) {
@@ -382,7 +410,10 @@ export function VoterRegistryView({ setView, token, t, i18n, user }: any) {
             <ShieldCheck size={18} className="text-emerald-500" />
             {t("integrity_check")}
           </button>
-          <button className="px-10 py-5 bg-white text-slate-900 rounded-[2rem] text-[10px] font-black uppercase tracking-[0.3em] shadow-xl shadow-slate-900 group-hover:bg-slate-100 transition-all flex items-center gap-3">
+          <button
+            onClick={handleExport}
+            className="px-10 py-5 bg-white text-slate-900 rounded-[2rem] text-[10px] font-black uppercase tracking-[0.3em] shadow-xl shadow-slate-900 group-hover:bg-slate-100 transition-all flex items-center gap-3"
+          >
             <Download size={18} />
             {t("export_registry")}
           </button>

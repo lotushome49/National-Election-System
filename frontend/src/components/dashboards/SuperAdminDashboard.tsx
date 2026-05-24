@@ -16,7 +16,14 @@ import { fetchOverview } from "../../services/api/reports";
 export function SuperAdminDashboard({ setView, t, i18n, results, token }: any) {
   const lang = i18n.language as "en" | "am";
   const [overview, setOverview] = useState<any>(null);
-  const nationalBallots = overview?.totalBallots ?? results?.total ?? 12840;
+  const summary = overview ?? results ?? {};
+  const totalBallots = Number(summary?.totalBallots ?? summary?.total ?? 0);
+  const totalRegisteredVoters = Number(summary?.totalRegisteredVoters ?? 0);
+  const turnoutPercentage = Number(summary?.turnoutPercentage ?? 0);
+  const leadingCandidate = summary?.candidateStandings?.[0];
+  const topRegion = Array.isArray(summary?.regionalBreakdown)
+    ? summary.regionalBreakdown[0]
+    : null;
 
   useEffect(() => {
     let mounted = true;
@@ -34,46 +41,55 @@ export function SuperAdminDashboard({ setView, t, i18n, results, token }: any) {
   }, [token]);
   const cards = [
     {
-      title: "National Users",
-      value: "12,480",
-      sub: "Across all active roles",
+      title: "National Ballots",
+      value: totalBallots.toLocaleString(),
+      sub: summary?.election?.title || "Current national tally",
       icon: <Users size={24} />,
     },
     {
-      title: "Active Elections",
-      value: "4",
-      sub: "National and local cycles",
+      title: "Registered Voters",
+      value: totalRegisteredVoters.toLocaleString(),
+      sub: "In scope for this overview",
       icon: <Vote size={24} />,
     },
     {
-      title: "Security Health",
-      value: "98.6%",
-      sub: "MFA and session coverage",
+      title: "Turnout",
+      value: `${turnoutPercentage.toFixed(1)}%`,
+      sub: "Derived from live report totals",
       icon: <ShieldCheck size={24} />,
     },
     {
-      title: "Live Alerts",
-      value: "7",
-      sub: "Open items requiring review",
+      title: "Top Region",
+      value: topRegion?.regionName ?? "N/A",
+      sub: topRegion
+        ? `${Number(topRegion.totalBallots ?? 0).toLocaleString()} ballots`
+        : "Waiting for breakdown data",
       icon: <AlertTriangle size={24} />,
     },
   ];
 
-  const auditTrends = [
-    { label: "Auth", value: 92 },
-    { label: "Scope", value: 88 },
-    { label: "Data", value: 76 },
-    { label: "Export", value: 64 },
-  ];
+  const auditTrends = Array.isArray(summary?.regionalBreakdown)
+    ? summary.regionalBreakdown.slice(0, 4).map((region: any) => ({
+        label: region.regionName,
+        value:
+          totalBallots > 0
+            ? Math.round(
+                (Number(region.totalBallots ?? 0) / totalBallots) * 100,
+              )
+            : 0,
+      }))
+    : [];
 
   const roles = [
-    { label: "SUPER_ADMIN", value: 1 },
-    { label: "ADMIN", value: 4 },
-    { label: "REGIONAL_ADMIN", value: 12 },
-    { label: "DISTRICT_ADMIN", value: 32 },
-    { label: "STAFF", value: 54 },
-    { label: "OBSERVER", value: 8 },
-    { label: "VOTER", value: 9800 },
+    { label: "BALLOTS", value: totalBallots },
+    { label: "REGISTERED", value: totalRegisteredVoters },
+    { label: "TURNOUT", value: turnoutPercentage },
+    {
+      label: "REGIONS",
+      value: Array.isArray(summary?.regionalBreakdown)
+        ? summary.regionalBreakdown.length
+        : 0,
+    },
   ];
 
   return (
@@ -138,7 +154,7 @@ export function SuperAdminDashboard({ setView, t, i18n, results, token }: any) {
           <div className="flex items-center gap-3 mb-10">
             <BarChart3 size={22} className="text-slate-900" />
             <h3 className="text-2xl font-display font-black tracking-tighter uppercase">
-              Audit Trend
+              Regional Breakdown
             </h3>
           </div>
           <div className="space-y-6">
@@ -176,15 +192,25 @@ export function SuperAdminDashboard({ setView, t, i18n, results, token }: any) {
                   {role.label}
                 </span>
                 <span className="font-display font-black text-xl">
-                  {role.value.toLocaleString()}
+                  {typeof role.value === "number"
+                    ? role.value.toLocaleString()
+                    : String(role.value)}
                 </span>
               </div>
             ))}
           </div>
           <div className="mt-10 p-5 rounded-2xl bg-white/5 border border-white/10 text-[10px] uppercase tracking-[0.2em] text-white/50">
-            {nationalBallots.toLocaleString()} ballots anchored in the live
-            stream.
+            {totalBallots.toLocaleString()} ballots anchored in the live stream.
           </div>
+          {leadingCandidate && (
+            <div className="mt-4 p-5 rounded-2xl bg-white/5 border border-white/10 text-[10px] uppercase tracking-[0.2em] text-white/50 space-y-2">
+              <div>{leadingCandidate.fullName}</div>
+              <div>
+                {Number(leadingCandidate.votes ?? 0).toLocaleString()} votes ·{" "}
+                {Number(leadingCandidate.percentage ?? 0).toFixed(1)}%
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </motion.div>

@@ -212,4 +212,63 @@ export const voterService = {
 
     return updated;
   },
+
+  async exportCsv(q: VoterQuery, requester?: JwtPayload) {
+    const scopedQuery = applyUserScope(q, requester);
+    // Fetch all matching voters for export
+    const rows = await voterRepository.findAllForExport(scopedQuery as any);
+
+    // Build CSV header
+    const header = [
+      "Voter ID",
+      "Full Name",
+      "National ID",
+      "Date of Birth",
+      "Gender",
+      "Phone",
+      "Email",
+      "Region ID",
+      "District ID",
+      "Polling Station ID",
+      "Is Verified",
+      "Registration Date",
+    ];
+
+    const escape = (v: any) => {
+      if (v === null || v === undefined) return "";
+      const s =
+        typeof v === "string"
+          ? v
+          : v instanceof Date
+            ? v.toISOString()
+            : String(v);
+      return `"${s.replace(/"/g, '""')}"`;
+    };
+
+    const lines = [header.map(escape).join(",")];
+    for (const r of rows) {
+      lines.push(
+        [
+          r.voterId,
+          r.fullName,
+          r.nationalId,
+          r.dateOfBirth
+            ? new Date(r.dateOfBirth).toISOString().split("T")[0]
+            : "",
+          r.gender || "",
+          r.phone || "",
+          r.email || "",
+          r.regionId || "",
+          r.districtId || "",
+          r.pollingStationId || "",
+          r.isVerified ? "true" : "false",
+          r.registrationDate ? new Date(r.registrationDate).toISOString() : "",
+        ]
+          .map(escape)
+          .join(","),
+      );
+    }
+
+    return lines.join("\n");
+  },
 };

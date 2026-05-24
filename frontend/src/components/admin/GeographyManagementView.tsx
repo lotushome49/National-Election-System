@@ -41,6 +41,8 @@ type PollingStation = {
   name: string;
   code: string;
   address?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   capacity: number;
   isActive: boolean;
   region?: { id: string; name: string; code: string };
@@ -107,6 +109,8 @@ export function GeographyManagementView({ setView, token, user }: Props) {
     code: "",
     address: "",
     capacity: "0",
+    latitude: "",
+    longitude: "",
     isActive: true,
   });
   const [regionEditingId, setRegionEditingId] = useState<string | null>(null);
@@ -136,13 +140,77 @@ export function GeographyManagementView({ setView, token, user }: Props) {
     [stations, selectedRegionId, selectedDistrictId],
   );
 
+  useEffect(() => {
+    if (
+      selectedDistrictId &&
+      !districts.some(
+        (district) =>
+          district.id === selectedDistrictId &&
+          (!selectedRegionId || district.regionId === selectedRegionId),
+      )
+    ) {
+      setSelectedDistrictId(null);
+    }
+  }, [districts, selectedDistrictId, selectedRegionId]);
+
+  const cleanText = (value: string) => value.trim();
+
+  const optionalText = (value: string) => {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  };
+
+  const optionalNumber = (value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) return undefined;
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  };
+
+  const buildRegionPayload = () => ({
+    name: cleanText(regionForm.name),
+    code: cleanText(regionForm.code),
+    ...(optionalText(regionForm.description)
+      ? { description: optionalText(regionForm.description) }
+      : {}),
+  });
+
+  const buildDistrictPayload = () => ({
+    regionId: selectedRegionId,
+    name: cleanText(districtForm.name),
+    code: cleanText(districtForm.code),
+    ...(optionalText(districtForm.description)
+      ? { description: optionalText(districtForm.description) }
+      : {}),
+  });
+
+  const buildStationPayload = () => ({
+    regionId: selectedRegionId,
+    districtId: selectedDistrictId,
+    name: cleanText(stationForm.name),
+    code: cleanText(stationForm.code),
+    ...(optionalText(stationForm.address)
+      ? { address: optionalText(stationForm.address) }
+      : {}),
+    ...(optionalNumber(stationForm.latitude) !== undefined
+      ? { latitude: optionalNumber(stationForm.latitude) }
+      : {}),
+    ...(optionalNumber(stationForm.longitude) !== undefined
+      ? { longitude: optionalNumber(stationForm.longitude) }
+      : {}),
+    capacity: Number(stationForm.capacity || 0),
+    isActive: stationForm.isActive,
+  });
+
   const loadAll = async () => {
     setLoading(true);
     try {
       const districtQuery = selectedRegionId
-        ? `?regionId=${selectedRegionId}`
+        ? `?page=1&limit=1000&regionId=${selectedRegionId}`
         : "";
       const stationParams = new URLSearchParams();
+      stationParams.set("page", "1");
+      stationParams.set("limit", "100");
       if (selectedRegionId) stationParams.set("regionId", selectedRegionId);
       if (selectedDistrictId)
         stationParams.set("districtId", selectedDistrictId);
@@ -193,13 +261,13 @@ export function GeographyManagementView({ setView, token, user }: Props) {
       if (regionEditingId) {
         await apiRequest(`/regions/${regionEditingId}`, token, {
           method: "PATCH",
-          body: JSON.stringify(regionForm),
+          body: JSON.stringify(buildRegionPayload()),
         });
         setRegionEditingId(null);
       } else {
         await apiRequest("/regions", token, {
           method: "POST",
-          body: JSON.stringify(regionForm),
+          body: JSON.stringify(buildRegionPayload()),
         });
       }
       setRegionForm({ name: "", code: "", description: "" });
@@ -228,13 +296,13 @@ export function GeographyManagementView({ setView, token, user }: Props) {
       if (districtEditingId) {
         await apiRequest(`/districts/${districtEditingId}`, token, {
           method: "PATCH",
-          body: JSON.stringify({ ...districtForm, regionId: selectedRegionId }),
+          body: JSON.stringify(buildDistrictPayload()),
         });
         setDistrictEditingId(null);
       } else {
         await apiRequest("/districts", token, {
           method: "POST",
-          body: JSON.stringify({ ...districtForm, regionId: selectedRegionId }),
+          body: JSON.stringify(buildDistrictPayload()),
         });
       }
       setDistrictForm({ name: "", code: "", description: "" });
@@ -263,23 +331,13 @@ export function GeographyManagementView({ setView, token, user }: Props) {
       if (stationEditingId) {
         await apiRequest(`/polling-stations/${stationEditingId}`, token, {
           method: "PATCH",
-          body: JSON.stringify({
-            ...stationForm,
-            regionId: selectedRegionId,
-            districtId: selectedDistrictId,
-            capacity: Number(stationForm.capacity),
-          }),
+          body: JSON.stringify(buildStationPayload()),
         });
         setStationEditingId(null);
       } else {
         await apiRequest("/polling-stations", token, {
           method: "POST",
-          body: JSON.stringify({
-            ...stationForm,
-            regionId: selectedRegionId,
-            districtId: selectedDistrictId,
-            capacity: Number(stationForm.capacity),
-          }),
+          body: JSON.stringify(buildStationPayload()),
         });
       }
       setStationForm({
@@ -287,6 +345,8 @@ export function GeographyManagementView({ setView, token, user }: Props) {
         code: "",
         address: "",
         capacity: "0",
+        latitude: "",
+        longitude: "",
         isActive: true,
       });
       await loadAll();
@@ -512,6 +572,16 @@ export function GeographyManagementView({ setView, token, user }: Props) {
                           code: station.code,
                           address: station.address ?? "",
                           capacity: String(station.capacity),
+                          latitude:
+                            station.latitude === null ||
+                            station.latitude === undefined
+                              ? ""
+                              : String(station.latitude),
+                          longitude:
+                            station.longitude === null ||
+                            station.longitude === undefined
+                              ? ""
+                              : String(station.longitude),
                           isActive: !!station.isActive,
                         });
                         setSelectedRegionId(station.regionId);
@@ -730,6 +800,30 @@ export function GeographyManagementView({ setView, token, user }: Props) {
                   placeholder="Address"
                   className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-medium text-slate-900"
                 />
+                <div className="grid grid-cols-2 gap-4">
+                  <input
+                    value={stationForm.latitude}
+                    onChange={(e) =>
+                      setStationForm({
+                        ...stationForm,
+                        latitude: e.target.value,
+                      })
+                    }
+                    placeholder="Latitude"
+                    className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-medium text-slate-900"
+                  />
+                  <input
+                    value={stationForm.longitude}
+                    onChange={(e) =>
+                      setStationForm({
+                        ...stationForm,
+                        longitude: e.target.value,
+                      })
+                    }
+                    placeholder="Longitude"
+                    className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-medium text-slate-900"
+                  />
+                </div>
                 <input
                   value={stationForm.capacity}
                   onChange={(e) =>

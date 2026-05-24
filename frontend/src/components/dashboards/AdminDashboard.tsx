@@ -16,6 +16,14 @@ import { fetchOverview } from "../../services/api/reports";
 export function AdminDashboard({ setView, t, i18n, results, token }: any) {
   const lang = i18n.language as "en" | "am";
   const [overview, setOverview] = useState<any>(null);
+  const summary = overview ?? results ?? {};
+  const totalBallots = Number(summary?.totalBallots ?? summary?.total ?? 0);
+  const totalRegisteredVoters = Number(summary?.totalRegisteredVoters ?? 0);
+  const turnoutPercentage = Number(summary?.turnoutPercentage ?? 0);
+  const leadingCandidate = summary?.candidateStandings?.[0];
+  const regionalBreakdown = Array.isArray(summary?.regionalBreakdown)
+    ? summary.regionalBreakdown
+    : [];
 
   useEffect(() => {
     let mounted = true;
@@ -30,38 +38,34 @@ export function AdminDashboard({ setView, t, i18n, results, token }: any) {
 
   const cards = [
     {
-      title: "Active Elections",
-      value: "4",
-      sub: "Managed from the national office",
+      title: "Ballots Counted",
+      value: totalBallots.toLocaleString(),
+      sub: summary?.election?.title || "Current election summary",
       icon: <Vote size={24} />,
     },
     {
-      title: "Pending Approvals",
-      value: "18",
-      sub: "Users, candidates, and changes",
+      title: "Registered Voters",
+      value: totalRegisteredVoters.toLocaleString(),
+      sub: "Across the scoped electorate",
       icon: <Clock size={24} />,
     },
     {
-      title: "Registry Health",
-      value: "96%",
-      sub: "Sync and validation status",
+      title: "Turnout",
+      value: `${turnoutPercentage.toFixed(1)}%`,
+      sub: "Derived from live report totals",
       icon: <UserCheck size={24} />,
     },
     {
-      title: "Live Voters",
-      value: (overview?.totalBallots ?? results?.total ?? 0).toLocaleString(),
-      sub: "Captured in the current tally",
+      title: "Leading Candidate",
+      value: leadingCandidate?.fullName ?? "N/A",
+      sub: leadingCandidate
+        ? `${Number(leadingCandidate.votes ?? 0).toLocaleString()} votes`
+        : "Waiting for tally data",
       icon: <Users size={24} />,
     },
   ];
 
-  const registrationTrend = [84, 88, 91, 94, 97, 96];
-  const regionMix = [
-    { label: "Addis", value: 92 },
-    { label: "Oromia", value: 85 },
-    { label: "Amhara", value: 79 },
-    { label: "SNNPR", value: 71 },
-  ];
+  const regionMix = regionalBreakdown.slice(0, 4);
 
   return (
     <motion.div
@@ -112,50 +116,85 @@ export function AdminDashboard({ setView, t, i18n, results, token }: any) {
           <div className="flex items-center gap-3 mb-10">
             <BarChart3 size={22} className="text-slate-900" />
             <h3 className="text-2xl font-display font-black tracking-tighter uppercase">
-              Registration Trend
+              Regional Breakdown
             </h3>
           </div>
           <div className="flex items-end gap-3 h-52">
-            {registrationTrend.map((value, index) => (
-              <div
-                key={index}
-                className="flex-1 flex flex-col items-center gap-3"
-              >
-                <motion.div
-                  initial={{ height: 0 }}
-                  animate={{ height: `${value}%` }}
-                  transition={{ duration: 1 }}
-                  className="w-full max-w-12 bg-slate-900 rounded-t-2xl mt-auto"
-                />
-                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                  W{index + 1}
-                </span>
+            {regionMix.length > 0 ? (
+              regionMix.map((region: any) => (
+                <div
+                  key={region.regionId}
+                  className="flex-1 flex flex-col items-center gap-3"
+                >
+                  <motion.div
+                    initial={{ height: 0 }}
+                    animate={{
+                      height: `${Math.max(
+                        20,
+                        Math.min(
+                          100,
+                          (Number(region.totalBallots ?? 0) /
+                            Math.max(totalBallots, 1)) *
+                            100,
+                        ),
+                      )}%`,
+                    }}
+                    transition={{ duration: 1 }}
+                    className="w-full max-w-12 bg-slate-900 rounded-t-2xl mt-auto"
+                  />
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                    {region.regionName?.slice(0, 8) ?? "Region"}
+                  </span>
+                </div>
+              ))
+            ) : (
+              <div className="col-span-full text-[10px] uppercase tracking-[0.3em] text-slate-300">
+                No regional breakdown available yet.
               </div>
-            ))}
+            )}
           </div>
         </div>
 
         <div className="bg-slate-900 text-white p-10 rounded-[3rem] shadow-2xl space-y-8">
           <div className="flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.3em] text-white/40">
             <Clock size={14} />
-            Operations queue
+            Scoped totals
           </div>
-          {regionMix.map((region) => (
-            <div key={region.label} className="space-y-2">
+          {regionMix.map((region: any) => (
+            <div key={region.regionId} className="space-y-2">
               <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-white/50">
-                <span>{region.label}</span>
-                <span>{region.value}%</span>
+                <span>{region.regionName}</span>
+                <span>{Number(region.totalBallots ?? 0).toLocaleString()}</span>
               </div>
               <div className="h-3 rounded-full bg-white/10 overflow-hidden">
                 <motion.div
                   initial={{ width: 0 }}
-                  animate={{ width: `${region.value}%` }}
+                  animate={{
+                    width: `${Math.max(
+                      20,
+                      Math.min(
+                        100,
+                        (Number(region.totalBallots ?? 0) /
+                          Math.max(totalBallots, 1)) *
+                          100,
+                      ),
+                    )}%`,
+                  }}
                   transition={{ duration: 1 }}
                   className="h-full rounded-full bg-white"
                 />
               </div>
             </div>
           ))}
+          {leadingCandidate && (
+            <div className="mt-10 p-5 rounded-2xl bg-white/5 border border-white/10 text-[10px] uppercase tracking-[0.2em] text-white/50 space-y-2">
+              <div>{leadingCandidate.fullName}</div>
+              <div>
+                {Number(leadingCandidate.votes ?? 0).toLocaleString()} votes ·{" "}
+                {Number(leadingCandidate.percentage ?? 0).toFixed(1)}%
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </motion.div>

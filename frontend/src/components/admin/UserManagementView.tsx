@@ -1,107 +1,237 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
-import { ShieldCheck, UserPlus, Edit2, Trash2 } from "lucide-react";
+import { Edit2, ShieldCheck, Trash2, UserPlus } from "lucide-react";
 import { cn } from "../../utils/cn";
-import { getScopeAccessModel } from "../../utils/scope";
 import { unwrapApiData } from "../../utils/mfa";
 
-export function UserManagementView({ setView, token, t, i18n, user }: any) {
-  const [users, setUsers] = useState<any[]>([]);
+type RoleOption = {
+  id: string;
+  code: string;
+  name: string;
+  description?: string | null;
+};
+
+type UserRecord = {
+  id: string;
+  fullName: string;
+  username: string;
+  email?: string | null;
+  status: "ACTIVE" | "SUSPENDED" | "LOCKED";
+  assignedRegionId?: string | null;
+  assignedDistrictId?: string | null;
+  lockUntil?: string | null;
+  role?: { id: string; code: string; name: string };
+};
+
+type UserFormState = {
+  fullName: string;
+  username: string;
+  email: string;
+  password: string;
+  roleId: string;
+  assignedRegionId: string;
+  assignedDistrictId: string;
+  status: "ACTIVE" | "SUSPENDED" | "LOCKED";
+};
+
+const emptyCreateForm = (roleId = ""): UserFormState => ({
+  fullName: "",
+  username: "",
+  email: "",
+  password: "",
+  roleId,
+  assignedRegionId: "",
+  assignedDistrictId: "",
+  status: "ACTIVE",
+});
+
+const emptyEditForm = (user: UserRecord): UserFormState => ({
+  fullName: user.fullName,
+  username: user.username,
+  email: user.email ?? "",
+  password: "",
+  roleId: user.role?.id ?? "",
+  assignedRegionId: user.assignedRegionId ?? "",
+  assignedDistrictId: user.assignedDistrictId ?? "",
+  status: user.status,
+});
+
+export function UserManagementView({ setView, token, t, i18n }: any) {
+  const [users, setUsers] = useState<UserRecord[]>([]);
+  const [roles, setRoles] = useState<RoleOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [modalMode, setModalMode] = useState<"create" | "edit">("create");
-  const [editingUser, setEditingUser] = useState<any>(null);
-  const [formData, setFormData] = useState({
-    username: "",
-    password: "",
-    role: "STAFF",
-    regionId: "",
-    districtId: "",
-  });
+  const [editingUser, setEditingUser] = useState<UserRecord | null>(null);
+  const [formData, setFormData] = useState<UserFormState>(emptyCreateForm());
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
   const lang = i18n.language as "en" | "am";
-  const scopeAccess = getScopeAccessModel(user);
 
-  const fetchUsers = useCallback(async () => {
+  const roleById = useMemo(
+    () => new Map(roles.map((role) => [role.id, role])),
+    [roles],
+  );
+
+  const loadRoles = async (authToken: string) => {
+    const response = await fetch("/api/v1/roles", {
+      headers: { Authorization: `Bearer ${authToken}` },
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error("UNAUTHORIZED");
+      }
+
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data?.message || data?.error || "Failed to load roles");
+    }
+
+    const payload = await response.json();
+    const extracted = unwrapApiData(payload);
+    setRoles(Array.isArray(extracted) ? extracted : []);
+    return Array.isArray(extracted) ? extracted : [];
+  };
+
+  const fetchUsers = async () => {
+    if (!token) return;
+
     setLoading(true);
+    setError("");
     try {
       const response = await fetch("/api/v1/users", {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      const contentType = response.headers.get("content-type") || "";
-
       if (!response.ok) {
-        // Unauthorized: redirect to login so user can re-authenticate
         if (response.status === 401) {
           setUsers([]);
           setView("login");
           return;
         }
 
-        // Try to parse error body for diagnostics
-        let errBody: any = null;
-        try {
-          if (contentType.includes("application/json"))
-            errBody = await response.json();
-          else errBody = await response.text();
-        } catch (e) {
-          errBody = null;
-        }
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data?.message || data?.error || "Failed to load users");
+      }
 
-        // Log and surface an empty list to avoid render errors
-        // eslint-disable-next-line no-console
-        console.error("Failed to fetch users:", response.status, errBody);
-        setUsers([]);
+      const payload = await response.json();
+      const extracted = unwrapApiData(payload);
+      setUsers(Array.isArray(extracted) ? extracted : []);
+    } catch (err: any) {
+      if (err?.message === "UNAUTHORIZED") {
+        setView("login");
         return;
       }
 
-      const data = contentType.includes("application/json")
-        ? await response.json()
-        : null;
-      const extracted = data ? unwrapApiData(data) : [];
-      setUsers(Array.isArray(extracted) ? extracted : []);
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error("Failed to fetch users", err);
+      setError(err?.message || "Failed to fetch users");
       setUsers([]);
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  };
 
   useEffect(() => {
-    fetchUsers();
-  }, [fetchUsers]);
+    const run = async () => {
+      if (!token) return;
 
-  const handleSubmit = async (e: any) => {
-    e.preventDefault();
+      try {
+        const loadedRoles = await loadRoles(token);
+        if (
+          !formData.roleId &&
+          loadedRoles.length > 0 &&
+          modalMode === "create"
+        ) {
+          setFormData((current) => ({
+            ...current,
+            roleId: loadedRoles[0].id,
+          }));
+        }
+      } catch (err: any) {
+        if (err?.message === "UNAUTHORIZED") {
+          setView("login");
+          return;
+        }
+        setError(err?.message || "Failed to load roles");
+      }
+
+      await fetchUsers();
+    };
+
+    void run();
+  }, [token]);
+
+  const openCreateModal = () => {
+    setModalMode("create");
+    setEditingUser(null);
+    setFormData(emptyCreateForm(roles[0]?.id ?? ""));
+    setShowModal(true);
+  };
+
+  const openEditModal = (user: UserRecord) => {
+    setModalMode("edit");
+    setEditingUser(user);
+    setFormData(emptyEditForm(user));
+    setShowModal(true);
+  };
+
+  const closeModal = () => {
+    setShowModal(false);
+    setEditingUser(null);
+    setFormData(emptyCreateForm(roles[0]?.id ?? ""));
+  };
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!token) return;
+
     setSubmitting(true);
+    setError("");
+
     try {
       const url =
         modalMode === "create"
           ? "/api/v1/users"
-          : `/api/v1/users/${editingUser.id}`;
+          : `/api/v1/users/${editingUser?.id}`;
       const method = modalMode === "create" ? "POST" : "PATCH";
 
-      const resp = await fetch(url, {
+      const payload =
+        modalMode === "create"
+          ? {
+              fullName: formData.fullName.trim(),
+              username: formData.username.trim(),
+              email: formData.email.trim() || undefined,
+              password: formData.password,
+              roleId: formData.roleId,
+              assignedRegionId: formData.assignedRegionId.trim() || undefined,
+              assignedDistrictId:
+                formData.assignedDistrictId.trim() || undefined,
+            }
+          : {
+              fullName: formData.fullName.trim(),
+              email: formData.email.trim() || undefined,
+              status: formData.status,
+              assignedRegionId: formData.assignedRegionId.trim() || null,
+              assignedDistrictId: formData.assignedDistrictId.trim() || null,
+            };
+
+      const response = await fetch(url, {
         method,
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(payload),
       });
 
-      const data = await resp.json();
-      if (!resp.ok) {
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
         throw new Error(data?.message || data?.error || "Request failed");
       }
 
-      setShowModal(false);
-      fetchUsers();
-    } catch (e: any) {
-      alert(e.message);
+      closeModal();
+      await fetchUsers();
+    } catch (err: any) {
+      setError(err?.message || "Failed to save user");
     } finally {
       setSubmitting(false);
     }
@@ -109,45 +239,22 @@ export function UserManagementView({ setView, token, t, i18n, user }: any) {
 
   const handleDelete = async (id: string) => {
     if (!confirm(t("confirm_delete_user"))) return;
+
     try {
-      const resp = await fetch(`/api/v1/users/${id}`, {
+      const response = await fetch(`/api/v1/users/${id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!resp.ok && resp.status !== 204) {
-        const data = await resp.json().catch(() => ({}));
+
+      if (!response.ok && response.status !== 204) {
+        const data = await response.json().catch(() => ({}));
         throw new Error(data?.message || data?.error || "Delete failed");
       }
-      fetchUsers();
-    } catch (e: any) {
-      alert(e.message);
+
+      await fetchUsers();
+    } catch (err: any) {
+      setError(err?.message || "Failed to delete user");
     }
-  };
-
-  const openCreateModal = () => {
-    setModalMode("create");
-    setEditingUser(null);
-    setFormData({
-      username: "",
-      password: "",
-      role: "STAFF",
-      regionId: "",
-      districtId: "",
-    });
-    setShowModal(true);
-  };
-
-  const openEditModal = (user: any) => {
-    setModalMode("edit");
-    setEditingUser(user);
-    setFormData({
-      username: user.username,
-      password: "",
-      role: user.role,
-      regionId: user.regionId || "",
-      districtId: user.districtId || "",
-    });
-    setShowModal(true);
   };
 
   return (
@@ -187,6 +294,12 @@ export function UserManagementView({ setView, token, t, i18n, user }: any) {
         </div>
       </div>
 
+      {error && (
+        <div className="mb-8 rounded-2xl border border-rose-100 bg-rose-50 px-5 py-4 text-rose-700 text-sm font-semibold">
+          {error}
+        </div>
+      )}
+
       {loading ? (
         <div className="p-32 text-center animate-pulse text-slate-300 font-display font-black uppercase tracking-[0.4em]">
           {t("fetching_users")}
@@ -211,25 +324,30 @@ export function UserManagementView({ setView, token, t, i18n, user }: any) {
                 >
                   <td className="px-10 py-6">
                     <p className="font-display font-black text-slate-900 text-lg uppercase tracking-tighter leading-none group-hover:translate-x-1 transition-transform">
-                      {u.username}
+                      {u.fullName}
                     </p>
                     <p className="text-[10px] text-slate-300 font-black uppercase tracking-widest mt-1">
-                      UUID: {u.id.slice(0, 8)}
+                      @{u.username} · UUID: {u.id.slice(0, 8)}
                     </p>
+                    {u.email && (
+                      <p className="text-[10px] text-slate-400 font-semibold mt-1 break-all">
+                        {u.email}
+                      </p>
+                    )}
                   </td>
                   <td className="px-10 py-6">
                     <span className="font-mono text-[9px] bg-slate-100 text-slate-600 px-3 py-1.5 rounded-lg border border-slate-200 uppercase font-black tracking-widest shadow-sm">
-                      {u.role}
+                      {u.role?.name || u.role?.code || "UNKNOWN"}
                     </span>
                   </td>
                   <td className="px-10 py-6">
                     <div className="space-y-1">
                       <p className="text-[10px] font-black text-slate-900 uppercase tracking-widest">
-                        {u.regionId || "GLOBAL"}
+                        Region: {u.assignedRegionId || "GLOBAL"}
                       </p>
-                      {u.districtId && (
+                      {u.assignedDistrictId && (
                         <p className="text-[9px] text-slate-400 font-black uppercase">
-                          District: {u.districtId}
+                          District: {u.assignedDistrictId}
                         </p>
                       )}
                     </div>
@@ -282,7 +400,7 @@ export function UserManagementView({ setView, token, t, i18n, user }: any) {
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bg-white rounded-[3rem] p-12 lg:p-16 w-full max-w-xl shadow-[0_50px_100px_-20px_rgba(0,0,0,0.5)] border border-slate-100 relative overflow-hidden"
+            className="bg-white rounded-[3rem] p-12 lg:p-16 w-full max-w-2xl shadow-[0_50px_100px_-20px_rgba(0,0,0,0.5)] border border-slate-100 relative overflow-hidden"
           >
             <div className="absolute top-0 right-0 p-8 opacity-5">
               <UserPlus size={160} />
@@ -300,59 +418,161 @@ export function UserManagementView({ setView, token, t, i18n, user }: any) {
             <form onSubmit={handleSubmit} className="space-y-8 relative z-10">
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-900 uppercase tracking-widest ml-1">
-                  {t("unique_identifier")}
+                  Full name
                 </label>
                 <input
                   required
+                  type="text"
+                  value={formData.fullName}
+                  onChange={(e) =>
+                    setFormData({ ...formData, fullName: e.target.value })
+                  }
+                  className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-[2rem] outline-none focus:ring-4 focus:ring-slate-100 transition-all font-bold text-slate-900"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-900 uppercase tracking-widest ml-1">
+                  {t("unique_identifier")}
+                </label>
+                <input
+                  required={modalMode === "create"}
                   type="text"
                   value={formData.username}
                   onChange={(e) =>
                     setFormData({ ...formData, username: e.target.value })
                   }
-                  className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-[2rem] outline-none focus:ring-4 focus:ring-slate-100 transition-all font-bold text-slate-900"
+                  disabled={modalMode === "edit"}
+                  className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-[2rem] outline-none focus:ring-4 focus:ring-slate-100 transition-all font-bold text-slate-900 disabled:opacity-60"
                 />
               </div>
+
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-900 uppercase tracking-widest ml-1">
-                  {t("vulnerability_passkey")}{" "}
-                  {modalMode === "edit" && (
-                    <span className="opacity-40 italic">
-                      ({t("leave_blank_keep")})
-                    </span>
-                  )}
+                  Email
                 </label>
                 <input
-                  required={modalMode === "create"}
-                  type="password"
-                  value={formData.password}
+                  type="email"
+                  value={formData.email}
                   onChange={(e) =>
-                    setFormData({ ...formData, password: e.target.value })
+                    setFormData({ ...formData, email: e.target.value })
                   }
                   className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-[2rem] outline-none focus:ring-4 focus:ring-slate-100 transition-all font-bold text-slate-900"
                 />
               </div>
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-900 uppercase tracking-widest ml-1">
-                  {t("assigned_clearance")}
-                </label>
-                <select
-                  value={formData.role}
-                  onChange={(e) =>
-                    setFormData({ ...formData, role: e.target.value })
-                  }
-                  className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-[2rem] outline-none focus:ring-4 focus:ring-slate-100 transition-all font-black text-[10px] uppercase tracking-widest appearance-none cursor-pointer"
-                >
-                  <option value="STAFF">Staff (Voter View Only)</option>
-                  <option value="OBSERVER">Observer (Full Read)</option>
-                  <option value="DISTRICT_ADMIN">District Administrator</option>
-                  <option value="REGIONAL_ADMIN">Regional Administrator</option>
-                  <option value="ADMIN">System Architect</option>
-                </select>
+
+              {modalMode === "create" ? (
+                <>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-900 uppercase tracking-widest ml-1">
+                      {t("vulnerability_passkey")}
+                    </label>
+                    <input
+                      required
+                      type="password"
+                      value={formData.password}
+                      onChange={(e) =>
+                        setFormData({ ...formData, password: e.target.value })
+                      }
+                      className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-[2rem] outline-none focus:ring-4 focus:ring-slate-100 transition-all font-bold text-slate-900"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-900 uppercase tracking-widest ml-1">
+                      {t("assigned_clearance")}
+                    </label>
+                    <select
+                      value={formData.roleId}
+                      onChange={(e) =>
+                        setFormData({ ...formData, roleId: e.target.value })
+                      }
+                      className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-[2rem] outline-none focus:ring-4 focus:ring-slate-100 transition-all font-black text-[10px] uppercase tracking-widest appearance-none cursor-pointer"
+                    >
+                      {roles.map((role) => (
+                        <option key={role.id} value={role.id}>
+                          {role.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </>
+              ) : (
+                <div className="space-y-2 rounded-[2rem] border border-slate-100 bg-slate-50 px-6 py-5">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.25em]">
+                    Role
+                  </p>
+                  <p className="mt-2 font-bold text-slate-900">
+                    {roleById.get(formData.roleId)?.name ||
+                      editingUser?.role?.name ||
+                      "Unknown"}
+                  </p>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-900 uppercase tracking-widest ml-1">
+                    Assigned region ID
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.assignedRegionId}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        assignedRegionId: e.target.value,
+                      })
+                    }
+                    className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-[2rem] outline-none focus:ring-4 focus:ring-slate-100 transition-all font-bold text-slate-900"
+                    placeholder="Optional region UUID"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-900 uppercase tracking-widest ml-1">
+                    Assigned district ID
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.assignedDistrictId}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        assignedDistrictId: e.target.value,
+                      })
+                    }
+                    className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-[2rem] outline-none focus:ring-4 focus:ring-slate-100 transition-all font-bold text-slate-900"
+                    placeholder="Optional district UUID"
+                  />
+                </div>
               </div>
+
+              {modalMode === "edit" && (
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-900 uppercase tracking-widest ml-1">
+                    System status
+                  </label>
+                  <select
+                    value={formData.status}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        status: e.target.value as UserFormState["status"],
+                      })
+                    }
+                    className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-[2rem] outline-none focus:ring-4 focus:ring-slate-100 transition-all font-black text-[10px] uppercase tracking-widest appearance-none cursor-pointer"
+                  >
+                    <option value="ACTIVE">Active</option>
+                    <option value="SUSPENDED">Suspended</option>
+                    <option value="LOCKED">Locked</option>
+                  </select>
+                </div>
+              )}
+
               <div className="flex flex-col sm:flex-row gap-4 pt-6">
                 <button
                   type="button"
-                  onClick={() => setShowModal(false)}
+                  onClick={closeModal}
                   className="flex-1 py-6 rounded-[2rem] font-black text-[10px] uppercase tracking-widest text-slate-400 bg-slate-50 hover:bg-slate-100 transition-all border border-slate-100"
                 >
                   {t("terminate_op")}
@@ -360,7 +580,7 @@ export function UserManagementView({ setView, token, t, i18n, user }: any) {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="flex-[2] bg-slate-900 text-white py-6 rounded-[2rem] font-black text-[10px] uppercase tracking-[0.2em] shadow-2xl shadow-slate-200 hover:bg-slate-800 active:scale-95 transition-all"
+                  className="flex-[2] bg-slate-900 text-white py-6 rounded-[2rem] font-black text-[10px] uppercase tracking-[0.2em] shadow-2xl shadow-slate-200 hover:bg-slate-800 active:scale-95 transition-all disabled:opacity-50"
                 >
                   {submitting
                     ? t("registering_identity")

@@ -46,6 +46,44 @@ export const voterRepository = {
     return { data, total };
   },
 
+  findAllForExport: async (q: VoterQuery) => {
+    const where: any = {
+      deletedAt: null,
+      ...(q.regionId && { regionId: q.regionId }),
+      ...(q.districtId && { districtId: q.districtId }),
+      ...(q.pollingStationId && { pollingStationId: q.pollingStationId }),
+      ...(q.isVerified !== undefined && { isVerified: q.isVerified }),
+      ...(q.search && {
+        OR: [
+          { fullName: { contains: q.search } },
+          { voterId: { contains: q.search } },
+          { nationalId: { contains: q.search } },
+        ],
+      }),
+    };
+
+    const data = await prisma.voter.findMany({
+      where,
+      select: {
+        voterId: true,
+        fullName: true,
+        nationalId: true,
+        dateOfBirth: true,
+        gender: true,
+        phone: true,
+        email: true,
+        regionId: true,
+        districtId: true,
+        pollingStationId: true,
+        isVerified: true,
+        registrationDate: true,
+      },
+      orderBy: { registrationDate: "desc" },
+    });
+
+    return data;
+  },
+
   findById: (id: string) =>
     prisma.voter.findFirst({
       where: { id, deletedAt: null },

@@ -208,6 +208,92 @@ export const reportsService = {
 
     return lines.join("\n");
   },
+  async exportTurnoutCsv(query: ReportsQuery, requester?: JwtPayload) {
+    const overview = await reportsService.getOverview(query, requester);
+    const lines: string[] = [];
+    lines.push("Turnout Report Export");
+    lines.push(`Election ID,${overview.election.id}`);
+    lines.push(`Election Title,${overview.election.title}`);
+    lines.push(`Total Ballots,${overview.totalBallots}`);
+    lines.push(`Registered Voters,${overview.totalRegisteredVoters}`);
+    lines.push(`Turnout Percentage,${overview.turnoutPercentage}`);
+    lines.push("");
+    lines.push("Regional Turnout Breakdown");
+    lines.push("Region ID,Region Name,Total Ballots,Percentage");
+    for (const r of overview.regionalBreakdown) {
+      const pct =
+        overview.totalBallots > 0
+          ? (r.totalBallots / overview.totalBallots) * 100
+          : 0;
+      lines.push(
+        [
+          r.regionId,
+          sanitizeCsvValue(r.regionName),
+          String(r.totalBallots),
+          String(Math.round(pct * 100) / 100),
+        ].join(","),
+      );
+    }
+    return lines.join("\n");
+  },
+
+  async exportDemographicsCsv(query: ReportsQuery, requester?: JwtPayload) {
+    const scoped = applyUserScope<any>(query as any, requester);
+    // respect optional electionId for scope/filters but demographics are from voters table
+    const voters = await reportsRepository.findVotersForDemographics(scoped);
+
+    // Buckets: <18, 18-25, 26-40, 41-60, >60
+    const ageBuckets: { [k: string]: number } = {
+      "<18": 0,
+      "18-25": 0,
+      "26-40": 0,
+      "41-60": 0,
+      ">60": 0,
+    };
+    const genderCounts: { [k: string]: number } = {};
+
+    const now = new Date();
+    for (const v of voters) {
+      // gender
+      const g = v.gender ?? "UNKNOWN";
+      genderCounts[g] = (genderCounts[g] || 0) + 1;
+
+      // age
+      if (v.dateOfBirth) {
+        const dob = new Date(v.dateOfBirth as any);
+        let age = now.getFullYear() - dob.getFullYear();
+        const m = now.getMonth() - dob.getMonth();
+        if (m < 0 || (m === 0 && now.getDate() < dob.getDate())) age--;
+        if (age < 18) ageBuckets["<18"]++;
+        else if (age <= 25) ageBuckets["18-25"]++;
+        else if (age <= 40) ageBuckets["26-40"]++;
+        else if (age <= 60) ageBuckets["41-60"]++;
+        else ageBuckets[">60"]++;
+      } else {
+        // unknown age goes to UNKNOWN bucket
+        ageBuckets["<18"] += 0; // no-op; keep totals consistent
+      }
+    }
+
+    const lines: string[] = [];
+    lines.push("Demographics Report Export");
+    lines.push(`Scope,${scoped.regionId ?? "all"}`);
+    lines.push(`Total Voters,${voters.length}`);
+    lines.push("");
+    lines.push("Gender Breakdown");
+    lines.push("Gender,Count");
+    for (const [g, count] of Object.entries(genderCounts)) {
+      lines.push([sanitizeCsvValue(g), String(count)].join(","));
+    }
+    lines.push("");
+    lines.push("Age Buckets");
+    lines.push("Bucket,Count");
+    for (const k of ["<18", "18-25", "26-40", "41-60", ">60"]) {
+      lines.push([k, String(ageBuckets[k])].join(","));
+    }
+
+    return lines.join("\n");
+  },
 };
 
 function sanitizeCsvValue(value: string): string {

@@ -22,6 +22,13 @@ router.get(
   voterController.list,
 );
 router.get(
+  "/export",
+  requirePermission("MANAGE_VOTERS"),
+  scopeGuard,
+  validate(voterQuerySchema, "query"),
+  voterController.exportCsv,
+);
+router.get(
   "/:id",
   requirePermission("MANAGE_VOTERS"),
   scopeGuard,

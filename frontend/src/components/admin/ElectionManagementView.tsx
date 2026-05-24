@@ -3,14 +3,9 @@ import {
   ChevronLeft,
   Plus,
   Trash2,
-  Calendar,
   AlertCircle,
-  FileText,
   Boxes,
   Play,
-  RotateCcw,
-  CheckCircle2,
-  Lock,
 } from "lucide-react";
 import { motion } from "motion/react";
 import { fetchJson } from "../../services/api/client";
@@ -40,6 +35,10 @@ type Election = {
     | "CANCELLED";
   isNational: boolean;
   maxVotesPerVoter: number;
+  nominationStart?: string | null;
+  nominationEnd?: string | null;
+  campaignStart?: string | null;
+  campaignEnd?: string | null;
   votingStart?: string | null;
   votingEnd?: string | null;
 };
@@ -83,12 +82,118 @@ export function ElectionManagementView({ setView, token }: Props) {
     type: "PRESIDENTIAL" as Election["type"],
     isNational: true,
     maxVotesPerVoter: 1,
+    nominationStart: "",
+    nominationEnd: "",
+    campaignStart: "",
+    campaignEnd: "",
+    votingStart: "",
+    votingEnd: "",
   });
+
+  const toInputValue = (value?: string | null) =>
+    value ? new Date(value).toISOString().slice(0, 16) : "";
+
+  const toApiValue = (value: string) =>
+    value ? new Date(value).toISOString() : undefined;
+
+  const buildPayload = () => {
+    const payload: Record<string, unknown> = {
+      title: form.title.trim(),
+      type: form.type,
+      isNational: form.isNational,
+      maxVotesPerVoter: Number(form.maxVotesPerVoter),
+    };
+
+    if (form.description.trim()) {
+      payload.description = form.description.trim();
+    }
+
+    const nominationStart = toApiValue(form.nominationStart);
+    const nominationEnd = toApiValue(form.nominationEnd);
+    const campaignStart = toApiValue(form.campaignStart);
+    const campaignEnd = toApiValue(form.campaignEnd);
+    const votingStart = toApiValue(form.votingStart);
+    const votingEnd = toApiValue(form.votingEnd);
+
+    if (nominationStart) payload.nominationStart = nominationStart;
+    if (nominationEnd) payload.nominationEnd = nominationEnd;
+    if (campaignStart) payload.campaignStart = campaignStart;
+    if (campaignEnd) payload.campaignEnd = campaignEnd;
+    if (votingStart) payload.votingStart = votingStart;
+    if (votingEnd) payload.votingEnd = votingEnd;
+
+    return payload;
+  };
+
+  const statusActions: Partial<
+    Record<
+      Election["status"],
+      { label: string; nextStatus: Election["status"]; className: string }
+    >
+  > = {
+    DRAFT: {
+      label: "Schedule",
+      nextStatus: "SCHEDULED",
+      className:
+        "bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white border-blue-100",
+    },
+    SCHEDULED: {
+      label: "Open Nomination",
+      nextStatus: "NOMINATION_OPEN",
+      className:
+        "bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white border-blue-100",
+    },
+    NOMINATION_OPEN: {
+      label: "Close Nomination",
+      nextStatus: "NOMINATION_CLOSED",
+      className:
+        "bg-orange-50 text-orange-600 hover:bg-orange-600 hover:text-white border-orange-100",
+    },
+    NOMINATION_CLOSED: {
+      label: "Start Campaign",
+      nextStatus: "CAMPAIGN",
+      className:
+        "bg-purple-50 text-purple-600 hover:bg-purple-600 hover:text-white border-purple-100",
+    },
+    CAMPAIGN: {
+      label: "Open Voting",
+      nextStatus: "VOTING_OPEN",
+      className:
+        "bg-orange-50 text-orange-600 hover:bg-orange-600 hover:text-white border-orange-100",
+    },
+    VOTING_OPEN: {
+      label: "Close Voting",
+      nextStatus: "VOTING_CLOSED",
+      className:
+        "bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white border-rose-100",
+    },
+    VOTING_CLOSED: {
+      label: "Start Counting",
+      nextStatus: "COUNTING",
+      className:
+        "bg-slate-50 text-slate-600 hover:bg-slate-900 hover:text-white border-slate-100",
+    },
+    COUNTING: {
+      label: "Declare Results",
+      nextStatus: "RESULTS_DECLARED",
+      className:
+        "bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white border-emerald-100",
+    },
+    DISPUTED: {
+      label: "Resume Counting",
+      nextStatus: "COUNTING",
+      className:
+        "bg-amber-50 text-amber-600 hover:bg-amber-600 hover:text-white border-amber-100",
+    },
+  };
 
   const loadElections = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await apiRequest<{ data: Election[] }>("/elections", token);
+      const res = await apiRequest<{ data: Election[] }>(
+        "/elections?page=1&limit=1000",
+        token,
+      );
       setElections(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
       if (isUnauthorized(err)) {
@@ -114,12 +219,12 @@ export function ElectionManagementView({ setView, token }: Props) {
       if (modalMode === "create") {
         await apiRequest("/elections", token, {
           method: "POST",
-          body: JSON.stringify(form),
+          body: JSON.stringify(buildPayload()),
         });
       } else if (editingId) {
         await apiRequest(`/elections/${editingId}`, token, {
           method: "PATCH",
-          body: JSON.stringify(form),
+          body: JSON.stringify(buildPayload()),
         });
       }
       setShowModal(false);
@@ -188,6 +293,12 @@ export function ElectionManagementView({ setView, token }: Props) {
       type: "PRESIDENTIAL",
       isNational: true,
       maxVotesPerVoter: 1,
+      nominationStart: "",
+      nominationEnd: "",
+      campaignStart: "",
+      campaignEnd: "",
+      votingStart: "",
+      votingEnd: "",
     });
     setShowModal(true);
   };
@@ -201,6 +312,12 @@ export function ElectionManagementView({ setView, token }: Props) {
       type: el.type,
       isNational: el.isNational,
       maxVotesPerVoter: el.maxVotesPerVoter,
+      nominationStart: toInputValue(el.nominationStart),
+      nominationEnd: toInputValue(el.nominationEnd),
+      campaignStart: toInputValue(el.campaignStart),
+      campaignEnd: toInputValue(el.campaignEnd),
+      votingStart: toInputValue(el.votingStart),
+      votingEnd: toInputValue(el.votingEnd),
     });
     setShowModal(true);
   };
@@ -309,34 +426,20 @@ export function ElectionManagementView({ setView, token }: Props) {
                 {/* Operations & Phase Transitions */}
                 <div className="flex flex-wrap items-center gap-3">
                   {/* Transition phase buttons */}
-                  {el.status === "DRAFT" && (
+                  {statusActions[el.status] && (
                     <button
                       onClick={() =>
-                        handleStatusTransition(el.id, "NOMINATION_OPEN")
+                        handleStatusTransition(
+                          el.id,
+                          statusActions[el.status]!.nextStatus,
+                        )
                       }
-                      className="px-5 py-2.5 bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white rounded-xl text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5"
+                      className={cn(
+                        "px-5 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5 border",
+                        statusActions[el.status]!.className,
+                      )}
                     >
-                      <Play size={12} /> Open Nomination
-                    </button>
-                  )}
-                  {el.status === "NOMINATION_OPEN" && (
-                    <button
-                      onClick={() =>
-                        handleStatusTransition(el.id, "VOTING_OPEN")
-                      }
-                      className="px-5 py-2.5 bg-orange-50 text-orange-600 hover:bg-orange-600 hover:text-white rounded-xl text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5"
-                    >
-                      <Play size={12} /> Open Voting
-                    </button>
-                  )}
-                  {el.status === "VOTING_OPEN" && (
-                    <button
-                      onClick={() =>
-                        handleStatusTransition(el.id, "RESULTS_DECLARED")
-                      }
-                      className="px-5 py-2.5 bg-green-50 text-green-600 hover:bg-green-600 hover:text-white rounded-xl text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5"
-                    >
-                      <CheckCircle2 size={12} /> Close & Declare
+                      <Play size={12} /> {statusActions[el.status]!.label}
                     </button>
                   )}
 
@@ -449,6 +552,34 @@ export function ElectionManagementView({ setView, token }: Props) {
                     className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-bold text-slate-900 focus:outline-none"
                   />
                 </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {[
+                  ["nominationStart", "Nomination Start"],
+                  ["nominationEnd", "Nomination End"],
+                  ["campaignStart", "Campaign Start"],
+                  ["campaignEnd", "Campaign End"],
+                  ["votingStart", "Voting Start"],
+                  ["votingEnd", "Voting End"],
+                ].map(([key, label]) => (
+                  <div key={key} className="space-y-1">
+                    <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 px-2 block">
+                      {label}
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={form[key as keyof typeof form] as string}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          [key]: e.target.value,
+                        })
+                      }
+                      className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-bold text-slate-900 focus:outline-none"
+                    />
+                  </div>
+                ))}
               </div>
 
               <div className="flex items-center gap-3 p-3">

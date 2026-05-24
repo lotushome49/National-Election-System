@@ -26,7 +26,9 @@ export const reportsRepository = {
         electionId,
         ...(scope.regionId && { regionId: scope.regionId }),
         ...(scope.districtId && { districtId: scope.districtId }),
-        ...(scope.pollingStationId && { pollingStationId: scope.pollingStationId }),
+        ...(scope.pollingStationId && {
+          pollingStationId: scope.pollingStationId,
+        }),
       },
     }),
 
@@ -36,7 +38,9 @@ export const reportsRepository = {
         deletedAt: null,
         ...(scope.regionId && { regionId: scope.regionId }),
         ...(scope.districtId && { districtId: scope.districtId }),
-        ...(scope.pollingStationId && { pollingStationId: scope.pollingStationId }),
+        ...(scope.pollingStationId && {
+          pollingStationId: scope.pollingStationId,
+        }),
       },
     }),
 
@@ -47,7 +51,9 @@ export const reportsRepository = {
         electionId,
         ...(scope.regionId && { regionId: scope.regionId }),
         ...(scope.districtId && { districtId: scope.districtId }),
-        ...(scope.pollingStationId && { pollingStationId: scope.pollingStationId }),
+        ...(scope.pollingStationId && {
+          pollingStationId: scope.pollingStationId,
+        }),
       },
       _count: { id: true },
     }),
@@ -70,7 +76,9 @@ export const reportsRepository = {
         electionId,
         ...(scope.regionId && { regionId: scope.regionId }),
         ...(scope.districtId && { districtId: scope.districtId }),
-        ...(scope.pollingStationId && { pollingStationId: scope.pollingStationId }),
+        ...(scope.pollingStationId && {
+          pollingStationId: scope.pollingStationId,
+        }),
       },
       _count: { id: true },
     }),
@@ -79,5 +87,19 @@ export const reportsRepository = {
     prisma.region.findMany({
       where: { id: { in: regionIds }, deletedAt: null },
       select: { id: true, name: true },
+    }),
+
+  // Fetch voter demographics within an optional scope
+  findVotersForDemographics: (scope: ScopeFilter) =>
+    prisma.voter.findMany({
+      where: {
+        deletedAt: null,
+        ...(scope.regionId && { regionId: scope.regionId }),
+        ...(scope.districtId && { districtId: scope.districtId }),
+        ...(scope.pollingStationId && {
+          pollingStationId: scope.pollingStationId,
+        }),
+      },
+      select: { id: true, dateOfBirth: true, gender: true },
     }),
 };

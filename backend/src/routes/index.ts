@@ -16,6 +16,7 @@ import regionRoutes from "../modules/region/region.routes";
 import districtRoutes from "../modules/district/district.routes";
 import pollingStationRoutes from "../modules/pollingStation/pollingStation.routes";
 import reportsRoutes from "../modules/reports/reports.routes";
+import roleRoutes from "../modules/role/role.routes";
 
 const router = Router();
 
@@ -45,5 +46,6 @@ router.use("/regions", regionRoutes);
 router.use("/districts", districtRoutes);
 router.use("/polling-stations", pollingStationRoutes);
 router.use("/reports", reportsRoutes);
+router.use("/roles", roleRoutes);
 
 export default router;

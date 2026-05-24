@@ -18,13 +18,13 @@ router.use(authenticate);
 // Observers and admins can list/view reports
 router.get(
   "/",
-  requirePermission("MANAGE_OBSERVERS"),
+  requireRole(ROLES.OBSERVER, ROLES.ADMIN, ROLES.SUPER_ADMIN),
   validate(reportQuerySchema, "query"),
   observerController.list,
 );
 router.get(
   "/:id",
-  requirePermission("MANAGE_OBSERVERS"),
+  requireRole(ROLES.OBSERVER, ROLES.ADMIN, ROLES.SUPER_ADMIN),
   observerController.getById,
 );
 
