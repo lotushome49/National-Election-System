@@ -21,7 +21,8 @@ router.get(
 );
 router.post(
   "/upload",
-  requireRole(ROLES.OBSERVER, ROLES.ADMIN, ROLES.SUPER_ADMIN),
+  // Only observers may upload evidence
+  requireRole(ROLES.OBSERVER),
   evidenceUpload.array("files", 10),
   observerEvidenceController.upload,
 );

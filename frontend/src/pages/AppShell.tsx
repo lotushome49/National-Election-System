@@ -184,6 +184,56 @@ export default function AppShell() {
         ? "login"
         : "dashboard";
 
+  const publicViews = new Set(["login", "password-reset", "help", "history"]);
+
+  const canAccessView = (nextView: string) => {
+    switch (nextView) {
+      case "login":
+      case "password-reset":
+      case "help":
+      case "history":
+        return true;
+      case "voters":
+        return checkPerm(role, "MANAGE_VOTERS");
+      case "users":
+        return checkPerm(role, "MANAGE_USERS");
+      case "elections":
+        return checkPerm(role, "MANAGE_ELECTIONS");
+      case "candidates":
+        return checkPerm(role, "MANAGE_CANDIDATES");
+      case "audit-logs":
+        return checkPerm(role, "VIEW_AUDIT_LOGS");
+      case "results-dashboard":
+        return checkPerm(role, "VIEW_RESULTS");
+      case "geography":
+        return (
+          checkPerm(role, "MANAGE_REGIONS") ||
+          checkPerm(role, "MANAGE_DISTRICTS") ||
+          checkPerm(role, "MANAGE_POLLING_STATIONS")
+        );
+      case "security":
+        return isMfaEligibleRole(role);
+      case "sessions":
+        return Boolean(token);
+      case "observer-evidence":
+        return canManageObserverEvidence;
+      case "voter-hub":
+        return role === "VOTER";
+      case "registration":
+        return Boolean(token);
+      case "voting-booth":
+        return Boolean(token);
+      case "dashboard":
+        return Boolean(token) && role !== "NONE";
+      default:
+        return false;
+    }
+  };
+
+  const effectiveView = !token && !publicViews.has(view) ? "login" : view;
+  const viewIsBlocked =
+    token && effectiveView !== "login" && !canAccessView(effectiveView);
+
   type SidebarItem = {
     key: string;
     label: string;
@@ -329,9 +379,62 @@ export default function AppShell() {
     document.documentElement.lang = i18n.language;
   }, [i18n.language]);
 
+  // Restore persisted auth state so deep-links and sidebar navigation
+  // behave seamlessly across reloads for admins.
+  useEffect(() => {
+    try {
+      const savedToken = localStorage.getItem("nehs_token");
+      const savedRole = localStorage.getItem("nehs_role") as Role | null;
+      const savedUser = localStorage.getItem("nehs_user");
+      const savedSession = localStorage.getItem("nehs_sessionId");
+
+      if (savedToken) {
+        setToken(savedToken);
+        if (savedRole) setRole(savedRole as Role);
+        if (savedUser) setUser(JSON.parse(savedUser));
+        if (savedSession) setSessionId(savedSession);
+      }
+    } catch (e) {
+      // ignore corrupted localStorage
+    }
+  }, []);
+
+  // Persist auth state when it changes so navigation remains consistent.
+  useEffect(() => {
+    if (token) localStorage.setItem("nehs_token", token);
+    else localStorage.removeItem("nehs_token");
+
+    if (role && role !== "NONE") localStorage.setItem("nehs_role", role);
+    else localStorage.removeItem("nehs_role");
+
+    if (user) localStorage.setItem("nehs_user", JSON.stringify(user));
+    else localStorage.removeItem("nehs_user");
+
+    if (sessionId) localStorage.setItem("nehs_sessionId", sessionId);
+    else localStorage.removeItem("nehs_sessionId");
+  }, [token, role, user, sessionId]);
+
   useEffect(() => {
     const nextView = viewFromPath(location.pathname);
-    setViewState(nextView);
+    // Defensive: only update state when the derived view actually changes.
+    // Add debug logs to help reproduce back-button navigation problems.
+    if (process.env.NODE_ENV === "development") {
+      // eslint-disable-next-line no-console
+      console.debug(
+        "AppShell: location.pathname ->",
+        location.pathname,
+        "derivedView->",
+        nextView,
+        "currentView->",
+        view,
+        "token->",
+        Boolean(token),
+      );
+    }
+
+    if (nextView !== view) {
+      setViewState(nextView);
+    }
 
     if (location.pathname === "/") {
       navigate("/login", { replace: true });
@@ -339,6 +442,16 @@ export default function AppShell() {
   }, [location.pathname, navigate]);
 
   const setView = (nextView: string) => {
+    if (process.env.NODE_ENV === "development") {
+      // eslint-disable-next-line no-console
+      console.debug(
+        "AppShell.setView ->",
+        nextView,
+        "path->",
+        pathFromView(nextView),
+      );
+    }
+
     setViewState(nextView);
     navigate(pathFromView(nextView));
     setMobileMenuOpen(false);
@@ -366,6 +479,15 @@ export default function AppShell() {
     setUser(null);
     setToken(null);
     setSessionId(null);
+    // Clear persisted state too so logout is thorough
+    try {
+      localStorage.removeItem("nehs_token");
+      localStorage.removeItem("nehs_role");
+      localStorage.removeItem("nehs_user");
+      localStorage.removeItem("nehs_sessionId");
+    } catch {
+      // ignore
+    }
     setView("login");
   };
 
@@ -526,8 +648,28 @@ export default function AppShell() {
             </div>
           )}
           <AnimatePresence mode="wait">
+            {viewIsBlocked ? (
+              <div className="max-w-3xl mx-auto py-24 text-center">
+                <ShieldCheck
+                  size={48}
+                  className="mx-auto text-slate-200 mb-4"
+                />
+                <h3 className="text-2xl font-bold text-slate-800 uppercase tracking-tight">
+                  {t("access_denied")}
+                </h3>
+                <p className="text-slate-500 text-sm mt-2">
+                  You do not have access to this page for your current role.
+                </p>
+                <button
+                  onClick={() => setView(getHomeViewForRole(role))}
+                  className="mt-8 bg-election-dark text-white px-8 py-3 rounded-xl font-bold"
+                >
+                  {t("return_home")}
+                </button>
+              </div>
+            ) : null}
             {/* View Switching (keep existing render logic) */}
-            {view === "login" && (
+            {effectiveView === "login" && (
               <LoginView
                 key="login"
                 setRole={setRole}
@@ -540,10 +682,10 @@ export default function AppShell() {
                 i18n={i18n}
               />
             )}
-            {view === "password-reset" && (
+            {effectiveView === "password-reset" && (
               <PasswordResetView setView={setView} />
             )}
-            {view === "help" && (
+            {effectiveView === "help" && (
               <HelpView
                 setView={setView}
                 role={role}
@@ -552,7 +694,7 @@ export default function AppShell() {
                 i18n={i18n}
               />
             )}
-            {view === "history" && (
+            {effectiveView === "history" && (
               <HistoryView
                 setView={setView}
                 role={role}
@@ -561,7 +703,7 @@ export default function AppShell() {
                 i18n={i18n}
               />
             )}
-            {view === "voters" && checkPerm(role, "MANAGE_VOTERS") && (
+            {effectiveView === "voters" && checkPerm(role, "MANAGE_VOTERS") && (
               <VoterRegistryView
                 setView={setView}
                 token={token}
@@ -570,7 +712,7 @@ export default function AppShell() {
                 user={user}
               />
             )}
-            {view === "users" && checkPerm(role, "MANAGE_USERS") && (
+            {effectiveView === "users" && checkPerm(role, "MANAGE_USERS") && (
               <UserManagementView
                 setView={setView}
                 token={token}
@@ -579,29 +721,32 @@ export default function AppShell() {
                 user={user}
               />
             )}
-            {view === "elections" && checkPerm(role, "MANAGE_ELECTIONS") && (
-              <ElectionManagementView
-                setView={setView}
-                token={token}
-                user={user}
-              />
-            )}
-            {view === "candidates" && checkPerm(role, "MANAGE_CANDIDATES") && (
-              <CandidateManagementView
-                setView={setView}
-                token={token}
-                user={user}
-              />
-            )}
-            {view === "audit-logs" && checkPerm(role, "VIEW_AUDIT_LOGS") && (
-              <AuditLogsView
-                setView={setView}
-                token={token}
-                t={t}
-                i18n={i18n}
-              />
-            )}
-            {view === "results-dashboard" &&
+            {effectiveView === "elections" &&
+              checkPerm(role, "MANAGE_ELECTIONS") && (
+                <ElectionManagementView
+                  setView={setView}
+                  token={token}
+                  user={user}
+                />
+              )}
+            {effectiveView === "candidates" &&
+              checkPerm(role, "MANAGE_CANDIDATES") && (
+                <CandidateManagementView
+                  setView={setView}
+                  token={token}
+                  user={user}
+                />
+              )}
+            {effectiveView === "audit-logs" &&
+              checkPerm(role, "VIEW_AUDIT_LOGS") && (
+                <AuditLogsView
+                  setView={setView}
+                  token={token}
+                  t={t}
+                  i18n={i18n}
+                />
+              )}
+            {effectiveView === "results-dashboard" &&
               checkPerm(role, "VIEW_RESULTS") && (
                 <ResultsDashboardView
                   setView={setView}
@@ -610,7 +755,7 @@ export default function AppShell() {
                   i18n={i18n}
                 />
               )}
-            {view === "geography" &&
+            {effectiveView === "geography" &&
               (checkPerm(role, "MANAGE_REGIONS") ||
                 checkPerm(role, "MANAGE_DISTRICTS") ||
                 checkPerm(role, "MANAGE_POLLING_STATIONS")) && (
@@ -620,10 +765,10 @@ export default function AppShell() {
                   user={user}
                 />
               )}
-            {view === "security" && isMfaEligibleRole(role) && (
+            {effectiveView === "security" && isMfaEligibleRole(role) && (
               <MfaSecurityView setView={setView} token={token} />
             )}
-            {view === "sessions" && token && (
+            {effectiveView === "sessions" && token && (
               <SessionManagementView
                 token={token}
                 sessionId={sessionId}
@@ -632,14 +777,15 @@ export default function AppShell() {
                 onSessionEnded={clearAuthState}
               />
             )}
-            {view === "observer-evidence" && canManageObserverEvidence && (
-              <ObserverEvidenceView
-                token={token}
-                role={role}
-                setView={setView}
-              />
-            )}
-            {view === "voter-hub" && role === "VOTER" && (
+            {effectiveView === "observer-evidence" &&
+              canManageObserverEvidence && (
+                <ObserverEvidenceView
+                  token={token}
+                  role={role}
+                  setView={setView}
+                />
+              )}
+            {effectiveView === "voter-hub" && role === "VOTER" && (
               <VoterHub
                 key="voter"
                 user={user}
@@ -651,7 +797,7 @@ export default function AppShell() {
                 i18n={i18n}
               />
             )}
-            {view === "registration" &&
+            {effectiveView === "registration" &&
               (electionPhase === "REGISTRATION" ? (
                 <RegistrationView
                   key="reg"
@@ -687,7 +833,7 @@ export default function AppShell() {
                   </button>
                 </div>
               ))}
-            {view === "voting-booth" &&
+            {effectiveView === "voting-booth" &&
               (role === "VOTER" || checkPerm(role, "MANAGE_ELECTIONS")) &&
               (electionPhase === "VOTING" || role === "ADMIN" ? (
                 <VotingBoothView
@@ -716,7 +862,7 @@ export default function AppShell() {
                   </button>
                 </div>
               ))}
-            {view === "dashboard" && token && role !== "VOTER" && (
+            {effectiveView === "dashboard" && token && role !== "VOTER" && (
               <DashboardView
                 key="dash"
                 results={results}
@@ -732,7 +878,7 @@ export default function AppShell() {
                 i18n={i18n}
               />
             )}
-            {view === "dashboard" && role === "VOTER" && (
+            {effectiveView === "dashboard" && role === "VOTER" && (
               <VoterHub
                 key="voter-dashboard"
                 user={user}
@@ -747,6 +893,25 @@ export default function AppShell() {
           </AnimatePresence>
         </main>
       </div>
+      {process.env.NODE_ENV === "development" && (
+        <div className="fixed bottom-4 right-4 bg-white border border-slate-200 p-3 rounded-lg shadow-lg text-xs z-50">
+          <div className="font-mono text-[11px] text-slate-700">
+            path: {location.pathname}
+          </div>
+          <div className="font-mono text-[11px] text-slate-600">
+            view: {view}
+          </div>
+          <div className="font-mono text-[11px] text-slate-600">
+            derived: {viewFromPath(location.pathname)}
+          </div>
+          <div className="font-mono text-[11px] text-slate-600">
+            effective: {effectiveView}
+          </div>
+          <div className="font-mono text-[11px] text-slate-600">
+            token: {token ? "yes" : "no"}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

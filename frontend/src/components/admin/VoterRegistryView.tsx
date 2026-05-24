@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { cn } from "../../utils/cn";
 import { getScopeAccessModel } from "../../utils/scope";
+import { unwrapApiData } from "../../utils/mfa";
 
 export function VoterRegistryView({ setView, token, t, i18n, user }: any) {
   const lang = i18n.language as "en" | "am";
@@ -32,11 +33,14 @@ export function VoterRegistryView({ setView, token, t, i18n, user }: any) {
   useEffect(() => {
     const fetchVoters = async () => {
       try {
-        const response = await fetch("/api/admin/voters", {
+        const response = await fetch("/api/v1/voters", {
           headers: { Authorization: `Bearer ${token}` },
         });
+        if (!response.ok) {
+          throw new Error(`Failed to fetch voters: ${response.status}`);
+        }
         const data = await response.json();
-        setVoters(data);
+        setVoters(unwrapApiData(data));
       } catch (err) {
         console.error(err);
       } finally {
@@ -65,7 +69,7 @@ export function VoterRegistryView({ setView, token, t, i18n, user }: any) {
   const handleVerifyVoter = async (voterId: string, verified: boolean) => {
     setUpdatingVerificationId(voterId);
     try {
-      const response = await fetch(`/api/admin/voters/${voterId}/verify`, {
+      const response = await fetch(`/api/v1/voters/${voterId}/verify`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -73,7 +77,7 @@ export function VoterRegistryView({ setView, token, t, i18n, user }: any) {
         },
         body: JSON.stringify({ verified }),
       });
-      const resData = await response.json();
+      const resData = await response.json().catch(() => ({}));
       if (response.ok) {
         setVoters((prev) =>
           prev.map((v) =>
@@ -86,7 +90,11 @@ export function VoterRegistryView({ setView, token, t, i18n, user }: any) {
           );
         }
       } else {
-        alert(resData.error || "Failed to update voter verification status");
+        alert(
+          resData?.message ||
+            resData?.error ||
+            "Failed to update voter verification status",
+        );
       }
     } catch (err) {
       console.error(err);

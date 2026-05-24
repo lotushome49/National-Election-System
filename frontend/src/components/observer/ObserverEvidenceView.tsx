@@ -290,180 +290,201 @@ export function ObserverEvidenceView({ token, role, setView }: Props) {
         )}
 
         <div className="grid grid-cols-1 xl:grid-cols-[0.85fr_1.15fr] gap-8">
-          <section className="rounded-[2.5rem] border border-slate-100 bg-slate-50/70 p-8 space-y-6">
-            <div className="flex items-center gap-3">
-              <UploadCloud size={20} className="text-slate-900" />
-              <h3 className="text-xl font-display font-black tracking-tighter uppercase text-slate-900">
-                Upload files
-              </h3>
-            </div>
+          {role === "OBSERVER" ? (
+            <section className="rounded-[2.5rem] border border-slate-100 bg-slate-50/70 p-8 space-y-6">
+              <div className="flex items-center gap-3">
+                <UploadCloud size={20} className="text-slate-900" />
+                <h3 className="text-xl font-display font-black tracking-tighter uppercase text-slate-900">
+                  Upload files
+                </h3>
+              </div>
 
-            <label className="block border-2 border-dashed border-slate-200 rounded-[2rem] p-8 text-center cursor-pointer hover:border-slate-900 hover:bg-white transition-all">
-              <input
-                type="file"
-                multiple
-                accept="image/*,video/*,application/pdf"
-                className="hidden"
-                onChange={(event) =>
-                  setFiles(Array.from(event.target.files ?? []))
-                }
-              />
-              <Plus size={28} className="mx-auto text-slate-300 mb-3" />
-              <p className="text-sm font-semibold text-slate-600">
-                Drop images, videos, or PDFs here
-              </p>
-              <p className="text-[10px] uppercase tracking-[0.25em] text-slate-400 mt-2">
-                Max 25MB per file, 10 files per upload
-              </p>
-            </label>
-
-            {files.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-400">
-                  Queued files
+              <label className="block border-2 border-dashed border-slate-200 rounded-[2rem] p-8 text-center cursor-pointer hover:border-slate-900 hover:bg-white transition-all">
+                <input
+                  type="file"
+                  multiple
+                  accept="image/*,video/*,application/pdf"
+                  className="hidden"
+                  onChange={(event) =>
+                    setFiles(Array.from(event.target.files ?? []))
+                  }
+                />
+                <Plus size={28} className="mx-auto text-slate-300 mb-3" />
+                <p className="text-sm font-semibold text-slate-600">
+                  Drop images, videos, or PDFs here
                 </p>
-                {files.map((file) => (
-                  <div
-                    key={`${file.name}-${file.size}`}
-                    className="flex items-center justify-between gap-3 bg-white border border-slate-100 rounded-2xl px-4 py-3"
-                  >
-                    <div>
-                      <p className="text-sm font-semibold text-slate-800 truncate">
-                        {file.name}
-                      </p>
-                      <p className="text-[10px] uppercase tracking-[0.25em] text-slate-400">
-                        {formatFileSize(file.size)}
-                      </p>
+                <p className="text-[10px] uppercase tracking-[0.25em] text-slate-400 mt-2">
+                  Max 25MB per file, 10 files per upload
+                </p>
+              </label>
+
+              {files.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-400">
+                    Queued files
+                  </p>
+                  {files.map((file) => (
+                    <div
+                      key={`${file.name}-${file.size}`}
+                      className="flex items-center justify-between gap-3 bg-white border border-slate-100 rounded-2xl px-4 py-3"
+                    >
+                      <div>
+                        <p className="text-sm font-semibold text-slate-800 truncate">
+                          {file.name}
+                        </p>
+                        <p className="text-[10px] uppercase tracking-[0.25em] text-slate-400">
+                          {formatFileSize(file.size)}
+                        </p>
+                      </div>
+                      <span className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-400">
+                        Ready
+                      </span>
                     </div>
-                    <span className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-400">
-                      Ready
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <button
-              onClick={uploadFiles}
-              disabled={uploading || files.length === 0}
-              className="w-full bg-slate-900 text-white p-5 rounded-[2rem] font-bold flex items-center justify-center gap-3 hover:bg-slate-800 transition-all shadow-2xl shadow-slate-200 disabled:opacity-50"
-            >
-              {uploading ? (
-                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              ) : (
-                <UploadCloud size={18} />
+                  ))}
+                </div>
               )}
-              Upload evidence
-            </button>
 
-            <div className="rounded-[2rem] bg-slate-900 text-white p-6 space-y-3">
-              <h4 className="text-[10px] font-black uppercase tracking-[0.3em] opacity-50">
-                Report linkage
-              </h4>
-              <p className="text-sm leading-relaxed opacity-80">
-                Submit a report using the selected evidence items. Each selected
-                file is linked to the created observer report.
-              </p>
-            </div>
+              <button
+                onClick={uploadFiles}
+                disabled={uploading || files.length === 0}
+                className="w-full bg-slate-900 text-white p-5 rounded-[2rem] font-bold flex items-center justify-center gap-3 hover:bg-slate-800 transition-all shadow-2xl shadow-slate-200 disabled:opacity-50"
+              >
+                {uploading ? (
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <UploadCloud size={18} />
+                )}
+                Upload evidence
+              </button>
 
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-300 uppercase tracking-[0.2em] ml-1">
-                  Election ID
-                </label>
-                <input
-                  value={report.electionId}
-                  onChange={(event) =>
-                    setReport({ ...report, electionId: event.target.value })
-                  }
-                  className="w-full p-4 bg-white border border-slate-100 rounded-2xl outline-none focus:ring-4 focus:ring-slate-900/5 focus:border-slate-900"
-                  placeholder="Paste election UUID"
-                />
+              <div className="rounded-[2rem] bg-slate-900 text-white p-6 space-y-3">
+                <h4 className="text-[10px] font-black uppercase tracking-[0.3em] opacity-50">
+                  Report linkage
+                </h4>
+                <p className="text-sm leading-relaxed opacity-80">
+                  Submit a report using the selected evidence items. Each
+                  selected file is linked to the created observer report.
+                </p>
               </div>
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-300 uppercase tracking-[0.2em] ml-1">
-                  Polling station ID
-                </label>
-                <input
-                  value={report.pollingStationId}
-                  onChange={(event) =>
-                    setReport({
-                      ...report,
-                      pollingStationId: event.target.value,
-                    })
-                  }
-                  className="w-full p-4 bg-white border border-slate-100 rounded-2xl outline-none focus:ring-4 focus:ring-slate-900/5 focus:border-slate-900"
-                  placeholder="Optional station UUID"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-300 uppercase tracking-[0.2em] ml-1">
-                  Report type
-                </label>
-                <select
-                  value={report.type}
-                  onChange={(event) =>
-                    setReport({
-                      ...report,
-                      type: event.target.value as ReportDraft["type"],
-                    })
-                  }
-                  className="w-full p-4 bg-white border border-slate-100 rounded-2xl outline-none focus:ring-4 focus:ring-slate-900/5 focus:border-slate-900"
-                >
-                  <option value="INCIDENT">Incident</option>
-                  <option value="IRREGULARITY">Irregularity</option>
-                  <option value="COMPLAINT">Complaint</option>
-                  <option value="GENERAL_OBSERVATION">
-                    General observation
-                  </option>
-                </select>
-              </div>
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-300 uppercase tracking-[0.2em] ml-1">
-                  Title
-                </label>
-                <input
-                  value={report.title}
-                  onChange={(event) =>
-                    setReport({ ...report, title: event.target.value })
-                  }
-                  className="w-full p-4 bg-white border border-slate-100 rounded-2xl outline-none focus:ring-4 focus:ring-slate-900/5 focus:border-slate-900"
-                  placeholder="Short summary"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-300 uppercase tracking-[0.2em] ml-1">
-                  Description
-                </label>
-                <textarea
-                  value={report.description}
-                  onChange={(event) =>
-                    setReport({ ...report, description: event.target.value })
-                  }
-                  className="w-full min-h-40 p-4 bg-white border border-slate-100 rounded-2xl outline-none focus:ring-4 focus:ring-slate-900/5 focus:border-slate-900 resize-y"
-                  placeholder="Describe what happened"
-                />
-              </div>
-            </div>
 
-            <button
-              onClick={submitReport}
-              disabled={
-                submitting ||
-                !report.electionId ||
-                !report.title ||
-                !report.description
-              }
-              className="w-full bg-emerald-600 text-white p-5 rounded-[2rem] font-bold flex items-center justify-center gap-3 hover:bg-emerald-500 transition-all shadow-2xl shadow-emerald-100 disabled:opacity-50"
-            >
-              {submitting ? (
-                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              ) : (
-                <CheckCircle2 size={18} />
-              )}
-              Submit report with evidence
-            </button>
-          </section>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-300 uppercase tracking-[0.2em] ml-1">
+                    Election ID
+                  </label>
+                  <input
+                    value={report.electionId}
+                    onChange={(event) =>
+                      setReport({ ...report, electionId: event.target.value })
+                    }
+                    className="w-full p-4 bg-white border border-slate-100 rounded-2xl outline-none focus:ring-4 focus:ring-slate-900/5 focus:border-slate-900"
+                    placeholder="Paste election UUID"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-300 uppercase tracking-[0.2em] ml-1">
+                    Polling station ID
+                  </label>
+                  <input
+                    value={report.pollingStationId}
+                    onChange={(event) =>
+                      setReport({
+                        ...report,
+                        pollingStationId: event.target.value,
+                      })
+                    }
+                    className="w-full p-4 bg-white border border-slate-100 rounded-2xl outline-none focus:ring-4 focus:ring-slate-900/5 focus:border-slate-900"
+                    placeholder="Optional station UUID"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-300 uppercase tracking-[0.2em] ml-1">
+                    Report type
+                  </label>
+                  <select
+                    value={report.type}
+                    onChange={(event) =>
+                      setReport({
+                        ...report,
+                        type: event.target.value as ReportDraft["type"],
+                      })
+                    }
+                    className="w-full p-4 bg-white border border-slate-100 rounded-2xl outline-none focus:ring-4 focus:ring-slate-900/5 focus:border-slate-900"
+                  >
+                    <option value="INCIDENT">Incident</option>
+                    <option value="IRREGULARITY">Irregularity</option>
+                    <option value="COMPLAINT">Complaint</option>
+                    <option value="GENERAL_OBSERVATION">
+                      General observation
+                    </option>
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-300 uppercase tracking-[0.2em] ml-1">
+                    Title
+                  </label>
+                  <input
+                    value={report.title}
+                    onChange={(event) =>
+                      setReport({ ...report, title: event.target.value })
+                    }
+                    className="w-full p-4 bg-white border border-slate-100 rounded-2xl outline-none focus:ring-4 focus:ring-slate-900/5 focus:border-slate-900"
+                    placeholder="Short summary"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-300 uppercase tracking-[0.2em] ml-1">
+                    Description
+                  </label>
+                  <textarea
+                    value={report.description}
+                    onChange={(event) =>
+                      setReport({ ...report, description: event.target.value })
+                    }
+                    className="w-full min-h-40 p-4 bg-white border border-slate-100 rounded-2xl outline-none focus:ring-4 focus:ring-slate-900/5 focus:border-slate-900 resize-y"
+                    placeholder="Describe what happened"
+                  />
+                </div>
+              </div>
+
+              <button
+                onClick={submitReport}
+                disabled={
+                  submitting ||
+                  !report.electionId ||
+                  !report.title ||
+                  !report.description
+                }
+                className="w-full bg-emerald-600 text-white p-5 rounded-[2rem] font-bold flex items-center justify-center gap-3 hover:bg-emerald-500 transition-all shadow-2xl shadow-emerald-100 disabled:opacity-50"
+              >
+                {submitting ? (
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <CheckCircle2 size={18} />
+                )}
+                Submit report with evidence
+              </button>
+            </section>
+          ) : (
+            <section className="rounded-[2.5rem] border border-slate-100 bg-slate-50/70 p-8 space-y-6">
+              <div className="flex items-center gap-3">
+                <ShieldCheck size={20} className="text-slate-900" />
+                <h3 className="text-xl font-display font-black tracking-tighter uppercase text-slate-900">
+                  Observer uploads (read-only)
+                </h3>
+              </div>
+              <div className="rounded-[2rem] border border-slate-100 bg-white p-8 text-slate-600">
+                <p className="font-semibold">
+                  Upload and report creation are restricted to accredited
+                  observers.
+                </p>
+                <p className="text-sm text-slate-500 mt-2">
+                  You can view uploaded evidence but cannot create or attach new
+                  evidence.
+                </p>
+              </div>
+            </section>
+          )}
 
           <section className="space-y-6">
             <div className="flex items-center justify-between gap-4">

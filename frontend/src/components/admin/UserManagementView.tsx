@@ -3,6 +3,7 @@ import { motion } from "motion/react";
 import { ShieldCheck, UserPlus, Edit2, Trash2 } from "lucide-react";
 import { cn } from "../../utils/cn";
 import { getScopeAccessModel } from "../../utils/scope";
+import { unwrapApiData } from "../../utils/mfa";
 
 export function UserManagementView({ setView, token, t, i18n, user }: any) {
   const [users, setUsers] = useState<any[]>([]);
@@ -24,13 +25,46 @@ export function UserManagementView({ setView, token, t, i18n, user }: any) {
   const fetchUsers = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetch("/api/admin/users", {
+      const response = await fetch("/api/v1/users", {
         headers: { Authorization: `Bearer ${token}` },
       });
-      const data = await response.json();
-      setUsers(data);
+
+      const contentType = response.headers.get("content-type") || "";
+
+      if (!response.ok) {
+        // Unauthorized: redirect to login so user can re-authenticate
+        if (response.status === 401) {
+          setUsers([]);
+          setView("login");
+          return;
+        }
+
+        // Try to parse error body for diagnostics
+        let errBody: any = null;
+        try {
+          if (contentType.includes("application/json"))
+            errBody = await response.json();
+          else errBody = await response.text();
+        } catch (e) {
+          errBody = null;
+        }
+
+        // Log and surface an empty list to avoid render errors
+        // eslint-disable-next-line no-console
+        console.error("Failed to fetch users:", response.status, errBody);
+        setUsers([]);
+        return;
+      }
+
+      const data = contentType.includes("application/json")
+        ? await response.json()
+        : null;
+      const extracted = data ? unwrapApiData(data) : [];
+      setUsers(Array.isArray(extracted) ? extracted : []);
     } catch (err) {
-      console.error("Failed to fetch users");
+      // eslint-disable-next-line no-console
+      console.error("Failed to fetch users", err);
+      setUsers([]);
     } finally {
       setLoading(false);
     }
@@ -46,9 +80,9 @@ export function UserManagementView({ setView, token, t, i18n, user }: any) {
     try {
       const url =
         modalMode === "create"
-          ? "/api/admin/users"
-          : `/api/admin/users/${editingUser.id}`;
-      const method = modalMode === "create" ? "POST" : "PUT";
+          ? "/api/v1/users"
+          : `/api/v1/users/${editingUser.id}`;
+      const method = modalMode === "create" ? "POST" : "PATCH";
 
       const resp = await fetch(url, {
         method,
@@ -60,7 +94,9 @@ export function UserManagementView({ setView, token, t, i18n, user }: any) {
       });
 
       const data = await resp.json();
-      if (data.error) throw new Error(data.error);
+      if (!resp.ok) {
+        throw new Error(data?.message || data?.error || "Request failed");
+      }
 
       setShowModal(false);
       fetchUsers();
@@ -74,12 +110,14 @@ export function UserManagementView({ setView, token, t, i18n, user }: any) {
   const handleDelete = async (id: string) => {
     if (!confirm(t("confirm_delete_user"))) return;
     try {
-      const resp = await fetch(`/api/admin/users/${id}`, {
+      const resp = await fetch(`/api/v1/users/${id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
-      const data = await resp.json();
-      if (data.error) throw new Error(data.error);
+      if (!resp.ok && resp.status !== 204) {
+        const data = await resp.json().catch(() => ({}));
+        throw new Error(data?.message || data?.error || "Delete failed");
+      }
       fetchUsers();
     } catch (e: any) {
       alert(e.message);

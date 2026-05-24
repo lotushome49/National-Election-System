@@ -31,7 +31,7 @@ router.get(
 // Only observers can submit reports
 router.post(
   "/",
-  requireRole(ROLES.OBSERVER, ROLES.ADMIN, ROLES.SUPER_ADMIN),
+  requireRole(ROLES.OBSERVER),
   validate(createReportSchema),
   observerController.create,
 );

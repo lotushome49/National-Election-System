@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { motion } from "motion/react";
 import { ChevronLeft, ShieldCheck } from "lucide-react";
 import { cn } from "../../utils/cn";
+import { unwrapApiData } from "../../utils/mfa";
 
 export function AuditLogsView({ setView, token, t, i18n }: any) {
   const lang = i18n.language as "en" | "am";
@@ -11,11 +12,15 @@ export function AuditLogsView({ setView, token, t, i18n }: any) {
   useEffect(() => {
     const fetchLogs = async () => {
       try {
-        const response = await fetch("/api/admin/audit-logs", {
+        const response = await fetch("/api/v1/audit", {
           headers: { Authorization: `Bearer ${token}` },
         });
+        if (!response.ok) {
+          throw new Error(`Failed to load audit logs: ${response.status}`);
+        }
         const data = await response.json();
-        setLogs(data.reverse()); // Show latest first
+        const entries = unwrapApiData<any[]>(data);
+        setLogs([...entries].reverse()); // Show latest first
       } catch (err) {
         console.error(err);
       } finally {
