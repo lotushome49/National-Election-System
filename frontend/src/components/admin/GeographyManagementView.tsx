@@ -53,6 +53,10 @@ interface Props {
   user: any;
 }
 
+function isUnauthorized(error: unknown) {
+  return Boolean((error as any)?.status === 401);
+}
+
 async function apiRequest<T>(
   path: string,
   token: string | null,
@@ -131,7 +135,6 @@ export function GeographyManagementView({ setView, token, user }: Props) {
   const loadAll = async () => {
     setLoading(true);
     try {
-      const regionQuery = "";
       const districtQuery = selectedRegionId
         ? `?regionId=${selectedRegionId}`
         : "";
@@ -152,14 +155,18 @@ export function GeographyManagementView({ setView, token, user }: Props) {
         ),
       ]);
 
-      setRegions(regionRes.data);
-      setDistricts(districtRes.data);
-      setStations(stationRes.data);
+      setRegions(Array.isArray(regionRes.data) ? regionRes.data : []);
+      setDistricts(Array.isArray(districtRes.data) ? districtRes.data : []);
+      setStations(Array.isArray(stationRes.data) ? stationRes.data : []);
 
       if (!selectedRegionId && regionRes.data.length > 0) {
         setSelectedRegionId(getUserRegionId(user) ?? regionRes.data[0].id);
       }
     } catch (error) {
+      if (isUnauthorized(error)) {
+        setView("login");
+        return;
+      }
       console.error("Failed to load geography data", error);
     } finally {
       setLoading(false);
@@ -187,6 +194,12 @@ export function GeographyManagementView({ setView, token, user }: Props) {
       }
       setRegionForm({ name: "", code: "", description: "" });
       await loadAll();
+    } catch (error) {
+      if (isUnauthorized(error)) {
+        setView("login");
+        return;
+      }
+      alert((error as any)?.message || "Failed to save region");
     } finally {
       setSubmitting(false);
     }
@@ -210,6 +223,12 @@ export function GeographyManagementView({ setView, token, user }: Props) {
       }
       setDistrictForm({ name: "", code: "", description: "" });
       await loadAll();
+    } catch (error) {
+      if (isUnauthorized(error)) {
+        setView("login");
+        return;
+      }
+      alert((error as any)?.message || "Failed to save district");
     } finally {
       setSubmitting(false);
     }
@@ -249,6 +268,12 @@ export function GeographyManagementView({ setView, token, user }: Props) {
         isActive: true,
       });
       await loadAll();
+    } catch (error) {
+      if (isUnauthorized(error)) {
+        setView("login");
+        return;
+      }
+      alert((error as any)?.message || "Failed to save polling station");
     } finally {
       setSubmitting(false);
     }
@@ -256,18 +281,26 @@ export function GeographyManagementView({ setView, token, user }: Props) {
 
   const removeItem = async (path: string) => {
     if (!confirm("Delete this item?")) return;
-    await apiRequest(path, token, { method: "DELETE" });
-    // clear any editing selection if the deleted item was being edited
-    if (regionEditingId && path.includes(`/regions/${regionEditingId}`))
-      setRegionEditingId(null);
-    if (districtEditingId && path.includes(`/districts/${districtEditingId}`))
-      setDistrictEditingId(null);
-    if (
-      stationEditingId &&
-      path.includes(`/polling-stations/${stationEditingId}`)
-    )
-      setStationEditingId(null);
-    await loadAll();
+    try {
+      await apiRequest(path, token, { method: "DELETE" });
+      // clear any editing selection if the deleted item was being edited
+      if (regionEditingId && path.includes(`/regions/${regionEditingId}`))
+        setRegionEditingId(null);
+      if (districtEditingId && path.includes(`/districts/${districtEditingId}`))
+        setDistrictEditingId(null);
+      if (
+        stationEditingId &&
+        path.includes(`/polling-stations/${stationEditingId}`)
+      )
+        setStationEditingId(null);
+      await loadAll();
+    } catch (error) {
+      if (isUnauthorized(error)) {
+        setView("login");
+        return;
+      }
+      alert((error as any)?.message || "Failed to delete item");
+    }
   };
 
   return (

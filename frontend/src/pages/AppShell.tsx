@@ -77,6 +77,7 @@ export default function AppShell() {
   const [user, setUser] = useState<any>(null);
   const [token, setToken] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [authHydrated, setAuthHydrated] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   const viewFromPath = (pathname: string) => {
@@ -405,6 +406,8 @@ export default function AppShell() {
       }
     } catch (e) {
       // ignore corrupted localStorage
+    } finally {
+      setAuthHydrated(true);
     }
   }, []);
 
@@ -499,6 +502,14 @@ export default function AppShell() {
     }
     setView("login");
   };
+
+  if (!authHydrated) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center text-slate-400 font-black uppercase tracking-[0.3em]">
+        Loading session...
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex font-sans">
@@ -670,10 +681,10 @@ export default function AppShell() {
                   You do not have access to this page for your current role.
                 </p>
                 <button
-                  onClick={() => setView(getHomeViewForRole(role))}
+                  onClick={clearAuthState}
                   className="mt-8 bg-election-dark text-white px-8 py-3 rounded-xl font-bold"
                 >
-                  {t("return_home")}
+                  Go to login
                 </button>
               </div>
             ) : null}

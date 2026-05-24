@@ -20,7 +20,12 @@ type Election = {
   id: string;
   title: string;
   description?: string | null;
-  type: "PRESIDENTIAL" | "PARLIAMENTARY" | "LOCAL" | "BY_ELECTION" | "REFERENDUM";
+  type:
+    | "PRESIDENTIAL"
+    | "PARLIAMENTARY"
+    | "LOCAL"
+    | "BY_ELECTION"
+    | "REFERENDUM";
   status:
     | "DRAFT"
     | "SCHEDULED"
@@ -43,6 +48,10 @@ interface Props {
   setView: (view: string) => void;
   token: string | null;
   user: any;
+}
+
+function isUnauthorized(error: unknown) {
+  return Boolean((error as any)?.status === 401);
 }
 
 async function apiRequest<T>(
@@ -80,13 +89,17 @@ export function ElectionManagementView({ setView, token }: Props) {
     setLoading(true);
     try {
       const res = await apiRequest<{ data: Election[] }>("/elections", token);
-      setElections(res.data || []);
+      setElections(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
+      if (isUnauthorized(err)) {
+        setView("login");
+        return;
+      }
       console.error("Failed to load elections", err);
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, setView]);
 
   useEffect(() => {
     void loadElections();
@@ -112,33 +125,56 @@ export function ElectionManagementView({ setView, token }: Props) {
       setShowModal(false);
       await loadElections();
     } catch (err: any) {
+      if (isUnauthorized(err)) {
+        setView("login");
+        return;
+      }
       alert(err.message || "Failed to save election");
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleStatusTransition = async (id: string, newStatus: Election["status"]) => {
+  const handleStatusTransition = async (
+    id: string,
+    newStatus: Election["status"],
+  ) => {
     if (!confirm(`Transition election status to ${newStatus}?`)) return;
     try {
       await apiRequest(`/elections/${id}/status`, token, {
         method: "PATCH",
-        body: JSON.stringify({ status: newStatus, reason: "Admin UI phase transition" }),
+        body: JSON.stringify({
+          status: newStatus,
+          reason: "Admin UI phase transition",
+        }),
       });
       await loadElections();
     } catch (err: any) {
+      if (isUnauthorized(err)) {
+        setView("login");
+        return;
+      }
       alert(err.message || "Failed to transition status");
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Are you absolutely sure you want to delete this election? This will delete all candidates and results!")) return;
+    if (
+      !confirm(
+        "Are you absolutely sure you want to delete this election? This will delete all candidates and results!",
+      )
+    )
+      return;
     try {
       await apiRequest(`/elections/${id}`, token, {
         method: "DELETE",
       });
       await loadElections();
     } catch (err: any) {
+      if (isUnauthorized(err)) {
+        setView("login");
+        return;
+      }
       alert(err.message || "Failed to delete election");
     }
   };
@@ -188,7 +224,8 @@ export function ElectionManagementView({ setView, token }: Props) {
             Elections Administration
           </h2>
           <p className="text-slate-400 text-sm font-medium uppercase tracking-widest max-w-2xl leading-relaxed">
-            Create elections, define voting scopes, and transition system phases from planning to results.
+            Create elections, define voting scopes, and transition system phases
+            from planning to results.
           </p>
         </div>
 
@@ -236,10 +273,19 @@ export function ElectionManagementView({ setView, token }: Props) {
                       className={cn(
                         "px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest",
                         el.status === "DRAFT" && "bg-slate-100 text-slate-500",
-                        el.status === "VOTING_OPEN" && "bg-orange-100 text-orange-600 border border-orange-200",
-                        el.status === "RESULTS_DECLARED" && "bg-green-100 text-green-600 border border-green-200",
-                        el.status === "NOMINATION_OPEN" && "bg-blue-100 text-blue-600 border border-blue-200",
-                        !["DRAFT", "VOTING_OPEN", "RESULTS_DECLARED", "NOMINATION_OPEN"].includes(el.status) && "bg-purple-100 text-purple-600",
+                        el.status === "VOTING_OPEN" &&
+                          "bg-orange-100 text-orange-600 border border-orange-200",
+                        el.status === "RESULTS_DECLARED" &&
+                          "bg-green-100 text-green-600 border border-green-200",
+                        el.status === "NOMINATION_OPEN" &&
+                          "bg-blue-100 text-blue-600 border border-blue-200",
+                        ![
+                          "DRAFT",
+                          "VOTING_OPEN",
+                          "RESULTS_DECLARED",
+                          "NOMINATION_OPEN",
+                        ].includes(el.status) &&
+                          "bg-purple-100 text-purple-600",
                       )}
                     >
                       ● {el.status.replace("_", " ")}
@@ -254,7 +300,9 @@ export function ElectionManagementView({ setView, token }: Props) {
                     </p>
                   )}
                   <p className="text-[10px] text-slate-300 font-bold uppercase tracking-widest">
-                    ID: {el.id} · Scope: {el.isNational ? "NATIONAL" : "REGIONAL"} · Limit: {el.maxVotesPerVoter} vote
+                    ID: {el.id} · Scope:{" "}
+                    {el.isNational ? "NATIONAL" : "REGIONAL"} · Limit:{" "}
+                    {el.maxVotesPerVoter} vote
                   </p>
                 </div>
 
@@ -263,7 +311,9 @@ export function ElectionManagementView({ setView, token }: Props) {
                   {/* Transition phase buttons */}
                   {el.status === "DRAFT" && (
                     <button
-                      onClick={() => handleStatusTransition(el.id, "NOMINATION_OPEN")}
+                      onClick={() =>
+                        handleStatusTransition(el.id, "NOMINATION_OPEN")
+                      }
                       className="px-5 py-2.5 bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white rounded-xl text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5"
                     >
                       <Play size={12} /> Open Nomination
@@ -271,7 +321,9 @@ export function ElectionManagementView({ setView, token }: Props) {
                   )}
                   {el.status === "NOMINATION_OPEN" && (
                     <button
-                      onClick={() => handleStatusTransition(el.id, "VOTING_OPEN")}
+                      onClick={() =>
+                        handleStatusTransition(el.id, "VOTING_OPEN")
+                      }
                       className="px-5 py-2.5 bg-orange-50 text-orange-600 hover:bg-orange-600 hover:text-white rounded-xl text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5"
                     >
                       <Play size={12} /> Open Voting
@@ -279,7 +331,9 @@ export function ElectionManagementView({ setView, token }: Props) {
                   )}
                   {el.status === "VOTING_OPEN" && (
                     <button
-                      onClick={() => handleStatusTransition(el.id, "RESULTS_DECLARED")}
+                      onClick={() =>
+                        handleStatusTransition(el.id, "RESULTS_DECLARED")
+                      }
                       className="px-5 py-2.5 bg-green-50 text-green-600 hover:bg-green-600 hover:text-white rounded-xl text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5"
                     >
                       <CheckCircle2 size={12} /> Close & Declare
@@ -346,7 +400,9 @@ export function ElectionManagementView({ setView, token }: Props) {
                 </label>
                 <textarea
                   value={form.description}
-                  onChange={(e) => setForm({ ...form, description: e.target.value })}
+                  onChange={(e) =>
+                    setForm({ ...form, description: e.target.value })
+                  }
                   placeholder="Brief synopsis of the scope and ballot conditions..."
                   className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-medium text-slate-900 min-h-24 focus:outline-none"
                 />
@@ -359,7 +415,12 @@ export function ElectionManagementView({ setView, token }: Props) {
                   </label>
                   <select
                     value={form.type}
-                    onChange={(e) => setForm({ ...form, type: e.target.value as Election["type"] })}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        type: e.target.value as Election["type"],
+                      })
+                    }
                     className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-bold text-slate-900 focus:outline-none"
                   >
                     <option value="PRESIDENTIAL">Presidential</option>
@@ -379,7 +440,12 @@ export function ElectionManagementView({ setView, token }: Props) {
                     min={1}
                     max={10}
                     value={form.maxVotesPerVoter}
-                    onChange={(e) => setForm({ ...form, maxVotesPerVoter: Number(e.target.value) })}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        maxVotesPerVoter: Number(e.target.value),
+                      })
+                    }
                     className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-bold text-slate-900 focus:outline-none"
                   />
                 </div>
@@ -390,7 +456,9 @@ export function ElectionManagementView({ setView, token }: Props) {
                   type="checkbox"
                   id="isNational"
                   checked={form.isNational}
-                  onChange={(e) => setForm({ ...form, isNational: e.target.checked })}
+                  onChange={(e) =>
+                    setForm({ ...form, isNational: e.target.checked })
+                  }
                   className="w-5 h-5 rounded-md border-slate-300"
                 />
                 <label
@@ -406,7 +474,9 @@ export function ElectionManagementView({ setView, token }: Props) {
                 disabled={submitting}
                 className="w-full py-5 bg-slate-900 hover:bg-slate-800 text-white rounded-[1.75rem] text-[10px] font-black uppercase tracking-[0.3em] transition-all disabled:opacity-50"
               >
-                {modalMode === "create" ? "Create Election Profile" : "Save Changes"}
+                {modalMode === "create"
+                  ? "Create Election Profile"
+                  : "Save Changes"}
               </button>
             </form>
           </motion.div>
