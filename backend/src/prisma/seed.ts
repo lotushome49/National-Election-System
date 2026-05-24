@@ -110,32 +110,65 @@ async function main() {
   if (!superAdminRole)
     throw new Error("SUPER_ADMIN role not found after seeding");
 
-  const systemAdminUsername = process.env.ADMIN_USERNAME ?? "admin";
-  const systemAdminEmail = process.env.ADMIN_EMAIL ?? "admin@example.com";
-  const systemAdminPassword = process.env.ADMIN_PASSWORD ?? "admin123";
-  const passwordHash = await bcrypt.hash(systemAdminPassword, 12);
+  const defaultAuthAccounts = [
+    {
+      username: "superadmin",
+      email: "superadmin@election.gov.et",
+      fullName: "System Super Admin",
+    },
+    {
+      username: "admin",
+      email: "admin@election.gov.et",
+      fullName: "System Admin",
+    },
+    {
+      username: "regional",
+      email: "regional@election.gov.et",
+      fullName: "Regional Admin",
+    },
+    {
+      username: "district",
+      email: "district@election.gov.et",
+      fullName: "District Admin",
+    },
+    {
+      username: "staff",
+      email: "staff@election.gov.et",
+      fullName: "Election Staff",
+    },
+    {
+      username: "observer",
+      email: "observer@election.gov.et",
+      fullName: "Election Observer",
+    },
+    { username: "voter", email: "voter@election.gov.et", fullName: "Voter" },
+  ];
+  const passwordHash = await bcrypt.hash("Admin@123", 12);
 
-  await prisma.user.upsert({
-    where: { username: systemAdminUsername },
-    update: {
-      roleId: superAdminRole.id,
-      fullName: "System Super Admin",
-      email: systemAdminEmail,
-      passwordHash,
-      status: "ACTIVE",
-    },
-    create: {
-      id: uuidv4(),
-      roleId: superAdminRole.id,
-      fullName: "System Super Admin",
-      username: systemAdminUsername,
-      email: systemAdminEmail,
-      passwordHash,
-      status: "ACTIVE",
-    },
-  });
+  for (const account of defaultAuthAccounts) {
+    const existingUser = await prisma.user.findFirst({
+      where: {
+        deletedAt: null,
+        OR: [{ username: account.username }, { email: account.email }],
+      },
+    });
+
+    if (existingUser) continue;
+
+    await prisma.user.create({
+      data: {
+        id: uuidv4(),
+        roleId: superAdminRole.id,
+        fullName: account.fullName,
+        username: account.username,
+        email: account.email,
+        passwordHash,
+        status: "ACTIVE",
+      },
+    });
+  }
   console.log(
-    `  ✅ System admin ready: ${systemAdminUsername} / ${systemAdminPassword}`,
+    "  ✅ Default auth accounts ensured: superadmin/admin/regional/district/staff/observer/voter",
   );
 
   // ---------------------------------------------------------

@@ -12,10 +12,15 @@ export const authRepository = {
         // ignore and fallback to prisma
       }
     }
+    // Normalize identifier: trim whitespace and use case-insensitive email lookup
+    const normalized = typeof identifier === "string" ? identifier.trim() : "";
     return prisma.user.findFirst({
       where: {
         deletedAt: null,
-        OR: [{ username: identifier }, { email: identifier }],
+        OR: [
+          { username: { equals: normalized, mode: "insensitive" } },
+          { email: { equals: normalized, mode: "insensitive" } },
+        ],
       },
       include: { role: { include: { permissions: true } } },
     });

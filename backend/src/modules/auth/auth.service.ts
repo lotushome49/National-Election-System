@@ -90,7 +90,12 @@ function getStoredMfaState(user: any): StoredMfaState {
 
 export const authService = {
   async login(dto: LoginDto, ip: string) {
-    const user = await authRepository.findByLoginIdentifier(dto.username);
+    // Trim and normalize identifier to improve login matching
+    const identifier = typeof dto.username === "string" ? dto.username.trim() : "";
+    console.log('Login identifier:', identifier);
+    const user = await authRepository.findByLoginIdentifier(identifier);
+    console.log('User found:', user ? user.id : null);
+
 
     if (!user) {
       throw new UnauthorizedError("Invalid credentials");
