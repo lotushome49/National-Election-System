@@ -85,7 +85,7 @@ export function LoginView({
         body: JSON.stringify(body),
       });
 
-      if (response.status !== 404) {
+      if (response.status !== 404 && response.status < 500) {
         return response;
       }
 
@@ -94,6 +94,21 @@ export function LoginView({
 
     if (lastResponse) return lastResponse;
     throw new Error("Authentication endpoint not found (404)");
+  };
+
+  const readResponseBody = async (response: Response) => {
+    const contentType = response.headers.get("content-type") || "";
+
+    if (contentType.includes("application/json")) {
+      return await response.json();
+    }
+
+    const text = await response.text();
+    try {
+      return JSON.parse(text);
+    } catch {
+      return { message: text || `HTTP error! status: ${response.status}` };
+    }
   };
 
   const createDeterministicDemoFaceEmbedding = (nationalId: string) => {
@@ -313,7 +328,7 @@ export function LoginView({
       const response = await postWithFallback(
         role === "VOTER"
           ? ["/api/auth/login/biometric", "/api/v1/auth/login/biometric"]
-          : ["/api/auth/login", "/api/v1/auth/login"],
+          : ["/api/v1/auth/login", "/api/auth/login"],
         requestBody,
       );
 
@@ -323,14 +338,7 @@ export function LoginView({
         );
       }
 
-      const contentType = response.headers.get("content-type");
-      if (!contentType || !contentType.includes("application/json")) {
-        throw new Error(
-          `Server error (Status: ${response.status}). Expected JSON but received ${contentType || "unknown"}`,
-        );
-      }
-
-      const data = unwrapApiData(await response.json());
+      const data = unwrapApiData(await readResponseBody(response));
       if (!response.ok) {
         throw new Error(
           data?.message ||
@@ -362,7 +370,7 @@ export function LoginView({
     setError("");
     try {
       const response = await postWithFallback(
-        ["/api/auth/mfa/challenge", "/api/v1/auth/mfa/challenge"],
+        ["/api/v1/auth/mfa/challenge", "/api/auth/mfa/challenge"],
         {
           challengeToken: mfaChallengeToken,
           code: useRecoveryCode ? undefined : mfaCode,
@@ -370,7 +378,7 @@ export function LoginView({
         },
       );
 
-      const data = unwrapApiData(await response.json());
+      const data = unwrapApiData(await readResponseBody(response));
       if (!response.ok) {
         throw new Error(
           data?.message ||

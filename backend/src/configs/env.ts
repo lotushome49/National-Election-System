@@ -43,6 +43,7 @@ const envSchema = z.object({
   CSRF_SECRET: z.string().min(32, "CSRF_SECRET must be at least 32 characters"),
 
   // Admin bootstrap
+  ADMIN_USERNAME: z.string().default("admin"),
   ADMIN_EMAIL: z.string().email().optional(),
   ADMIN_PASSWORD: z.string().min(12).optional(),
 });

@@ -83,8 +83,26 @@ export default function AppShell() {
   const isDev =
     window.location.hostname === "localhost" ||
     window.location.hostname === "127.0.0.1";
+  const normalizePath = (pathname: string) => {
+    const trimmed = pathname.replace(/\/+$/, "") || "/";
+
+    if (trimmed.startsWith("/super-admin/")) {
+      return trimmed.replace("/super-admin", "");
+    }
+
+    if (trimmed.startsWith("/admin/")) {
+      return trimmed.replace("/admin", "");
+    }
+
+    return trimmed;
+  };
+  const getAdminPathPrefix = () => {
+    if (role === "SUPER_ADMIN") return "/super-admin";
+    if (role === "ADMIN") return "/admin";
+    return "";
+  };
   const viewFromPath = (pathname: string) => {
-    const normalizedPath = pathname.replace(/\/+$/, "") || "/";
+    const normalizedPath = normalizePath(pathname);
 
     switch (normalizedPath) {
       case "/":
@@ -125,10 +143,11 @@ export default function AppShell() {
       case "/dashboard":
         return "dashboard";
       default:
-        return "login";
+        return "dashboard";
     }
   };
   const pathFromView = (nextView: string) => {
+    const adminPrefix = getAdminPathPrefix();
     switch (nextView) {
       case "login":
         return "/login";
@@ -139,33 +158,37 @@ export default function AppShell() {
       case "history":
         return "/history";
       case "voters":
-        return "/voters";
+        return `${adminPrefix}/voters` || "/voters";
       case "users":
-        return "/users";
+        return adminPrefix ? `${adminPrefix}/users` : "/users";
       case "elections":
-        return "/elections";
+        return adminPrefix ? `${adminPrefix}/elections` : "/elections";
       case "candidates":
-        return "/candidates";
+        return adminPrefix ? `${adminPrefix}/candidates` : "/candidates";
       case "audit-logs":
-        return "/audit-logs";
+        return adminPrefix ? `${adminPrefix}/audit-logs` : "/audit-logs";
       case "results-dashboard":
-        return "/results-dashboard";
+        return adminPrefix
+          ? `${adminPrefix}/results-dashboard`
+          : "/results-dashboard";
       case "geography":
-        return "/geography";
+        return adminPrefix ? `${adminPrefix}/geography` : "/geography";
       case "security":
-        return "/security";
+        return adminPrefix ? `${adminPrefix}/security` : "/security";
       case "sessions":
-        return "/sessions";
+        return adminPrefix ? `${adminPrefix}/sessions` : "/sessions";
       case "observer-evidence":
-        return "/observer-evidence";
+        return adminPrefix
+          ? `${adminPrefix}/observer-evidence`
+          : "/observer-evidence";
       case "voter-hub":
         return "/voter-hub";
       case "registration":
-        return "/registration";
+        return adminPrefix ? `${adminPrefix}/registration` : "/registration";
       case "voting-booth":
         return "/voting-booth";
       case "dashboard":
-        return "/dashboard";
+        return adminPrefix ? `${adminPrefix}/dashboard` : "/dashboard";
       default:
         return "/login";
     }

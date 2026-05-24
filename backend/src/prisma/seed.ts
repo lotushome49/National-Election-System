@@ -103,31 +103,40 @@ async function main() {
     console.log(`  ✅ Role: ${role.name}`);
   }
 
-  // Create default super admin if env vars are set
-  const adminEmail = process.env.ADMIN_EMAIL;
-  const adminPassword = process.env.ADMIN_PASSWORD;
-  if (adminEmail && adminPassword) {
-    const superAdminRole = await prisma.role.findUnique({
-      where: { code: "SUPER_ADMIN" },
-    });
-    if (!superAdminRole)
-      throw new Error("SUPER_ADMIN role not found after seeding");
-    const passwordHash = await bcrypt.hash(adminPassword, 12);
-    await prisma.user.upsert({
-      where: { username: "superadmin" },
-      update: {},
-      create: {
-        id: uuidv4(),
-        roleId: superAdminRole.id,
-        fullName: "System Super Admin",
-        username: "superadmin",
-        email: adminEmail,
-        passwordHash,
-        status: "ACTIVE",
-      },
-    });
-    console.log(`  ✅ Super admin created: ${adminEmail}`);
-  }
+  // Create a working default system admin so the documented login is always valid.
+  const superAdminRole = await prisma.role.findUnique({
+    where: { code: "SUPER_ADMIN" },
+  });
+  if (!superAdminRole)
+    throw new Error("SUPER_ADMIN role not found after seeding");
+
+  const systemAdminUsername = process.env.ADMIN_USERNAME ?? "admin";
+  const systemAdminEmail = process.env.ADMIN_EMAIL ?? "admin@example.com";
+  const systemAdminPassword = process.env.ADMIN_PASSWORD ?? "admin123";
+  const passwordHash = await bcrypt.hash(systemAdminPassword, 12);
+
+  await prisma.user.upsert({
+    where: { username: systemAdminUsername },
+    update: {
+      roleId: superAdminRole.id,
+      fullName: "System Super Admin",
+      email: systemAdminEmail,
+      passwordHash,
+      status: "ACTIVE",
+    },
+    create: {
+      id: uuidv4(),
+      roleId: superAdminRole.id,
+      fullName: "System Super Admin",
+      username: systemAdminUsername,
+      email: systemAdminEmail,
+      passwordHash,
+      status: "ACTIVE",
+    },
+  });
+  console.log(
+    `  ✅ System admin ready: ${systemAdminUsername} / ${systemAdminPassword}`,
+  );
 
   // ---------------------------------------------------------
   // ---------------------------------------------------------
@@ -180,8 +189,18 @@ async function main() {
 
   const samplePollingStations = [
     { name: "Bole Center", code: "BOC1", districtCode: "BO", regionCode: "AA" },
-    { name: "Nifas Silk Center", code: "NSC1", districtCode: "NS", regionCode: "AA" },
-    { name: "Arsi Central", code: "ARC1", districtCode: "AR", regionCode: "OR" },
+    {
+      name: "Nifas Silk Center",
+      code: "NSC1",
+      districtCode: "NS",
+      regionCode: "AA",
+    },
+    {
+      name: "Arsi Central",
+      code: "ARC1",
+      districtCode: "AR",
+      regionCode: "OR",
+    },
   ];
 
   for (const ps of samplePollingStations) {
@@ -198,7 +217,6 @@ async function main() {
     });
     console.log(`  ✅ Polling Station created: ${ps.name}`);
   }
-
 }
 
 main()
