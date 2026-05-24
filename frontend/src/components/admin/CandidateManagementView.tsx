@@ -43,6 +43,18 @@ type Candidate = {
 type Election = {
   id: string;
   title: string;
+  status:
+    | "DRAFT"
+    | "SCHEDULED"
+    | "NOMINATION_OPEN"
+    | "NOMINATION_CLOSED"
+    | "CAMPAIGN"
+    | "VOTING_OPEN"
+    | "VOTING_CLOSED"
+    | "COUNTING"
+    | "RESULTS_DECLARED"
+    | "DISPUTED"
+    | "CANCELLED";
 };
 
 type Region = {
@@ -73,6 +85,29 @@ interface Props {
 
 function isUnauthorized(error: unknown) {
   return Boolean((error as any)?.status === 401);
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+  const body = (error as any)?.body;
+  if (typeof body?.message === "string" && body.message.trim()) {
+    return body.message;
+  }
+
+  if (body?.errors && typeof body.errors === "object") {
+    const firstField = Object.values(body.errors).find(
+      (value) => Array.isArray(value) && value.length > 0,
+    ) as unknown[] | undefined;
+
+    if (firstField && typeof firstField[0] === "string") {
+      return firstField[0];
+    }
+  }
+
+  if (typeof (error as any)?.message === "string") {
+    return (error as any).message;
+  }
+
+  return fallback;
 }
 
 async function apiRequest<T>(
@@ -132,6 +167,14 @@ export function CandidateManagementView({ setView, token, user }: Props) {
     regionId: getUserRegionId(user) ?? "",
     districtId: getUserDistrictId(user) ?? "",
   });
+
+  const nominationEligibleElections = useMemo(
+    () =>
+      elections.filter((election) =>
+        ["NOMINATION_OPEN", "NOMINATION_CLOSED"].includes(election.status),
+      ),
+    [elections],
+  );
 
   const filteredDistricts = useMemo(() => {
     return districts.filter(
@@ -212,7 +255,7 @@ export function CandidateManagementView({ setView, token, user }: Props) {
         setView("login");
         return;
       }
-      alert(err.message || "Failed to save candidate");
+      alert(getErrorMessage(err, "Failed to save candidate"));
     } finally {
       setSubmitting(false);
     }
@@ -233,7 +276,7 @@ export function CandidateManagementView({ setView, token, user }: Props) {
         setView("login");
         return;
       }
-      alert(err.message || "Failed to update status");
+      alert(getErrorMessage(err, "Failed to update status"));
     }
   };
 
@@ -248,7 +291,7 @@ export function CandidateManagementView({ setView, token, user }: Props) {
         setView("login");
         return;
       }
-      alert(err.message || "Failed to delete candidate");
+      alert(getErrorMessage(err, "Failed to delete candidate"));
     }
   };
 
@@ -256,7 +299,7 @@ export function CandidateManagementView({ setView, token, user }: Props) {
     setModalMode("create");
     setEditingId(null);
     setForm({
-      electionId: elections[0]?.id || "",
+      electionId: nominationEligibleElections[0]?.id || "",
       fullName: "",
       party: "",
       bio: "",
@@ -491,7 +534,30 @@ export function CandidateManagementView({ setView, token, user }: Props) {
                 <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 px-2 block">
                   Select Target Election
                 </label>
-                {elections.length > 0 ? (
+                {modalMode === "create" ? (
+                  nominationEligibleElections.length > 0 ? (
+                    <select
+                      required
+                      value={form.electionId}
+                      onChange={(e) =>
+                        setForm({ ...form, electionId: e.target.value })
+                      }
+                      className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-bold text-slate-900 focus:outline-none"
+                    >
+                      <option value="">Select an election</option>
+                      {nominationEligibleElections.map((el) => (
+                        <option key={el.id} value={el.id}>
+                          {el.title}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className="w-full px-6 py-4 bg-amber-50 border border-amber-100 rounded-[1.5rem] text-amber-700 text-sm font-semibold">
+                      No elections are currently in nomination phase. Open
+                      nomination on an election first.
+                    </div>
+                  )
+                ) : elections.length > 0 ? (
                   <select
                     required
                     value={form.electionId}
@@ -640,7 +706,12 @@ export function CandidateManagementView({ setView, token, user }: Props) {
 
               <button
                 type="submit"
-                disabled={submitting || elections.length === 0}
+                disabled={
+                  submitting ||
+                  (modalMode === "create"
+                    ? nominationEligibleElections.length === 0
+                    : elections.length === 0)
+                }
                 className="w-full py-5 bg-slate-900 hover:bg-slate-800 text-white rounded-[1.75rem] text-[10px] font-black uppercase tracking-[0.3em] transition-all disabled:opacity-50"
               >
                 {modalMode === "create"

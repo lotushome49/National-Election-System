@@ -77,6 +77,9 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
 
 async function main() {
   console.log("🌱 Seeding database...");
+  const now = new Date();
+  const plusDays = (days: number) =>
+    new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
 
   // Upsert roles and permissions
   for (const role of ROLES) {
@@ -249,6 +252,107 @@ async function main() {
       },
     });
     console.log(`  ✅ Polling Station created: ${ps.name}`);
+  }
+
+  // ---------------------------------------------------------
+  // SAMPLE ELECTION DATA (Real records for admin workflows)
+  // ---------------------------------------------------------
+  const sampleElections = [
+    {
+      id: uuidv4(),
+      title: "2026 National Presidential Election",
+      description:
+        "Primary national election used to exercise nomination and candidate workflows.",
+      type: "PRESIDENTIAL" as const,
+      status: "NOMINATION_OPEN" as const,
+      nominationStart: plusDays(-10),
+      nominationEnd: plusDays(10),
+      campaignStart: plusDays(11),
+      campaignEnd: plusDays(40),
+      votingStart: plusDays(45),
+      votingEnd: plusDays(46),
+      isNational: true,
+      maxVotesPerVoter: 1,
+      createdBy: null,
+      updatedBy: null,
+      metadata: { fixture: true, scope: "national" },
+    },
+    {
+      id: uuidv4(),
+      title: "2026 Addis Ababa Council Election",
+      description:
+        "Regional election seeded in draft state for phase transition testing.",
+      type: "LOCAL" as const,
+      status: "DRAFT" as const,
+      nominationStart: null,
+      nominationEnd: null,
+      campaignStart: null,
+      campaignEnd: null,
+      votingStart: null,
+      votingEnd: null,
+      isNational: false,
+      maxVotesPerVoter: 1,
+      createdBy: null,
+      updatedBy: null,
+      metadata: { fixture: true, scope: "regional", regionCode: "AA" },
+    },
+    {
+      id: uuidv4(),
+      title: "2026 Reform Referendum",
+      description:
+        "Sample referendum already in campaign phase for end-to-end testing.",
+      type: "REFERENDUM" as const,
+      status: "CAMPAIGN" as const,
+      nominationStart: plusDays(-30),
+      nominationEnd: plusDays(-20),
+      campaignStart: plusDays(-5),
+      campaignEnd: plusDays(5),
+      votingStart: plusDays(10),
+      votingEnd: plusDays(11),
+      isNational: true,
+      maxVotesPerVoter: 1,
+      createdBy: null,
+      updatedBy: null,
+      metadata: { fixture: true, scope: "national" },
+    },
+  ];
+
+  for (const election of sampleElections) {
+    await prisma.election.upsert({
+      where: { id: election.id },
+      update: {
+        title: election.title,
+        description: election.description,
+        type: election.type,
+        status: election.status,
+        nominationStart: election.nominationStart,
+        nominationEnd: election.nominationEnd,
+        campaignStart: election.campaignStart,
+        campaignEnd: election.campaignEnd,
+        votingStart: election.votingStart,
+        votingEnd: election.votingEnd,
+        isNational: election.isNational,
+        maxVotesPerVoter: election.maxVotesPerVoter,
+        metadata: election.metadata as any,
+      },
+      create: {
+        id: election.id,
+        title: election.title,
+        description: election.description,
+        type: election.type,
+        status: election.status,
+        nominationStart: election.nominationStart ?? undefined,
+        nominationEnd: election.nominationEnd ?? undefined,
+        campaignStart: election.campaignStart ?? undefined,
+        campaignEnd: election.campaignEnd ?? undefined,
+        votingStart: election.votingStart ?? undefined,
+        votingEnd: election.votingEnd ?? undefined,
+        isNational: election.isNational,
+        maxVotesPerVoter: election.maxVotesPerVoter,
+        metadata: election.metadata as any,
+      },
+    });
+    console.log(`  ✅ Election created: ${election.title}`);
   }
 }
 
