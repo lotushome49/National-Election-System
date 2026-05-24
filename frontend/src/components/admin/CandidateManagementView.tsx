@@ -71,6 +71,10 @@ interface Props {
   user: any;
 }
 
+function isUnauthorized(error: unknown) {
+  return Boolean((error as any)?.status === 401);
+}
+
 async function apiRequest<T>(
   path: string,
   token: string | null,
@@ -146,20 +150,30 @@ export function CandidateManagementView({ setView, token, user }: Props) {
           apiRequest<{ data: District[] }>("/districts", token),
         ]);
 
-      setCandidates(candidatesRes.data || []);
-      setElections(electionsRes.data || []);
-      setRegions(regionsRes.data || []);
-      setDistricts(districtsRes.data || []);
+      setCandidates(
+        Array.isArray(candidatesRes.data) ? candidatesRes.data : [],
+      );
+      setElections(Array.isArray(electionsRes.data) ? electionsRes.data : []);
+      setRegions(Array.isArray(regionsRes.data) ? regionsRes.data : []);
+      setDistricts(Array.isArray(districtsRes.data) ? districtsRes.data : []);
 
-      if (electionsRes.data?.length > 0 && !form.electionId) {
+      if (
+        Array.isArray(electionsRes.data) &&
+        electionsRes.data.length > 0 &&
+        !form.electionId
+      ) {
         setForm((prev) => ({ ...prev, electionId: electionsRes.data[0].id }));
       }
     } catch (err) {
+      if (isUnauthorized(err)) {
+        setView("login");
+        return;
+      }
       console.error("Failed to load candidate management data", err);
     } finally {
       setLoading(false);
     }
-  }, [token, form.electionId]);
+  }, [token, form.electionId, setView]);
 
   useEffect(() => {
     void loadData();
@@ -194,6 +208,10 @@ export function CandidateManagementView({ setView, token, user }: Props) {
       setShowModal(false);
       await loadData();
     } catch (err: any) {
+      if (isUnauthorized(err)) {
+        setView("login");
+        return;
+      }
       alert(err.message || "Failed to save candidate");
     } finally {
       setSubmitting(false);
@@ -211,6 +229,10 @@ export function CandidateManagementView({ setView, token, user }: Props) {
       });
       await loadData();
     } catch (err: any) {
+      if (isUnauthorized(err)) {
+        setView("login");
+        return;
+      }
       alert(err.message || "Failed to update status");
     }
   };
@@ -222,6 +244,10 @@ export function CandidateManagementView({ setView, token, user }: Props) {
       await apiRequest(`/candidates/${id}`, token, { method: "DELETE" });
       await loadData();
     } catch (err: any) {
+      if (isUnauthorized(err)) {
+        setView("login");
+        return;
+      }
       alert(err.message || "Failed to delete candidate");
     }
   };
@@ -465,53 +491,57 @@ export function CandidateManagementView({ setView, token, user }: Props) {
                 <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 px-2 block">
                   Select Target Election
                 </label>
-                <select
-                  required
-                  value={form.electionId}
-                  onChange={(e) =>
-                    setForm({ ...form, electionId: e.target.value })
-                  }
-                  className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-bold text-slate-900 focus:outline-none"
-                >
-                  <option value="">Select an election</option>
-                  {elections.map((el) => (
-                    <option key={el.id} value={el.id}>
-                      {el.title}
-                    </option>
-                  ))}
-                </select>
+                {elections.length > 0 ? (
+                  <select
+                    required
+                    value={form.electionId}
+                    onChange={(e) =>
+                      setForm({ ...form, electionId: e.target.value })
+                    }
+                    className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-bold text-slate-900 focus:outline-none"
+                  >
+                    <option value="">Select an election</option>
+                    {elections.map((el) => (
+                      <option key={el.id} value={el.id}>
+                        {el.title}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="w-full px-6 py-4 bg-amber-50 border border-amber-100 rounded-[1.5rem] text-amber-700 text-sm font-semibold">
+                    No elections available. Create an election first.
+                  </div>
+                )}
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 px-2 block">
-                    Full Name
-                  </label>
-                  <input
-                    required
-                    value={form.fullName}
-                    onChange={(e) =>
-                      setForm({ ...form, fullName: e.target.value })
-                    }
-                    placeholder="e.g. Haile Gebrselassie"
-                    className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-bold text-slate-900 focus:outline-none"
-                  />
-                </div>
+              <div className="space-y-1">
+                <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 px-2 block">
+                  Full Name
+                </label>
+                <input
+                  required
+                  value={form.fullName}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                    setForm({ ...form, fullName: e.target.value })
+                  }
+                  placeholder="e.g. Haile Gebrselassie"
+                  className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-bold text-slate-900 focus:outline-none"
+                />
+              </div>
 
-                <div className="space-y-1">
-                  <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 px-2 block">
-                    Political Party
-                  </label>
-                  <input
-                    required
-                    value={form.party}
-                    onChange={(e) =>
-                      setForm({ ...form, party: e.target.value })
-                    }
-                    placeholder="e.g. Unity Alliance"
-                    className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-bold text-slate-900 focus:outline-none"
-                  />
-                </div>
+              <div className="space-y-1">
+                <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 px-2 block">
+                  Political Party
+                </label>
+                <input
+                  required
+                  value={form.party}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                    setForm({ ...form, party: e.target.value })
+                  }
+                  placeholder="e.g. Unity Alliance"
+                  className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-bold text-slate-900 focus:outline-none"
+                />
               </div>
 
               <div className="space-y-1">
@@ -520,7 +550,9 @@ export function CandidateManagementView({ setView, token, user }: Props) {
                 </label>
                 <textarea
                   value={form.bio}
-                  onChange={(e) => setForm({ ...form, bio: e.target.value })}
+                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                    setForm({ ...form, bio: e.target.value })
+                  }
                   placeholder="Contestant professional background and political focus..."
                   className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-medium text-slate-900 min-h-20 focus:outline-none"
                 />
@@ -531,52 +563,64 @@ export function CandidateManagementView({ setView, token, user }: Props) {
                   <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 px-2 block">
                     Region Jurisdiction
                   </label>
-                  <select
-                    value={form.regionId}
-                    onChange={(e) =>
-                      setForm({
-                        ...form,
-                        regionId: e.target.value,
-                        districtId: "",
-                      })
-                    }
-                    disabled={
-                      !scopeAccess.canPickRegion &&
-                      scopeAccess.regionId !== null
-                    }
-                    className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-bold text-slate-900 focus:outline-none"
-                  >
-                    <option value="">National Scope</option>
-                    {regions.map((rg) => (
-                      <option key={rg.id} value={rg.id}>
-                        {rg.name}
-                      </option>
-                    ))}
-                  </select>
+                  {regions.length > 0 ? (
+                    <select
+                      value={form.regionId}
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                        setForm({
+                          ...form,
+                          regionId: e.target.value,
+                          districtId: "",
+                        })
+                      }
+                      disabled={
+                        !scopeAccess.canPickRegion &&
+                        scopeAccess.regionId !== null
+                      }
+                      className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-bold text-slate-900 focus:outline-none"
+                    >
+                      <option value="">National Scope</option>
+                      {regions.map((rg) => (
+                        <option key={rg.id} value={rg.id}>
+                          {rg.name}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className="w-full px-6 py-4 bg-amber-50 border border-amber-100 rounded-[1.5rem] text-amber-700 text-sm font-semibold">
+                      No regions available. Create a region first.
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-1">
                   <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 px-2 block">
                     District Jurisdiction
                   </label>
-                  <select
-                    value={form.districtId}
-                    onChange={(e) =>
-                      setForm({ ...form, districtId: e.target.value })
-                    }
-                    disabled={
-                      !scopeAccess.canPickDistrict &&
-                      scopeAccess.districtId !== null
-                    }
-                    className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-bold text-slate-900 focus:outline-none"
-                  >
-                    <option value="">Regional/Global Scope</option>
-                    {filteredDistricts.map((ds) => (
-                      <option key={ds.id} value={ds.id}>
-                        {ds.name}
-                      </option>
-                    ))}
-                  </select>
+                  {filteredDistricts.length > 0 ? (
+                    <select
+                      value={form.districtId}
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                        setForm({ ...form, districtId: e.target.value })
+                      }
+                      disabled={
+                        !scopeAccess.canPickDistrict &&
+                        scopeAccess.districtId !== null
+                      }
+                      className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-bold text-slate-900 focus:outline-none"
+                    >
+                      <option value="">Regional/Global Scope</option>
+                      {filteredDistricts.map((ds) => (
+                        <option key={ds.id} value={ds.id}>
+                          {ds.name}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className="w-full px-6 py-4 bg-amber-50 border border-amber-100 rounded-[1.5rem] text-amber-700 text-sm font-semibold">
+                      No districts available. Create a district first.
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -586,7 +630,7 @@ export function CandidateManagementView({ setView, token, user }: Props) {
                 </label>
                 <input
                   value={form.photoUrl}
-                  onChange={(e) =>
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                     setForm({ ...form, photoUrl: e.target.value })
                   }
                   placeholder="https://images.unsplash.com/photo-..."
@@ -596,7 +640,7 @@ export function CandidateManagementView({ setView, token, user }: Props) {
 
               <button
                 type="submit"
-                disabled={submitting}
+                disabled={submitting || elections.length === 0}
                 className="w-full py-5 bg-slate-900 hover:bg-slate-800 text-white rounded-[1.75rem] text-[10px] font-black uppercase tracking-[0.3em] transition-all disabled:opacity-50"
               >
                 {modalMode === "create"

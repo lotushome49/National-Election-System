@@ -80,6 +80,9 @@ export default function AppShell() {
   const [authHydrated, setAuthHydrated] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
+  const isDev =
+    window.location.hostname === "localhost" ||
+    window.location.hostname === "127.0.0.1";
   const viewFromPath = (pathname: string) => {
     const normalizedPath = pathname.replace(/\/+$/, "") || "/";
 
@@ -427,10 +430,12 @@ export default function AppShell() {
   }, [token, role, user, sessionId]);
 
   useEffect(() => {
+    if (!authHydrated) return;
+
     const nextView = viewFromPath(location.pathname);
     // Defensive: only update state when the derived view actually changes.
     // Add debug logs to help reproduce back-button navigation problems.
-    if (process.env.NODE_ENV === "development") {
+    if (isDev) {
       // eslint-disable-next-line no-console
       console.debug(
         "AppShell: location.pathname ->",
@@ -449,12 +454,12 @@ export default function AppShell() {
     }
 
     if (location.pathname === "/") {
-      navigate("/login", { replace: true });
+      navigate(pathFromView(getHomeViewForRole(role)), { replace: true });
     }
-  }, [location.pathname, navigate]);
+  }, [authHydrated, location.pathname, navigate, role, view]);
 
   const setView = (nextView: string) => {
-    if (process.env.NODE_ENV === "development") {
+    if (isDev) {
       // eslint-disable-next-line no-console
       console.debug(
         "AppShell.setView ->",
@@ -913,7 +918,7 @@ export default function AppShell() {
           </AnimatePresence>
         </main>
       </div>
-      {process.env.NODE_ENV === "development" && (
+      {isDev && (
         <div className="fixed bottom-4 right-4 bg-white border border-slate-200 p-3 rounded-lg shadow-lg text-xs z-50">
           <div className="font-mono text-[11px] text-slate-700">
             path: {location.pathname}

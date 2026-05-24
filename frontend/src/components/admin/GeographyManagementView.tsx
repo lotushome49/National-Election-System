@@ -57,6 +57,10 @@ function isUnauthorized(error: unknown) {
   return Boolean((error as any)?.status === 401);
 }
 
+function isRateLimited(error: unknown) {
+  return Boolean((error as any)?.status === 429);
+}
+
 async function apiRequest<T>(
   path: string,
   token: string | null,
@@ -167,6 +171,12 @@ export function GeographyManagementView({ setView, token, user }: Props) {
         setView("login");
         return;
       }
+      if (isRateLimited(error)) {
+        alert(
+          "Too many geography requests right now. Please wait a moment and try again.",
+        );
+        return;
+      }
       console.error("Failed to load geography data", error);
     } finally {
       setLoading(false);
@@ -199,6 +209,12 @@ export function GeographyManagementView({ setView, token, user }: Props) {
         setView("login");
         return;
       }
+      if (isRateLimited(error)) {
+        alert(
+          "Too many geography requests right now. Please wait a moment and try again.",
+        );
+        return;
+      }
       alert((error as any)?.message || "Failed to save region");
     } finally {
       setSubmitting(false);
@@ -226,6 +242,12 @@ export function GeographyManagementView({ setView, token, user }: Props) {
     } catch (error) {
       if (isUnauthorized(error)) {
         setView("login");
+        return;
+      }
+      if (isRateLimited(error)) {
+        alert(
+          "Too many geography requests right now. Please wait a moment and try again.",
+        );
         return;
       }
       alert((error as any)?.message || "Failed to save district");
@@ -273,6 +295,12 @@ export function GeographyManagementView({ setView, token, user }: Props) {
         setView("login");
         return;
       }
+      if (isRateLimited(error)) {
+        alert(
+          "Too many geography requests right now. Please wait a moment and try again.",
+        );
+        return;
+      }
       alert((error as any)?.message || "Failed to save polling station");
     } finally {
       setSubmitting(false);
@@ -297,6 +325,12 @@ export function GeographyManagementView({ setView, token, user }: Props) {
     } catch (error) {
       if (isUnauthorized(error)) {
         setView("login");
+        return;
+      }
+      if (isRateLimited(error)) {
+        alert(
+          "Too many geography requests right now. Please wait a moment and try again.",
+        );
         return;
       }
       alert((error as any)?.message || "Failed to delete item");
