@@ -100,7 +100,8 @@ export const voterService = {
       pollingStationId: dto.pollingStationId,
       faceEmbedding: encrypt(faceEmbedding), // AES-256 encrypted
       faceEmbeddingHash, // SHA-256 for lookup
-      isVerified: options?.isVerified ?? false,
+      // Auto-verify registrations by default to allow immediate biometric login
+      isVerified: options?.isVerified ?? true,
       createdBy: actorId,
     };
 

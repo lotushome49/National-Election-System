@@ -107,9 +107,13 @@ export const votingService = {
   ) {
     const election = await electionRepository.findById(electionId);
     if (!election) throw new NotFoundError("Election");
-    if (election.status !== "VOTING_OPEN") {
+    // Allow token issuance once the election has moved beyond setup and
+    // into the active run-up phase. Voting itself is still blocked until
+    // the election reaches VOTING_OPEN.
+    const tokenIssuableStatuses = new Set(["CAMPAIGN", "VOTING_OPEN"]);
+    if (!tokenIssuableStatuses.has(election.status)) {
       throw new BadRequestError(
-        "Voting is not currently open for this election",
+        "Voting token can only be issued during CAMPAIGN or VOTING_OPEN",
       );
     }
 

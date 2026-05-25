@@ -106,6 +106,8 @@ export default function AppShell() {
 
     return trimmed;
   };
+  const isJwtAccessToken = (value: string | null) =>
+    Boolean(value && value.split(".").length === 3);
   const getAdminPathPrefix = () => {
     if (role === "SUPER_ADMIN") return "/super-admin";
     if (role === "ADMIN") return "/admin";
@@ -451,7 +453,12 @@ export default function AppShell() {
       const savedUser = localStorage.getItem("nehs_user");
       const savedSession = localStorage.getItem("nehs_sessionId");
 
-      if (savedToken) {
+      if (savedToken && !isJwtAccessToken(savedToken)) {
+        localStorage.removeItem("nehs_token");
+        localStorage.removeItem("nehs_role");
+        localStorage.removeItem("nehs_user");
+        localStorage.removeItem("nehs_sessionId");
+      } else if (savedToken) {
         setToken(savedToken);
         if (savedRole) setRole(savedRole as Role);
         if (savedUser) {

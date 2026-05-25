@@ -87,17 +87,43 @@ export const electionRepository = {
   findCurrentVotingOpen: async () => {
     const elections = await prisma.election.findMany({
       where: { deletedAt: null, status: "VOTING_OPEN" },
-      orderBy: { updatedAt: "desc" },
+      orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
       include: {
         candidates: { where: { deletedAt: null, status: "APPROVED" } },
       },
     });
 
-    return (
+    const primaryElection =
       elections.find((election) => election.candidates.length > 0) ??
       elections[0] ??
-      null
-    );
+      null;
+
+    if (!primaryElection) return null;
+
+    if (elections.length > 1) {
+      const otherIds = elections
+        .filter((election) => election.id !== primaryElection.id)
+        .map((election) => election.id);
+
+      if (otherIds.length > 0) {
+        console.warn(
+          `Multiple elections were marked VOTING_OPEN. Keeping ${primaryElection.id} active and closing ${otherIds.length} others.`,
+        );
+        await prisma.election.updateMany({
+          where: {
+            id: { in: otherIds },
+            deletedAt: null,
+            status: "VOTING_OPEN",
+          },
+          data: {
+            status: "VOTING_CLOSED",
+            updatedBy: "SYSTEM",
+          },
+        });
+      }
+    }
+
+    return primaryElection;
   },
 
   countApprovedCandidates: (electionId: string) =>

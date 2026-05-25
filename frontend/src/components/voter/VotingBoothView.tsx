@@ -26,6 +26,10 @@ function getErrorMessage(error: unknown, fallback: string) {
   return fallback;
 }
 
+function hasJwtAccessToken(token: unknown) {
+  return typeof token === "string" && token.split(".").length === 3;
+}
+
 function mapBallotCandidate(candidate: any): Candidate {
   return {
     id: candidate.id,
@@ -96,6 +100,14 @@ export function VotingBoothView({
 
   useEffect(() => {
     if (step !== 1) {
+      return;
+    }
+
+    if (!hasJwtAccessToken(token)) {
+      setCandidates([]);
+      setCandidateError(
+        "Please log in again. Voting requires the access token from login, not the voting token.",
+      );
       return;
     }
 
@@ -197,6 +209,13 @@ export function VotingBoothView({
 
     if (!votingToken.trim()) {
       alert("Enter your unique voting ID.");
+      return;
+    }
+
+    if (!hasJwtAccessToken(token)) {
+      alert(
+        "Please log in again. The vote request must use your login access token, not the voting token.",
+      );
       return;
     }
 

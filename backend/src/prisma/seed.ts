@@ -2,6 +2,7 @@ import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { v4 as uuidv4 } from "uuid";
 import { createDemoFaceEmbedding } from "../utils/faceRecognition";
+import { encrypt, sha256 } from "../utils/crypto";
 
 const prisma = new PrismaClient();
 
@@ -222,18 +223,35 @@ async function main() {
   const regionMap = {} as Record<string, string>; // code -> id
 
   for (const region of sampleRegions) {
-    const created = await prisma.region.upsert({
-      where: { code: region.code },
-      update: { name: region.name, description: region.description },
-      create: {
-        id: uuidv4(),
-        name: region.name,
-        code: region.code,
-        description: region.description,
-      },
+    // Avoid unique-constraint failures on `name` by checking for existing
+    // regions that match either `code` or `name` and updating if found.
+    const existing = await prisma.region.findFirst({
+      where: { OR: [{ code: region.code }, { name: region.name }] },
     });
-    regionMap[region.code] = created.id;
-    console.log(`  ✅ Region created: ${region.name}`);
+
+    if (existing) {
+      const updated = await prisma.region.update({
+        where: { id: existing.id },
+        data: {
+          name: region.name,
+          description: region.description,
+          code: region.code,
+        },
+      });
+      regionMap[region.code] = updated.id;
+      console.log(`  ✅ Region ensured (updated): ${updated.name}`);
+    } else {
+      const created = await prisma.region.create({
+        data: {
+          id: uuidv4(),
+          name: region.name,
+          code: region.code,
+          description: region.description,
+        },
+      });
+      regionMap[region.code] = created.id;
+      console.log(`  ✅ Region created: ${region.name}`);
+    }
   }
 
   const sampleDistricts = [
@@ -389,6 +407,65 @@ async function main() {
       },
     });
     console.log(`  ✅ Election created: ${election.title}`);
+  }
+
+  // ---------------------------------------------------------
+  // DEMO VOTERS (deterministic embeddings, auto-verified)
+  // ---------------------------------------------------------
+  try {
+    const demoCount = 50;
+    for (let i = 1; i <= demoCount; i++) {
+      const nationalId = `NID-${String(i).padStart(6, "0")}`;
+      const fullName = `Demo Voter ${String(i).padStart(3, "0")}`;
+      const dob = new Date("1990-01-01");
+      const regionId = regionMap["AA"];
+      const districtId = districtMap["BO"];
+
+      const rawEmbedding = createDemoFaceEmbedding(nationalId);
+      const encryptedEmbedding = encrypt(rawEmbedding);
+      const embeddingHash = sha256(rawEmbedding);
+
+      const voterId = `ET-${new Date().getFullYear()}-${String(i).padStart(4, "0")}-${nationalId.slice(-4)}`;
+
+      await prisma.voter.upsert({
+        where: { nationalId },
+        update: {
+          fullName,
+          dateOfBirth: dob,
+          gender: "OTHER",
+          phone: null,
+          email: null,
+          address: "Demo registration",
+          regionId,
+          districtId,
+          faceEmbedding: encryptedEmbedding,
+          faceEmbeddingHash: embeddingHash,
+          isVerified: true,
+          voterId,
+        },
+        create: {
+          id: uuidv4(),
+          voterId,
+          fullName,
+          nationalId,
+          dateOfBirth: dob,
+          gender: "OTHER",
+          phone: null,
+          email: null,
+          address: "Demo registration",
+          regionId,
+          districtId,
+          faceEmbedding: encryptedEmbedding,
+          faceEmbeddingHash: embeddingHash,
+          isVerified: true,
+          createdBy: null,
+          registrationDate: new Date(),
+        },
+      });
+      console.log(`  ✅ Demo voter created: ${voterId} (${nationalId})`);
+    }
+  } catch (e) {
+    console.warn("Failed creating demo voters:", e);
   }
 }
 

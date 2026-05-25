@@ -18,24 +18,30 @@ export function AdminOpenElectionView({ token, setView, t }: any) {
       );
 
       const loadedElections = Array.isArray(res.data) ? res.data : [];
-      const electionsWithCounts = await Promise.all(
-        loadedElections.map(async (election) => {
-          try {
-            const candidates = await fetchJson<{ data: any[] }>(
-              `/api/v1/candidates?page=1&limit=1&electionId=${encodeURIComponent(
-                election.id,
-              )}&status=APPROVED`,
-              { headers: { Authorization: `Bearer ${token}` } },
-            );
-            return {
-              ...election,
-              approvedCandidateCount: candidates?.data?.length ?? 0,
-            };
-          } catch {
-            return { ...election, approvedCandidateCount: 0 };
-          }
-        }),
+      const approvedCandidatesRes = await fetchJson<{ data: any[] }>(
+        "/api/v1/candidates?page=1&limit=1000&status=APPROVED",
+        { headers: { Authorization: `Bearer ${token}` } },
       );
+
+      const approvedCandidates = Array.isArray(approvedCandidatesRes.data)
+        ? approvedCandidatesRes.data
+        : [];
+      const approvedCountByElection = approvedCandidates.reduce(
+        (counts, candidate) => {
+          if (!candidate?.electionId) return counts;
+          counts.set(
+            candidate.electionId,
+            (counts.get(candidate.electionId) ?? 0) + 1,
+          );
+          return counts;
+        },
+        new Map<string, number>(),
+      );
+
+      const electionsWithCounts = loadedElections.map((election) => ({
+        ...election,
+        approvedCandidateCount: approvedCountByElection.get(election.id) ?? 0,
+      }));
 
       setElections(electionsWithCounts);
     } catch (e: any) {
@@ -122,8 +128,8 @@ export function AdminOpenElectionView({ token, setView, t }: any) {
             <option value="">Select an election</option>
             {elections.map((el) => (
               <option key={el.id} value={el.id}>
-                {el.title} - {el.status} -{" "}
-                {el.approvedCandidateCount ?? 0} approved candidate(s)
+                {el.title} - {el.status} - {el.approvedCandidateCount ?? 0}{" "}
+                approved candidate(s)
               </option>
             ))}
           </select>

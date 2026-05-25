@@ -25,6 +25,10 @@ function statusToPhase(status?: string | null) {
   return null;
 }
 
+function hasJwtAccessToken(token: unknown) {
+  return typeof token === "string" && token.split(".").length === 3;
+}
+
 function mapCandidate(candidate: any) {
   return {
     id: candidate.id,
@@ -92,7 +96,7 @@ export function VoterHub({
   }, [currentElectionId, currentElectionTitle, currentElectionStatus]);
 
   const hydrateElectionDetails = async (electionId: string) => {
-    if (!token || !electionId) {
+    if (!hasJwtAccessToken(token) || !electionId) {
       return null;
     }
 
@@ -192,7 +196,7 @@ export function VoterHub({
   };
 
   const loadVotingStatus = async () => {
-    if (!isVoter || !token) {
+    if (!isVoter || !hasJwtAccessToken(token)) {
       return;
     }
 
@@ -273,6 +277,13 @@ export function VoterHub({
       return;
     }
 
+    if (!hasJwtAccessToken(token)) {
+      setVoteError(
+        "Please log in again. Voting requires your login access token, not the voting token.",
+      );
+      return;
+    }
+
     setCastingVote(true);
     setVoteError(null);
     setVoteNotice(null);
@@ -349,7 +360,7 @@ export function VoterHub({
   ]);
 
   useEffect(() => {
-    if (currentElectionId || resolvedElectionId) {
+    if (currentElectionId || resolvedElectionId || !hasJwtAccessToken(token)) {
       return;
     }
 

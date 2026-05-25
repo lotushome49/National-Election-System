@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import {
   ChevronLeft,
   Plus,
@@ -144,6 +144,7 @@ function parseCandidateDocuments(
 
 export function CandidateManagementView({ setView, token, user }: Props) {
   const scopeAccess = getScopeAccessModel(user);
+  const initialLoadTokenRef = useRef<string | null>(null);
 
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [elections, setElections] = useState<Election[]>([]);
@@ -208,19 +209,6 @@ export function CandidateManagementView({ setView, token, user }: Props) {
       setElections(serverElections);
       setRegions(Array.isArray(regionsRes.data) ? regionsRes.data : []);
       setDistricts(Array.isArray(districtsRes.data) ? districtsRes.data : []);
-
-      if (!form.electionId) {
-        const defaultElection =
-          serverElections.find((election) =>
-            isNominationReady(election.status),
-          ) ??
-          serverElections[0] ??
-          null;
-
-        if (defaultElection) {
-          setForm((prev) => ({ ...prev, electionId: defaultElection.id }));
-        }
-      }
     } catch (err) {
       if (isUnauthorized(err)) {
         setView("login");
@@ -230,9 +218,12 @@ export function CandidateManagementView({ setView, token, user }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [token, form.electionId, setView]);
+  }, [token, setView]);
 
   useEffect(() => {
+    if (!token) return;
+    if (initialLoadTokenRef.current === token) return;
+    initialLoadTokenRef.current = token;
     void loadData();
   }, [loadData]);
 
