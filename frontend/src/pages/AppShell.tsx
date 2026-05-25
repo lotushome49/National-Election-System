@@ -41,7 +41,6 @@ import { CandidateDetailModal } from "../components/candidates/CandidateDetailMo
 import { GeographyManagementView } from "../components/admin/GeographyManagementView";
 import { MfaSecurityView } from "../components/admin/MfaSecurityView";
 import { PasswordResetView } from "../components/auth/PasswordResetView";
-import { SessionManagementView } from "../components/admin/SessionManagementView";
 import { ObserverEvidenceView } from "../components/observer/ObserverEvidenceView";
 import { ElectionManagementView } from "../components/admin/ElectionManagementView";
 import AdminOpenElectionView from "../components/admin/AdminOpenElectionView";
@@ -97,13 +96,6 @@ export default function AppShell() {
   const normalizePath = (pathname: string) => {
     const trimmed = pathname.replace(/\/+$/, "") || "/";
 
-    if (
-      trimmed === "/admin/voter-hub" ||
-      trimmed === "/super-admin/voter-hub"
-    ) {
-      return trimmed;
-    }
-
     if (trimmed.startsWith("/super-admin/")) {
       return trimmed.replace("/super-admin", "");
     }
@@ -148,14 +140,10 @@ export default function AppShell() {
         return "geography";
       case "/security":
         return "security";
-      case "/sessions":
-        return "sessions";
       case "/observer-evidence":
         return "observer-evidence";
       case "/voter-hub":
         return "voter-hub";
-      case "/admin/voter-hub":
-      case "/super-admin/voter-hub":
       case "/voter-hub-admin":
         return "voter-hub-admin";
       case "/registration":
@@ -199,8 +187,6 @@ export default function AppShell() {
         return adminPrefix ? `${adminPrefix}/geography` : "/geography";
       case "security":
         return adminPrefix ? `${adminPrefix}/security` : "/security";
-      case "sessions":
-        return adminPrefix ? `${adminPrefix}/sessions` : "/sessions";
       case "observer-evidence":
         return adminPrefix
           ? `${adminPrefix}/observer-evidence`
@@ -208,7 +194,7 @@ export default function AppShell() {
       case "voter-hub":
         return "/voter-hub";
       case "voter-hub-admin":
-        return adminPrefix ? `${adminPrefix}/voter-hub` : "/voter-hub-admin";
+        return "/voter-hub-admin";
       case "registration":
         return adminPrefix ? `${adminPrefix}/registration` : "/registration";
       case "voting-booth":
@@ -289,8 +275,6 @@ export default function AppShell() {
         );
       case "security":
         return isMfaEligibleRole(role);
-      case "sessions":
-        return Boolean(token);
       case "observer-evidence":
         return canManageObserverEvidence;
       case "voter-hub":
@@ -435,13 +419,6 @@ export default function AppShell() {
         view: "security",
       });
     }
-
-    items.push({
-      key: "sessions",
-      label: "Sessions",
-      icon: <Clock size={18} />,
-      view: "sessions",
-    });
 
     items.push({
       key: "help",
@@ -930,15 +907,6 @@ export default function AppShell() {
               )}
             {effectiveView === "security" && isMfaEligibleRole(role) && (
               <MfaSecurityView setView={setView} token={token} />
-            )}
-            {effectiveView === "sessions" && token && (
-              <SessionManagementView
-                token={token}
-                sessionId={sessionId}
-                setView={setView}
-                homeView={getHomeViewForRole(role)}
-                onSessionEnded={clearAuthState}
-              />
             )}
             {effectiveView === "observer-evidence" &&
               canManageObserverEvidence && (
