@@ -22,6 +22,60 @@ export const electionRepository = {
     return { data, total };
   },
 
+  findHistory: async (limit = 10) => {
+    const elections = await prisma.election.findMany({
+      where: {
+        deletedAt: null,
+        status: "RESULTS_DECLARED",
+      },
+      orderBy: [{ resultsAt: "desc" }, { updatedAt: "desc" }],
+      take: limit,
+      include: {
+        results: {
+          where: { isFinal: true },
+          orderBy: { totalVotes: "desc" },
+          include: {
+            candidate: {
+              select: {
+                fullName: true,
+                party: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const summaries = await Promise.all(
+      elections.map(async (election) => {
+        const turnout = await prisma.ballot.count({
+          where: { electionId: election.id },
+        });
+
+        const winner =
+          election.results.find((result) => result.isWinner) ??
+          election.results[0] ??
+          null;
+
+        const summaryDate = election.resultsAt ?? election.updatedAt;
+
+        return {
+          id: election.id,
+          title: election.title,
+          year: summaryDate.getFullYear().toString(),
+          date: summaryDate.toISOString().slice(0, 10),
+          turnout,
+          winner: winner?.candidate.fullName ?? "TBD",
+          percentage: `${Number(winner?.percentage ?? 0).toFixed(1)}%`,
+          status: "Certified",
+          winnerParty: winner?.candidate.party ?? null,
+        };
+      }),
+    );
+
+    return summaries;
+  },
+
   findById: (id: string) =>
     prisma.election.findFirst({
       where: { id, deletedAt: null },

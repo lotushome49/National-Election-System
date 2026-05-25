@@ -1,39 +1,57 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { motion } from "motion/react";
 import { Clock, FileCheck, Database, ChevronRight } from "lucide-react";
 import { cn } from "../../utils/cn";
+import { fetchJson } from "../../services/api/client";
+
+type HistoryItem = {
+  id: string;
+  title: string;
+  year: string;
+  date: string;
+  turnout: number;
+  winner: string;
+  percentage: string;
+  status: string;
+  winnerParty?: string | null;
+};
 
 export function HistoryView({ setView, role, homeView, t, i18n }: any) {
   const lang = i18n.language as "en" | "am";
-  const pastElections = [
-    {
-      year: "2021",
-      title: t("election_6_title"),
-      date: t("election_6_date"),
-      turnout: "38,234,910",
-      winner: "Prosperity Party",
-      percentage: "92.4%",
-      status: "Certified",
-    },
-    {
-      year: "2015",
-      title: t("election_5_title"),
-      date: t("election_5_date"),
-      turnout: "36,851,461",
-      winner: "EPRDF",
-      percentage: "100%",
-      status: "Archived",
-    },
-    {
-      year: "2010",
-      title: t("election_4_title"),
-      date: t("election_4_date"),
-      turnout: "29,832,190",
-      winner: "EPRDF",
-      percentage: "99.2%",
-      status: "Archived",
-    },
-  ];
+  const [pastElections, setPastElections] = useState<HistoryItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadHistory = async () => {
+      setLoading(true);
+      setError("");
+
+      try {
+        const payload = await fetchJson<{ data: HistoryItem[] }>(
+          "/api/v1/elections/history?limit=10",
+          {},
+        );
+
+        if (!mounted) return;
+        setPastElections(Array.isArray(payload?.data) ? payload.data : []);
+      } catch (err: any) {
+        if (!mounted) return;
+        setPastElections([]);
+        setError(err?.message ?? "Failed to load election history");
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+
+    void loadHistory();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   return (
     <motion.div
@@ -83,6 +101,24 @@ export function HistoryView({ setView, role, homeView, t, i18n }: any) {
       </div>
 
       <div className="space-y-8">
+        {loading && (
+          <div className="px-6 py-8 rounded-[2rem] border border-slate-100 bg-white text-slate-400 font-black uppercase tracking-[0.3em]">
+            Loading history...
+          </div>
+        )}
+
+        {!loading && error && (
+          <div className="px-6 py-8 rounded-[2rem] border border-rose-100 bg-rose-50 text-rose-700 text-sm font-semibold">
+            {error}
+          </div>
+        )}
+
+        {!loading && !error && pastElections.length === 0 && (
+          <div className="px-6 py-8 rounded-[2rem] border border-slate-100 bg-white text-sm text-slate-500">
+            No completed elections were found in the database.
+          </div>
+        )}
+
         {pastElections.map((election, i) => (
           <motion.div
             key={i}
@@ -117,7 +153,7 @@ export function HistoryView({ setView, role, homeView, t, i18n }: any) {
                   {t("voter_turnout")}
                 </p>
                 <p className="text-2xl font-display font-black text-slate-900 tracking-tighter">
-                  {election.turnout}
+                  {new Intl.NumberFormat().format(election.turnout)}
                 </p>
               </div>
               <div className="space-y-2">

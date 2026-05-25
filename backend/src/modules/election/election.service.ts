@@ -32,6 +32,10 @@ export const electionService = {
     return { data, meta: buildPaginationMeta(total, q.page, q.limit) };
   },
 
+  async getHistory(limit = 10) {
+    return electionRepository.findHistory(limit);
+  },
+
   async getById(id: string) {
     const election = await electionRepository.findById(id);
     if (!election) throw new NotFoundError("Election");

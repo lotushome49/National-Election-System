@@ -18,6 +18,18 @@ export const electionController = {
     }
   },
 
+  getHistory: async (_req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const limit = Number((_req.query?.limit as string | undefined) ?? 10);
+      const data = await electionService.getHistory(
+        Number.isFinite(limit) && limit > 0 ? Math.min(limit, 20) : 10,
+      );
+      sendSuccess(res, data, "Historical elections loaded");
+    } catch (err) {
+      next(err);
+    }
+  },
+
   getById: async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       sendSuccess(res, await electionService.getById(req.params.id));

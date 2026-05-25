@@ -50,6 +50,26 @@ async function fetchAuthed<T>(
   return unwrapApiData(payload);
 }
 
+async function fetchAuthedWithFallback<T>(
+  urls: string[],
+  token: string,
+  init?: RequestInit,
+): Promise<T> {
+  let lastError: unknown = null;
+
+  for (const url of urls) {
+    try {
+      return await fetchAuthed<T>(url, token, init);
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("Failed to load sessions");
+}
+
 function formatDate(value?: string | null) {
   if (!value) {
     return "Unknown";
@@ -81,8 +101,8 @@ export function SessionManagementView({
     setLoading(true);
     setError("");
     try {
-      const payload = await fetchAuthed<SessionRecord[]>(
-        "/api/auth/sessions",
+      const payload = await fetchAuthedWithFallback<SessionRecord[]>(
+        ["/api/v1/auth/sessions", "/api/auth/sessions"],
         token,
       );
       setSessions(payload);
@@ -105,9 +125,13 @@ export function SessionManagementView({
     setSubmitting(id);
     setError("");
     try {
-      await fetchAuthed(`/api/auth/sessions/${id}`, token, {
-        method: "DELETE",
-      });
+      await fetchAuthedWithFallback(
+        [`/api/v1/auth/sessions/${id}`, `/api/auth/sessions/${id}`],
+        token,
+        {
+          method: "DELETE",
+        },
+      );
 
       if (id === sessionId) {
         onSessionEnded();

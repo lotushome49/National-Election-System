@@ -13,6 +13,7 @@ import {
 const router = Router();
 
 router.get("/current/open", electionController.getCurrentOpen);
+router.get("/history", electionController.getHistory);
 
 router.use(authenticate);
 
