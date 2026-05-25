@@ -969,6 +969,13 @@ export default function AppShell() {
                   canRegister={checkPerm(role, "MANAGE_VOTERS")}
                   role={role}
                   token={token}
+                  onRegistered={({ token, role, sessionId, user }: any) => {
+                    setToken(token);
+                    setRole(role);
+                    setSessionId(sessionId);
+                    setUser(user);
+                    setView("voter-hub");
+                  }}
                   i18n={i18n}
                 />
               ) : (
@@ -1006,7 +1013,9 @@ export default function AppShell() {
                   setUser={setUser}
                   role={role}
                   t={t}
-                  currentElectionId={openElectionContext.id ?? currentElectionId}
+                  currentElectionId={
+                    openElectionContext.id ?? currentElectionId
+                  }
                 />
               ) : (
                 <div className="max-w-md mx-auto text-center py-20">

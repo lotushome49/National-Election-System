@@ -55,6 +55,7 @@
   "reg_success": "መለያ ተፈጥሯል",
   "reg_success_desc": "መረጃዎ በመዝገቡ ላይ ሰፍሯል። ለባዮሜትሪክ ምስል ቀረጻ ወደ ምርጫ ጣቢያ ይሂዱ።",
   "registration_closed": "ምዝገባ ተዘግቷል",
+  "registration_closed_desc": "ምዝገባ ተዘግቷል። ምርጫው በ{{phase}} ደረጃ ላይ ነው፣ ስለዚህ መራጮች ልዩ የመራጭ መለያቸውን በመጠቀም ድምጽ ሊሰጡ ይገባል።",
   "reg_not_active_desc": "የምርጫ ምዝገባ በአሁኑ ጊዜ ንቁ አይደለም። ምርጫው በ{{phase}} ደረጃ ላይ ነው።",
   "unauthorized_reg": "ፍቃድ የለዎትም: ሚናዎ የምዝገባ ፍቃድ የለውም።",
   "nid_hint": "ናሙና መታወቂያዎችን ይሞክሩ: NID-123456, NID-654321",
@@ -90,6 +91,7 @@
 
   "voter_hub": "የመራጮች ማዕከል",
   "voter_welcome": "እንኳን ደህና መጡ፣ {{name}}",
+  "voter_hub_title": "የመራጮች ማዕከል",
   "unique_voter_id": "የእርስዎ ልዩ የመራጭ መለያ",
   "status_verified": "የባዮሜትሪክ መረጃ ተረጋግጧል",
   "status_pending": "ድምጽ በመጠባበቅ ላይ",

@@ -423,6 +423,9 @@ export function VoterHub({
   const displayElectionPhase =
     statusToPhase(resolvedElectionStatus ?? currentElectionStatus) ??
     electionPhase;
+  const votingActive = displayElectionPhase === "VOTING";
+  const electionLabel =
+    resolvedElectionTitle ?? currentElectionTitle ?? currentElectionId ?? null;
 
   return (
     <motion.div
@@ -454,155 +457,276 @@ export function VoterHub({
         </div>
       </div>
 
-      <div className="bg-white border border-slate-100 p-10 rounded-3xl shadow-sm">
-        <h2 className="text-2xl font-black mb-4">{t("voter_hub_title")}</h2>
-        <p className="text-sm text-slate-500 mb-6">
-          Choose a candidate, verify with your voting key, and submit the
-          ballot.
-        </p>
-
-        <div className="mb-6 rounded-2xl border border-slate-100 bg-slate-50 p-5 flex flex-col gap-2">
-          <div className="flex items-center justify-between gap-4 flex-wrap">
-            <div>
-              <p className="text-[10px] uppercase tracking-[0.3em] text-slate-400 font-black">
-                Current election
-              </p>
-              <p className="font-black text-slate-900">
-                {resolvedElectionTitle ??
-                  currentElectionTitle ??
-                  currentElectionId ??
-                  (displayElectionPhase === "VOTING"
-                    ? "Voting is open"
-                    : "Election not selected")}
-              </p>
-              {(resolvedElectionStatus ?? currentElectionStatus) && (
-                <p className="text-xs text-slate-500 mt-1 uppercase tracking-[0.2em] font-semibold">
-                  Status:{" "}
-                  {(resolvedElectionStatus ??
-                    currentElectionStatus)!.replaceAll("_", " ")}
-                </p>
-              )}
+      <div className="bg-white border border-slate-100 p-8 lg:p-10 rounded-3xl shadow-sm">
+        <div className="grid gap-4 lg:grid-cols-[1.5fr_0.8fr] lg:items-start mb-8">
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-3 py-1 text-[9px] font-black uppercase tracking-[0.25em] text-white">
+                <ShieldCheck size={12} /> {t("secure_session")}
+              </span>
+              <span
+                className={cn(
+                  "inline-flex items-center gap-2 rounded-full px-3 py-1 text-[9px] font-black uppercase tracking-[0.25em]",
+                  votingActive
+                    ? "bg-emerald-50 text-emerald-700"
+                    : "bg-slate-100 text-slate-500",
+                )}
+              >
+                <CheckCircle2 size={12} />
+                {votingActive ? t("voting_open") : t("election_closed")}
+              </span>
             </div>
-            <span
-              className={cn(
-                "px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-[0.25em]",
-                displayElectionPhase === "VOTING"
-                  ? "bg-emerald-50 text-emerald-700"
-                  : "bg-slate-100 text-slate-500",
-              )}
-            >
-              {t(`phase_${displayElectionPhase.toLowerCase()}`)}
-            </span>
+
+            <div>
+              <h2 className="text-2xl lg:text-3xl font-black tracking-tight text-slate-900">
+                {t("voter_hub_title")}
+              </h2>
+              <p className="text-sm text-slate-500 mt-2 max-w-2xl">
+                Review the open election, use your unique voting ID, and submit
+                your ballot from the secure voting chamber.
+              </p>
+            </div>
           </div>
-          {!isVoter && (
-            <p className="text-xs text-slate-500">
-              Staff can review registration and issue voting tokens from the
-              voter registry.
+
+          <div className="rounded-3xl border border-slate-100 bg-slate-50 px-5 py-4">
+            <p className="text-[10px] uppercase tracking-[0.3em] text-slate-400 font-black">
+              Current election
             </p>
-          )}
+            <p className="mt-2 font-black text-slate-900 leading-tight">
+              {electionLabel ??
+                (votingActive ? "Voting is open" : "No active election")}
+            </p>
+            <p className="mt-1 text-xs uppercase tracking-[0.2em] font-semibold text-slate-500">
+              {resolvedElectionStatus ?? currentElectionStatus ?? "UNKNOWN"}
+            </p>
+          </div>
         </div>
 
-        <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-slate-400 uppercase tracking-wide">
-                {t("registration_status")}
-              </p>
-              <p className="font-bold mt-1">
-                {isVoter || user.registered
-                  ? t("registered")
-                  : t("not_registered")}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-slate-400 uppercase tracking-wide">
-                {t("voting_availability")}
-              </p>
-              <p className="font-bold mt-1">
-                {displayElectionPhase === "VOTING" ? t("open") : t("closed")}
-              </p>
-            </div>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 mb-8">
+          <div className="rounded-3xl border border-slate-100 bg-slate-50 p-5">
+            <p className="text-[10px] uppercase tracking-[0.3em] text-slate-400 font-black">
+              {t("unique_voter_id")}
+            </p>
+            <p className="mt-3 font-mono text-sm text-slate-900 break-all">
+              {user?.uniqueVoterId ?? user?.nationalId ?? user?.id ?? "Pending"}
+            </p>
           </div>
 
-          <div className="pt-4 border-t">
-            {displayHasVoted ? (
-              <div className="p-4 bg-emerald-50 rounded-lg">
-                <div className="flex items-center gap-3">
-                  <CheckCircle2 />
-                  <div>
-                    <p className="font-black">{t("vote_recorded")}</p>
-                    <p className="text-xs text-slate-500">
-                      {t("receipt_token")}
-                    </p>
-                    <p className="font-mono text-sm">
-                      {displayReceiptHash ?? "Receipt pending"}
-                    </p>
-                  </div>
-                </div>
-                <div className="mt-4 flex flex-wrap gap-3">
-                  <button
-                    onClick={() => setView("receipt-verification")}
-                    className="px-5 py-3 rounded-xl font-black uppercase tracking-widest text-[9px] bg-slate-900 text-white"
-                  >
-                    <Search size={14} className="inline-block mr-2" /> Verify
-                    Receipt
-                  </button>
-                </div>
+          <div className="rounded-3xl border border-slate-100 bg-slate-50 p-5">
+            <p className="text-[10px] uppercase tracking-[0.3em] text-slate-400 font-black">
+              {t("voting_availability")}
+            </p>
+            <p className="mt-3 font-black text-slate-900">
+              {votingActive ? t("open") : t("closed")}
+            </p>
+          </div>
+
+          <div className="rounded-3xl border border-slate-100 bg-slate-50 p-5">
+            <p className="text-[10px] uppercase tracking-[0.3em] text-slate-400 font-black">
+              {t("registration_status")}
+            </p>
+            <p className="mt-3 font-black text-slate-900">
+              {isVoter || user.registered
+                ? t("registered")
+                : t("not_registered")}
+            </p>
+          </div>
+        </div>
+
+        {!isVoter && (
+          <div className="mb-8 rounded-2xl border border-slate-100 bg-white p-4">
+            <div className="flex items-center gap-3">
+              <Users className="text-slate-500" />
+              <div>
+                <p className="font-black text-slate-900">Staff access</p>
+                <p className="text-xs text-slate-500">
+                  Use the voter registry to verify citizens and issue unique
+                  voting IDs.
+                </p>
               </div>
-            ) : !isVoter ? (
-              <div className="p-4 bg-slate-50 rounded-lg border border-slate-100">
-                <div className="flex items-center gap-3">
-                  <Users className="text-slate-500" />
-                  <div>
-                    <p className="font-black text-slate-900">Staff access</p>
-                    <p className="text-xs text-slate-500">
-                      Use the voter registry to verify citizens and issue
-                      tokens.
-                    </p>
-                  </div>
-                </div>
-                <div className="mt-4 flex flex-wrap gap-3">
-                  <button
-                    onClick={() => setView("voters")}
-                    className="px-5 py-3 rounded-xl font-black uppercase tracking-widest text-[9px] bg-slate-900 text-white"
-                  >
-                    Open Voter Registry
-                  </button>
-                </div>
+            </div>
+          </div>
+        )}
+
+        <div className="grid gap-6 lg:grid-cols-[1.4fr_0.9fr] items-start">
+          <div className="rounded-[2rem] border border-slate-100 bg-slate-50 p-6 lg:p-8">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.3em] text-slate-400 font-black">
+                  {votingActive ? "Cast your ballot" : "Voting status"}
+                </p>
+                <h3 className="mt-2 text-xl font-black text-slate-900">
+                  {displayHasVoted ? "Ballot recorded" : "Ready to vote"}
+                </h3>
+                <p className="mt-2 text-sm text-slate-500 max-w-xl">
+                  {displayHasVoted
+                    ? "Your ballot has been anchored. Use the receipt to verify it later."
+                    : "Select a candidate, then use your unique voting ID to unlock the ballot."}
+                </p>
               </div>
-            ) : (
-              <div className="flex items-center gap-4">
+              <div
+                className={cn(
+                  "rounded-2xl px-4 py-2 text-[9px] font-black uppercase tracking-[0.25em]",
+                  votingActive
+                    ? "bg-emerald-50 text-emerald-700"
+                    : "bg-slate-200 text-slate-500",
+                )}
+              >
+                {t(`phase_${displayElectionPhase.toLowerCase()}`)}
+              </div>
+            </div>
+
+            <div className="mt-6 flex flex-wrap gap-3">
+              {displayHasVoted ? (
                 <button
-                  onClick={() =>
-                    displayElectionPhase === "VOTING" &&
-                    setView("voting-booth")
-                  }
-                  disabled={displayElectionPhase !== "VOTING"}
+                  onClick={() => setView("receipt-verification")}
+                  className="px-5 py-3 rounded-2xl font-black uppercase tracking-[0.2em] text-[10px] bg-slate-900 text-white"
+                >
+                  <Search size={14} className="inline-block mr-2" /> Verify
+                  Receipt
+                </button>
+              ) : (
+                <button
+                  onClick={() => votingActive && setView("voting-booth")}
+                  disabled={!votingActive}
                   className={cn(
-                    "px-6 py-3 rounded-xl font-black",
-                    displayElectionPhase === "VOTING"
+                    "px-5 py-3 rounded-2xl font-black uppercase tracking-[0.2em] text-[10px]",
+                    votingActive
                       ? "bg-slate-900 text-white"
                       : "bg-slate-200 text-slate-400",
                   )}
                 >
-                  <Vote className="inline-block mr-2" />{" "}
-                  {displayElectionPhase === "VOTING"
-                    ? t("cast_ballot")
-                    : t("voting_inactive")}
+                  <Vote className="inline-block mr-2" />
+                  {votingActive ? t("cast_ballot") : t("voting_inactive")}
                 </button>
-                <button
-                  onClick={() => setView("receipt-verification")}
-                  className="px-6 py-3 rounded-xl font-black border border-slate-200 text-slate-600 hover:text-slate-900 hover:border-slate-400"
-                >
-                  <Search size={14} className="inline-block mr-2" />
-                  Verify Receipt
-                </button>
-                <div className="text-sm text-slate-500">
-                  <Clock size={16} /> {t("polls_close_in_short")}
+              )}
+
+              <button
+                onClick={() => setView("receipt-verification")}
+                className="px-5 py-3 rounded-2xl font-black uppercase tracking-[0.2em] text-[10px] border border-slate-200 text-slate-600 hover:text-slate-900 hover:border-slate-400"
+              >
+                <Search size={14} className="inline-block mr-2" />
+                Verify Receipt
+              </button>
+            </div>
+          </div>
+
+          <div className="rounded-[2rem] border border-slate-100 bg-white p-6 lg:p-8 shadow-sm">
+            <p className="text-[10px] uppercase tracking-[0.3em] text-slate-400 font-black">
+              Unique ID workflow
+            </p>
+            <div className="mt-4 space-y-4">
+              <div className="flex gap-3 items-start">
+                <div className="w-7 h-7 rounded-full bg-slate-900 text-white text-[10px] font-black flex items-center justify-center shrink-0">
+                  1
+                </div>
+                <div>
+                  <p className="font-black text-slate-900">Receive ID</p>
+                  <p className="text-sm text-slate-500">
+                    Staff issues a unique voting ID after verification.
+                  </p>
                 </div>
               </div>
-            )}
+              <div className="flex gap-3 items-start">
+                <div className="w-7 h-7 rounded-full bg-slate-900 text-white text-[10px] font-black flex items-center justify-center shrink-0">
+                  2
+                </div>
+                <div>
+                  <p className="font-black text-slate-900">Select ballot</p>
+                  <p className="text-sm text-slate-500">
+                    Choose a candidate from the approved election list.
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-3 items-start">
+                <div className="w-7 h-7 rounded-full bg-slate-900 text-white text-[10px] font-black flex items-center justify-center shrink-0">
+                  3
+                </div>
+                <div>
+                  <p className="font-black text-slate-900">Submit safely</p>
+                  <p className="text-sm text-slate-500">
+                    Enter the one-time ID to cast and anchor the vote.
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
+        </div>
+
+        <div className="pt-4 border-t mt-8">
+          {displayHasVoted ? (
+            <div className="p-4 bg-emerald-50 rounded-lg">
+              <div className="flex items-center gap-3">
+                <CheckCircle2 />
+                <div>
+                  <p className="font-black">{t("vote_recorded")}</p>
+                  <p className="text-xs text-slate-500">{t("receipt_token")}</p>
+                  <p className="font-mono text-sm">
+                    {displayReceiptHash ?? "Receipt pending"}
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-3">
+                <button
+                  onClick={() => setView("receipt-verification")}
+                  className="px-5 py-3 rounded-xl font-black uppercase tracking-widest text-[9px] bg-slate-900 text-white"
+                >
+                  <Search size={14} className="inline-block mr-2" /> Verify
+                  Receipt
+                </button>
+              </div>
+            </div>
+          ) : !isVoter ? (
+            <div className="p-4 bg-slate-50 rounded-lg border border-slate-100">
+              <div className="flex items-center gap-3">
+                <Users className="text-slate-500" />
+                <div>
+                  <p className="font-black text-slate-900">Staff access</p>
+                  <p className="text-xs text-slate-500">
+                    Use the voter registry to verify citizens and issue tokens.
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-3">
+                <button
+                  onClick={() => setView("voters")}
+                  className="px-5 py-3 rounded-xl font-black uppercase tracking-widest text-[9px] bg-slate-900 text-white"
+                >
+                  Open Voter Registry
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() =>
+                  displayElectionPhase === "VOTING" && setView("voting-booth")
+                }
+                disabled={displayElectionPhase !== "VOTING"}
+                className={cn(
+                  "px-6 py-3 rounded-xl font-black",
+                  displayElectionPhase === "VOTING"
+                    ? "bg-slate-900 text-white"
+                    : "bg-slate-200 text-slate-400",
+                )}
+              >
+                <Vote className="inline-block mr-2" />{" "}
+                {displayElectionPhase === "VOTING"
+                  ? t("cast_ballot")
+                  : t("voting_inactive")}
+              </button>
+              <button
+                onClick={() => setView("receipt-verification")}
+                className="px-6 py-3 rounded-xl font-black border border-slate-200 text-slate-600 hover:text-slate-900 hover:border-slate-400"
+              >
+                <Search size={14} className="inline-block mr-2" />
+                Verify Receipt
+              </button>
+              <div className="text-sm text-slate-500">
+                <Clock size={16} /> {t("polls_close_in_short")}
+              </div>
+            </div>
+          )}
         </div>
 
         {candidatePreview.length > 0 && (
@@ -643,15 +767,13 @@ export function VoterHub({
                   </div>
                   <button
                     onClick={() => {
-                      if (displayElectionPhase !== "VOTING" || !isVoter)
-                        return;
+                      if (displayElectionPhase !== "VOTING" || !isVoter) return;
                       setVotingCandidate(candidate);
                       setVoteError(null);
                       setVoteNotice(null);
                     }}
                     disabled={
-                      displayElectionPhase !== "VOTING" ||
-                      votingStatus.hasVoted
+                      displayElectionPhase !== "VOTING" || votingStatus.hasVoted
                     }
                     className={cn(
                       "mt-auto w-full rounded-2xl px-4 py-3 font-black uppercase tracking-[0.25em] text-[10px] inline-flex items-center justify-center gap-2 transition-all",
@@ -680,13 +802,13 @@ export function VoterHub({
               <div className="flex items-start justify-between gap-4 mb-4">
                 <div>
                   <p className="text-[10px] uppercase tracking-[0.3em] text-slate-400 font-black">
-                    Confirm ballot
+                    Unique voting ID
                   </p>
                   <h4 className="text-2xl font-black text-slate-900 mt-1">
                     {votingCandidate.fullName}
                   </h4>
                   <p className="text-sm text-slate-500 mt-1">
-                    Enter the voting key issued by staff to cast this ballot.
+                    Enter the one-time ID issued by staff to unlock this ballot.
                   </p>
                 </div>
                 <button
@@ -701,16 +823,16 @@ export function VoterHub({
                 <ShieldCheck size={18} className="text-slate-900" />
                 <div>
                   <p className="text-xs font-black uppercase tracking-widest text-slate-500">
-                    Key required
+                    ID required
                   </p>
                   <p className="text-sm text-slate-700">
-                    The server validates the key before the vote is counted.
+                    The server validates the ID before the vote is counted.
                   </p>
                 </div>
               </div>
 
               <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">
-                Voting key
+                Unique voting ID
               </label>
               <input
                 autoFocus
@@ -718,7 +840,7 @@ export function VoterHub({
                 value={votingKey}
                 onChange={(event) => setVotingKey(event.target.value)}
                 className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-slate-900 font-mono outline-none focus:border-slate-900"
-                placeholder="Enter key from staff"
+                placeholder="Enter your unique voting ID"
               />
 
               {voteError && (

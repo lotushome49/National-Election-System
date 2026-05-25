@@ -20,6 +20,7 @@ export function RegistrationView({
   role,
   token,
   i18n,
+  onRegistered,
 }: any) {
   const lang = i18n.language as "en" | "am";
   const isAuthorized = role === "NONE" || canRegister;
@@ -450,6 +451,34 @@ export function RegistrationView({
               expiresAt: result.votingTokenExpiresAt || null,
             }),
           );
+        }
+
+        if (result?.accessToken) {
+          localStorage.setItem("nehs_token", result.accessToken);
+          localStorage.setItem("nehs_role", "VOTER");
+          if (result?.sessionId) {
+            localStorage.setItem("nehs_sessionId", result.sessionId);
+          }
+
+          const voterUser = {
+            id: result.id,
+            voterId: result.voterId,
+            fullName: formData.fullName,
+            nationalId: formData.nationalId,
+            uniqueVoterId: result.voterId,
+            registered: true,
+            hasVoted: false,
+            receiptToken: null,
+            role: "VOTER",
+          };
+
+          localStorage.setItem("nehs_user", JSON.stringify(voterUser));
+          onRegistered?.({
+            token: result.accessToken,
+            role: "VOTER",
+            sessionId: result.sessionId ?? null,
+            user: voterUser,
+          });
         }
       } catch {
         // Ignore storage failures in restricted environments.

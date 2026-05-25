@@ -44,7 +44,6 @@ export function VotingBoothView({
   token,
   setView,
   setUser,
-  role,
   t,
   currentElectionId,
 }: any) {
@@ -197,7 +196,7 @@ export function VotingBoothView({
     }
 
     if (!votingToken.trim()) {
-      alert("Enter the voting token issued by staff.");
+      alert("Enter your unique voting ID.");
       return;
     }
 
@@ -277,7 +276,7 @@ export function VotingBoothView({
                     key={i}
                     className={cn(
                       "w-12 h-1.5 rounded-full transition-all duration-500",
-                      i === step + 1 ? "bg-slate-900 w-20" : "bg-slate-200",
+                      i === step ? "bg-slate-900 w-20" : "bg-slate-200",
                     )}
                   />
                 ))}
@@ -458,7 +457,7 @@ export function VotingBoothView({
                   key={i}
                   className={cn(
                     "w-12 h-1.5 rounded-full transition-all duration-500",
-                    i === step + 1 ? "bg-slate-900 w-20" : "bg-slate-200",
+                    i === step ? "bg-slate-900 w-20" : "bg-slate-200",
                   )}
                 />
               ))}
@@ -496,16 +495,16 @@ export function VotingBoothView({
 
             <div className="space-y-1 mb-12 text-left">
               <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 px-2 block">
-                Voting Token
+                Unique Voting ID
               </label>
               <input
                 value={votingToken}
                 onChange={(event) => setVotingToken(event.target.value)}
-                placeholder="Enter the token issued by staff"
+                placeholder="Enter your unique voting ID"
                 className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-mono text-slate-900 focus:outline-none"
               />
               <p className="text-[10px] text-slate-400 font-medium uppercase tracking-widest px-2">
-                The token is required once and will be verified by the backend.
+                This ID is required once and will be verified by the backend.
               </p>
             </div>
 

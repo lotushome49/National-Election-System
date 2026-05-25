@@ -2,8 +2,10 @@ import { Request, Response, NextFunction } from "express";
 import { authService } from "./auth.service";
 import { voterService } from "../voter/voter.service";
 import { votingService } from "../voting/voting.service";
+import { authRepository } from "./auth.repository";
 import { sendCreated, sendSuccess } from "../../utils/response";
 import type { AuthRequest } from "../../types";
+import { signAccessToken } from "../../utils/jwt";
 
 export const authController = {
   login: async (req: Request, res: Response, next: NextFunction) => {
@@ -39,10 +41,24 @@ export const authController = {
         req.ip ?? "",
       );
 
+      const session = await authRepository.createSession({
+        userId: result.id,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        ipAddress: req.ip ?? "",
+      });
+
+      const accessToken = signAccessToken({
+        sub: result.id,
+        sid: session.id,
+        role: "VOTER",
+      });
+
       sendCreated(
         res,
         {
           ...result,
+          accessToken,
+          sessionId: session.id,
           votingToken: tokenIssue?.token ?? null,
           votingElectionId: tokenIssue?.electionId ?? null,
           votingTokenExpiresAt: tokenIssue?.expiresAt ?? null,
