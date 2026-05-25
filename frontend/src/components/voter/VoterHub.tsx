@@ -1,6 +1,5 @@
-import React from "react";
-import { useEffect, useState } from "react";
-import { motion } from "motion/react";
+import React, { useEffect, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
 import {
   Vote,
   CheckCircle2,
@@ -75,6 +74,7 @@ export function VoterHub({
   const [castingVote, setCastingVote] = useState(false);
   const [voteError, setVoteError] = useState<string | null>(null);
   const [voteNotice, setVoteNotice] = useState<string | null>(null);
+  const [candidateListVisible, setCandidateListVisible] = useState(false);
   const isVoter = role === "VOTER";
 
   useEffect(() => {
@@ -116,14 +116,10 @@ export function VoterHub({
   };
 
   const loadCurrentOpenElection = async () => {
-    if (!token) {
-      return null;
-    }
-
     try {
       const response = await fetchJson<{ data: any }>(
         "/api/v1/elections/current/open",
-        { headers: { Authorization: `Bearer ${token}` } },
+        {},
       );
 
       const election = response?.data ?? null;
@@ -140,10 +136,6 @@ export function VoterHub({
   };
 
   const resolveActiveElection = async () => {
-    if (!token) {
-      return null;
-    }
-
     const currentOpenElection = await loadCurrentOpenElection();
     if (currentOpenElection?.id) {
       return currentOpenElection;
@@ -152,7 +144,7 @@ export function VoterHub({
     try {
       const response = await fetchJson<{ data: any[] }>(
         "/api/v1/elections?page=1&limit=100&status=VOTING_OPEN",
-        { headers: { Authorization: `Bearer ${token}` } },
+        {},
       );
 
       const openElection = Array.isArray(response?.data)
@@ -172,7 +164,7 @@ export function VoterHub({
     try {
       const response = await fetchJson<{ data: any[] }>(
         "/api/v1/elections?page=1&limit=100",
-        { headers: { Authorization: `Bearer ${token}` } },
+        {},
       );
 
       const fallbackElection =
@@ -225,64 +217,24 @@ export function VoterHub({
   };
 
   const loadCandidates = async () => {
-    if (!token) {
-      setCandidatePreview([]);
-      return;
-    }
-
     try {
-      const ballot = await fetchJson<{
-        data: { election?: any; candidates?: any[] };
-      }>("/api/v1/voting/active-ballot", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      let electionId = currentElectionId ?? resolvedElectionId;
+      let electionTitle = currentElectionTitle ?? resolvedElectionTitle;
+      let electionStatus = currentElectionStatus ?? resolvedElectionStatus;
 
-      const election = ballot?.data?.election ?? null;
-      if (election?.id) {
-        setResolvedElectionId(election.id);
-        setResolvedElectionTitle(election.title ?? null);
-        setResolvedElectionStatus(election.status ?? null);
+      if (!electionId) {
+        const activeElection = await resolveActiveElection();
+        electionId = activeElection?.id ?? null;
+        electionTitle = activeElection?.title ?? electionTitle ?? null;
+        electionStatus = activeElection?.status ?? electionStatus ?? null;
       }
 
-      setCandidatePreview(
-        Array.isArray(ballot?.data?.candidates)
-          ? ballot.data.candidates.map(mapCandidate)
-          : [],
-      );
-      return;
-    } catch {
-      // Fall back to older endpoints for staff/admin preview access.
-    }
-
-    let electionId = currentElectionId ?? resolvedElectionId;
-    let electionTitle = currentElectionTitle ?? resolvedElectionTitle;
-    let electionStatus = currentElectionStatus ?? resolvedElectionStatus;
-
-    if (!electionId) {
-      const activeElection = await resolveActiveElection();
-      electionId = activeElection?.id ?? null;
-      electionTitle = activeElection?.title ?? electionTitle ?? null;
-      electionStatus = activeElection?.status ?? electionStatus ?? null;
-    }
-
-    try {
       const response = await fetchJson<{ data: any[] }>(
         electionId
-          ? `/api/v1/candidates?page=1&limit=100&electionId=${encodeURIComponent(electionId)}&status=APPROVED`
-          : "/api/v1/candidates?page=1&limit=100&status=APPROVED",
-        { headers: { Authorization: `Bearer ${token}` } },
+          ? `/api/v1/candidates/public?page=1&limit=100&electionId=${encodeURIComponent(electionId)}&status=APPROVED`
+          : "/api/v1/candidates/public?page=1&limit=100&status=APPROVED",
+        {},
       );
-
-      const firstCandidateElectionId =
-        !electionId && Array.isArray(response.data)
-          ? (response.data.find((candidate) => candidate?.electionId)
-              ?.electionId ?? null)
-          : null;
-
-      if (!electionId && firstCandidateElectionId) {
-        electionId = firstCandidateElectionId;
-        await hydrateElectionDetails(firstCandidateElectionId);
-      }
 
       setCandidatePreview(
         Array.isArray(response.data)
@@ -486,8 +438,8 @@ export function VoterHub({
                 {t("voter_hub_title")}
               </h2>
               <p className="text-sm text-slate-500 mt-2 max-w-2xl">
-                Review the open election, use your unique voting ID, and submit
-                your ballot from the voting booth.
+                Open the candidate list, then choose a candidate and enter your
+                unique voting ID to cast the ballot.
               </p>
             </div>
           </div>
@@ -532,7 +484,7 @@ export function VoterHub({
               {t("registration_status")}
             </p>
             <p className="mt-3 font-black text-slate-900">
-              {isVoter || user.registered
+              {isVoter || user?.registered
                 ? t("registered")
                 : t("not_registered")}
             </p>
@@ -554,249 +506,103 @@ export function VoterHub({
           </div>
         )}
 
-        <div className="grid gap-6 lg:grid-cols-[1.4fr_0.9fr] items-start">
-          <div className="rounded-[2rem] border border-slate-100 bg-slate-50 p-6 lg:p-8">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-[10px] uppercase tracking-[0.3em] text-slate-400 font-black">
-                  {votingActive ? "Cast your ballot" : "Voting status"}
-                </p>
-                <h3 className="mt-2 text-xl font-black text-slate-900">
-                  {displayHasVoted ? "Ballot recorded" : "Ready to vote"}
-                </h3>
-                <p className="mt-2 text-sm text-slate-500 max-w-xl">
-                  {displayHasVoted
-                    ? "Your ballot has been anchored. Use the receipt to verify it later."
-                    : "Select a candidate, then use your unique voting ID to unlock the ballot."}
-                </p>
-              </div>
-              <div
-                className={cn(
-                  "rounded-2xl px-4 py-2 text-[9px] font-black uppercase tracking-[0.25em]",
-                  votingActive
-                    ? "bg-emerald-50 text-emerald-700"
-                    : "bg-slate-200 text-slate-500",
-                )}
-              >
-                {t(`phase_${displayElectionPhase.toLowerCase()}`)}
-              </div>
+        <div className="rounded-[2rem] border border-slate-100 bg-slate-50 p-6 lg:p-8">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.3em] text-slate-400 font-black">
+                Candidates
+              </p>
+              <h3 className="mt-2 text-xl font-black text-slate-900">
+                {candidateListVisible ? "Candidate list" : "Hidden"}
+              </h3>
             </div>
-
-            <div className="mt-6 flex flex-wrap gap-3">
-              {displayHasVoted ? (
-                <button
-                  onClick={() => setView("receipt-verification")}
-                  className="px-5 py-3 rounded-2xl font-black uppercase tracking-[0.2em] text-[10px] bg-slate-900 text-white"
-                >
-                  <Search size={14} className="inline-block mr-2" /> Verify
-                  Receipt
-                </button>
-              ) : (
-                <button
-                  onClick={() => votingActive && setView("voting-booth")}
-                  disabled={!votingActive}
-                  className={cn(
-                    "px-5 py-3 rounded-2xl font-black uppercase tracking-[0.2em] text-[10px]",
-                    votingActive
-                      ? "bg-slate-900 text-white"
-                      : "bg-slate-200 text-slate-400",
-                  )}
-                >
-                  <Vote className="inline-block mr-2" />
-                  {votingActive ? t("cast_ballot") : t("voting_inactive")}
-                </button>
-              )}
-
-              <button
-                onClick={() => setView("receipt-verification")}
-                className="px-5 py-3 rounded-2xl font-black uppercase tracking-[0.2em] text-[10px] border border-slate-200 text-slate-600 hover:text-slate-900 hover:border-slate-400"
-              >
-                <Search size={14} className="inline-block mr-2" />
-                Verify Receipt
-              </button>
-            </div>
+            <button
+              onClick={() => setCandidateListVisible((prev) => !prev)}
+              className="px-5 py-3 rounded-2xl bg-slate-900 text-white font-black uppercase tracking-[0.2em] text-[10px]"
+            >
+              <Vote className="inline-block mr-2" />
+              {candidateListVisible ? "Hide candidates" : "View candidates"}
+            </button>
           </div>
 
-          <div className="rounded-[2rem] border border-slate-100 bg-white p-6 lg:p-8 shadow-sm">
-            <p className="text-[10px] uppercase tracking-[0.3em] text-slate-400 font-black">
-              Unique ID workflow
-            </p>
-            <div className="mt-4 space-y-4">
-              <div className="flex gap-3 items-start">
-                <div className="w-7 h-7 rounded-full bg-slate-900 text-white text-[10px] font-black flex items-center justify-center shrink-0">
-                  1
-                </div>
-                <div>
-                  <p className="font-black text-slate-900">Receive ID</p>
-                  <p className="text-sm text-slate-500">
-                    Staff issues a unique voting ID after verification.
-                  </p>
-                </div>
-              </div>
-              <div className="flex gap-3 items-start">
-                <div className="w-7 h-7 rounded-full bg-slate-900 text-white text-[10px] font-black flex items-center justify-center shrink-0">
-                  2
-                </div>
-                <div>
-                  <p className="font-black text-slate-900">Select ballot</p>
-                  <p className="text-sm text-slate-500">
-                    Choose a candidate from the approved election list.
-                  </p>
-                </div>
-              </div>
-              <div className="flex gap-3 items-start">
-                <div className="w-7 h-7 rounded-full bg-slate-900 text-white text-[10px] font-black flex items-center justify-center shrink-0">
-                  3
-                </div>
-                <div>
-                  <p className="font-black text-slate-900">Submit safely</p>
-                  <p className="text-sm text-slate-500">
-                    Enter the one-time ID to cast and anchor the vote.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="pt-4 border-t mt-8">
-          {displayHasVoted ? (
-            <div className="p-4 bg-emerald-50 rounded-lg">
-              <div className="flex items-center gap-3">
-                <CheckCircle2 />
-                <div>
-                  <p className="font-black">{t("vote_recorded")}</p>
-                  <p className="text-xs text-slate-500">{t("receipt_token")}</p>
-                  <p className="font-mono text-sm">
-                    {displayReceiptHash ?? "Receipt pending"}
-                  </p>
-                </div>
-              </div>
-              <div className="mt-4 flex flex-wrap gap-3">
-                <button
-                  onClick={() => setView("receipt-verification")}
-                  className="px-5 py-3 rounded-xl font-black uppercase tracking-widest text-[9px] bg-slate-900 text-white"
-                >
-                  <Search size={14} className="inline-block mr-2" /> Verify
-                  Receipt
-                </button>
-              </div>
-            </div>
-          ) : !isVoter ? (
-            <div className="p-4 bg-slate-50 rounded-lg border border-slate-100">
-              <div className="flex items-center gap-3">
-                <Users className="text-slate-500" />
-                <div>
-                  <p className="font-black text-slate-900">Staff access</p>
-                  <p className="text-xs text-slate-500">
-                    Use the voter registry to verify citizens and issue tokens.
-                  </p>
-                </div>
-              </div>
-              <div className="mt-4 flex flex-wrap gap-3">
-                <button
-                  onClick={() => setView("voters")}
-                  className="px-5 py-3 rounded-xl font-black uppercase tracking-widest text-[9px] bg-slate-900 text-white"
-                >
-                  Open Voter Registry
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="flex items-center gap-4">
-              <button
-                onClick={() =>
-                  displayElectionPhase === "VOTING" && setView("voting-booth")
-                }
-                disabled={displayElectionPhase !== "VOTING"}
-                className={cn(
-                  "px-6 py-3 rounded-xl font-black",
-                  displayElectionPhase === "VOTING"
-                    ? "bg-slate-900 text-white"
-                    : "bg-slate-200 text-slate-400",
-                )}
+          <AnimatePresence>
+            {candidateListVisible && candidatePreview.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 8 }}
+                className="mt-8 border-t border-slate-100 pt-6"
               >
-                <Vote className="inline-block mr-2" />{" "}
-                {displayElectionPhase === "VOTING"
-                  ? t("cast_ballot")
-                  : t("voting_inactive")}
-              </button>
-              <button
-                onClick={() => setView("receipt-verification")}
-                className="px-6 py-3 rounded-xl font-black border border-slate-200 text-slate-600 hover:text-slate-900 hover:border-slate-400"
-              >
-                <Search size={14} className="inline-block mr-2" />
-                Verify Receipt
-              </button>
-              <div className="text-sm text-slate-500">
-                <Clock size={16} /> {t("polls_close_in_short")}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {candidatePreview.length > 0 && (
-          <div className="mt-8 border-t border-slate-100 pt-6">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <p className="text-[10px] uppercase tracking-[0.3em] text-slate-400 font-black">
-                  Approved candidates
-                </p>
-                <h3 className="text-lg font-black text-slate-900 mt-1">
-                  Vote directly from the command center
-                </h3>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-              {candidatePreview.map((candidate) => (
-                <div
-                  key={candidate.id}
-                  className="rounded-3xl border border-slate-100 bg-slate-50 p-5 flex flex-col gap-4"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-xl bg-white border border-slate-100 flex items-center justify-center text-xl shrink-0">
-                      {candidate.symbol}
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {candidatePreview.map((candidate) => (
+                    <div
+                      key={candidate.id}
+                      className="rounded-3xl border border-slate-100 bg-white p-5 flex flex-col gap-4 shadow-sm"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-xl shrink-0">
+                          {candidate.symbol}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-black text-slate-900 truncate">
+                            {candidate.fullName}
+                          </p>
+                          <p className="text-[10px] uppercase tracking-widest text-slate-400 truncate">
+                            {candidate.party}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.25em] text-slate-400 font-black">
+                        <span>Approved</span>
+                        <span>{candidate.votes ?? 0} votes</span>
+                      </div>
+                      <button
+                        onClick={() => {
+                          if (displayElectionPhase !== "VOTING" || !isVoter)
+                            return;
+                          setVotingCandidate(candidate);
+                          setVoteError(null);
+                          setVoteNotice(null);
+                        }}
+                        disabled={
+                          displayElectionPhase !== "VOTING" ||
+                          votingStatus.hasVoted
+                        }
+                        className={cn(
+                          "mt-auto w-full rounded-2xl px-4 py-3 font-black uppercase tracking-[0.25em] text-[10px] inline-flex items-center justify-center gap-2 transition-all",
+                          displayElectionPhase === "VOTING" &&
+                            !votingStatus.hasVoted
+                            ? "bg-slate-900 text-white hover:bg-slate-800"
+                            : "bg-slate-200 text-slate-400 cursor-not-allowed",
+                        )}
+                      >
+                        <Vote size={14} />
+                        {votingStatus.hasVoted ? "Vote recorded" : "Vote"}
+                      </button>
                     </div>
-                    <div className="min-w-0">
-                      <p className="font-black text-slate-900 truncate">
-                        {candidate.fullName}
-                      </p>
-                      <p className="text-[10px] uppercase tracking-widest text-slate-400 truncate">
-                        {candidate.party}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.25em] text-slate-400 font-black">
-                    <span>Approved</span>
-                    <span>{candidate.votes ?? 0} votes</span>
-                  </div>
-                  <button
-                    onClick={() => {
-                      if (displayElectionPhase !== "VOTING" || !isVoter) return;
-                      setVotingCandidate(candidate);
-                      setVoteError(null);
-                      setVoteNotice(null);
-                    }}
-                    disabled={
-                      displayElectionPhase !== "VOTING" || votingStatus.hasVoted
-                    }
-                    className={cn(
-                      "mt-auto w-full rounded-2xl px-4 py-3 font-black uppercase tracking-[0.25em] text-[10px] inline-flex items-center justify-center gap-2 transition-all",
-                      displayElectionPhase === "VOTING" &&
-                        !votingStatus.hasVoted
-                        ? "bg-slate-900 text-white hover:bg-slate-800"
-                        : "bg-slate-200 text-slate-400 cursor-not-allowed",
-                    )}
-                  >
-                    <Vote size={14} />
-                    {votingStatus.hasVoted ? "Vote recorded" : "Vote now"}
-                  </button>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
+              </motion.div>
+            )}
+            {candidateListVisible && candidatePreview.length === 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 8 }}
+                className="mt-8 border-t border-slate-100 pt-6"
+              >
+                <div className="rounded-3xl border border-dashed border-slate-200 bg-white px-6 py-8 text-center">
+                  <p className="text-sm font-black text-slate-900">
+                    No candidates loaded yet.
+                  </p>
+                  <p className="mt-2 text-sm text-slate-500">
+                    Try again in a moment, or open the current election first.
+                  </p>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
 
         {votingCandidate && (
           <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">

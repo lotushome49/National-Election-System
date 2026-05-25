@@ -533,7 +533,7 @@ export default function AppShell() {
       try {
         const response = await fetchJson<{ data: any }>(
           "/api/v1/elections/current/open",
-          { headers: { Authorization: `Bearer ${token}` } },
+          {},
         );
 
         const election = response?.data ?? null;

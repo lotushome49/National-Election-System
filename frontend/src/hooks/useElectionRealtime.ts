@@ -200,9 +200,7 @@ export function useElectionRealtime(token: string | null, enabled = true) {
         try {
           const response = await fetchJson<{ data: ElectionSummary }>(
             "/api/v1/elections/current/open",
-            {
-              headers: { Authorization: `Bearer ${effectiveToken}` },
-            },
+            {},
           );
 
           const activeElection = response?.data ?? null;

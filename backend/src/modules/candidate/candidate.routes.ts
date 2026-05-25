@@ -13,6 +13,12 @@ import { candidateUpload } from "./candidate.upload";
 
 const router = Router();
 
+router.get(
+  "/public",
+  validate(candidateQuerySchema, "query"),
+  candidateController.list,
+);
+
 router.use(authenticate);
 
 // Any authenticated user can list/view candidates, but scoped roles stay in-region.

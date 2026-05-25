@@ -12,6 +12,8 @@ import {
 
 const router = Router();
 
+router.get("/current/open", electionController.getCurrentOpen);
+
 router.use(authenticate);
 
 router.get(
@@ -19,7 +21,6 @@ router.get(
   validate(electionQuerySchema, "query"),
   electionController.list,
 );
-router.get("/current/open", electionController.getCurrentOpen);
 router.get("/:id", electionController.getById);
 router.post(
   "/",
