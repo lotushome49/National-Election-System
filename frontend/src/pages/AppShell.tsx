@@ -477,7 +477,25 @@ export default function AppShell() {
       if (savedToken) {
         setToken(savedToken);
         if (savedRole) setRole(savedRole as Role);
-        if (savedUser) setUser(JSON.parse(savedUser));
+        if (savedUser) {
+          const parsedUser = JSON.parse(savedUser);
+          const normalizedUser = {
+            ...parsedUser,
+            uniqueVoterId:
+              parsedUser?.uniqueVoterId ??
+              parsedUser?.voterId ??
+              parsedUser?.id ??
+              null,
+          };
+
+          if (!normalizedUser.uniqueVoterId && normalizedUser.nationalId) {
+            delete normalizedUser.nationalId;
+          }
+
+          setUser({
+            ...normalizedUser,
+          });
+        }
         if (savedSession) setSessionId(savedSession);
       }
     } catch (e) {

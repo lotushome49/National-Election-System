@@ -292,6 +292,13 @@ export function LoginView({
 
   const finalizeLogin = (payload: any, fallbackRole: Role) => {
     const resolvedRole = (payload.user?.role ?? fallbackRole) as Role;
+    const uniqueVoterId =
+      payload.user?.uniqueVoterId ??
+      payload.user?.voterId ??
+      payload.voter?.voterId ??
+      payload.user?.username ??
+      payload.user?.id ??
+      null;
     setRole(resolvedRole);
     setToken(payload.token ?? payload.accessToken ?? null);
     setSessionId(payload.sessionId ?? payload.user?.sessionId ?? null);
@@ -299,6 +306,8 @@ export function LoginView({
       payload.user
         ? {
             ...payload.user,
+            uniqueVoterId,
+            voterId: payload.user?.voterId ?? payload.voter?.voterId ?? null,
             sessionId: payload.sessionId ?? payload.user?.sessionId ?? null,
           }
         : null,

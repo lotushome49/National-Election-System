@@ -60,7 +60,6 @@ export function ReceiptVerificationView({
         data: { verified: boolean; electionId: string; castAt: string };
       }>(`/api/v1/voting/verify/${encodeURIComponent(receiptHash.trim())}`, {
         method: "GET",
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       });
       setResult(response.data);
     } catch (err) {

@@ -91,11 +91,11 @@ function getStoredMfaState(user: any): StoredMfaState {
 export const authService = {
   async login(dto: LoginDto, ip: string) {
     // Trim and normalize identifier to improve login matching
-    const identifier = typeof dto.username === "string" ? dto.username.trim() : "";
-    console.log('Login identifier:', identifier);
+    const identifier =
+      typeof dto.username === "string" ? dto.username.trim() : "";
+    console.log("Login identifier:", identifier);
     const user = await authRepository.findByLoginIdentifier(identifier);
-    console.log('User found:', user ? user.id : null);
-
+    console.log("User found:", user ? user.id : null);
 
     if (!user) {
       throw new UnauthorizedError("Invalid credentials");
@@ -243,13 +243,16 @@ export const authService = {
       ipAddress: ip,
     });
 
-    const accessToken = signAccessToken({
-      sub: voter.id,
-      sid: session.id,
-      role: "VOTER",
-      regionId: voter.regionId ?? undefined,
-      districtId: voter.districtId ?? undefined,
-    });
+    const accessToken = signAccessToken(
+      {
+        sub: voter.id,
+        sid: session.id,
+        role: "VOTER",
+        regionId: voter.regionId ?? undefined,
+        districtId: voter.districtId ?? undefined,
+      },
+      session.id,
+    );
 
     await auditService.log({
       userId: voter.id,
@@ -579,7 +582,7 @@ export const authService = {
       districtId: user.assignedDistrictId ?? undefined,
     };
 
-    const accessToken = signAccessToken(tokenPayload);
+    const accessToken = signAccessToken(tokenPayload, sessionId);
     const refreshToken = signRefreshToken(tokenPayload);
 
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);

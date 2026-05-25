@@ -426,6 +426,10 @@ export function VoterHub({
   const votingActive = displayElectionPhase === "VOTING";
   const electionLabel =
     resolvedElectionTitle ?? currentElectionTitle ?? currentElectionId ?? null;
+  const electionStatusLabel =
+    resolvedElectionStatus ??
+    currentElectionStatus ??
+    (votingActive ? "VOTING_OPEN" : null);
 
   return (
     <motion.div
@@ -483,7 +487,7 @@ export function VoterHub({
               </h2>
               <p className="text-sm text-slate-500 mt-2 max-w-2xl">
                 Review the open election, use your unique voting ID, and submit
-                your ballot from the secure voting chamber.
+                your ballot from the voting booth.
               </p>
             </div>
           </div>
@@ -497,7 +501,9 @@ export function VoterHub({
                 (votingActive ? "Voting is open" : "No active election")}
             </p>
             <p className="mt-1 text-xs uppercase tracking-[0.2em] font-semibold text-slate-500">
-              {resolvedElectionStatus ?? currentElectionStatus ?? "UNKNOWN"}
+              {electionStatusLabel
+                ? electionStatusLabel.replaceAll("_", " ")
+                : t("voting_open")}
             </p>
           </div>
         </div>
@@ -508,7 +514,7 @@ export function VoterHub({
               {t("unique_voter_id")}
             </p>
             <p className="mt-3 font-mono text-sm text-slate-900 break-all">
-              {user?.uniqueVoterId ?? user?.nationalId ?? user?.id ?? "Pending"}
+              {user?.uniqueVoterId ?? user?.voterId ?? user?.id ?? "Pending"}
             </p>
           </div>
 

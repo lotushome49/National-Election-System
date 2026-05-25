@@ -9,6 +9,9 @@ import { z } from "zod";
 
 const router = Router();
 
+// Public receipt verification should work without a bearer token.
+router.get("/verify/:receiptHash", votingController.verifyReceipt);
+
 router.use(authenticate);
 
 // Voter self status for the voter hub
@@ -39,8 +42,5 @@ router.post(
   validate(castVoteSchema),
   votingController.castVote,
 );
-
-// Anyone can verify a receipt (no sensitive data returned)
-router.get("/verify/:receiptHash", votingController.verifyReceipt);
 
 export default router;

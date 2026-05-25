@@ -47,11 +47,14 @@ export const authController = {
         ipAddress: req.ip ?? "",
       });
 
-      const accessToken = signAccessToken({
-        sub: result.id,
-        sid: session.id,
-        role: "VOTER",
-      });
+      const accessToken = signAccessToken(
+        {
+          sub: result.id,
+          sid: session.id,
+          role: "VOTER",
+        },
+        session.id,
+      );
 
       sendCreated(
         res,
