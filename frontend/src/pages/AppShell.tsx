@@ -228,6 +228,7 @@ export default function AppShell() {
     "password-reset",
     "help",
     "history",
+    "registration",
     "receipt-verification",
   ]);
 
@@ -266,7 +267,7 @@ export default function AppShell() {
       case "voter-hub":
         return role === "VOTER" || checkPerm(role, "MANAGE_VOTERS");
       case "registration":
-        return Boolean(token);
+        return true;
       case "voting-booth":
         return Boolean(token);
       case "receipt-verification":

@@ -27,6 +27,7 @@ export function VoterHub({
     receiptHash: user?.receiptToken ?? null,
     castAt: null,
   });
+  const [candidatePreview, setCandidatePreview] = useState<any[]>([]);
   const isVoter = role === "VOTER";
 
   useEffect(() => {
@@ -65,6 +66,47 @@ export function VoterHub({
       mounted = false;
     };
   }, [isVoter, token, user]);
+
+  useEffect(() => {
+    if (!currentElectionId || !token) {
+      setCandidatePreview([]);
+      return;
+    }
+
+    let mounted = true;
+    const loadCandidates = async () => {
+      try {
+        const response = await fetchJson<{ data: any[] }>(
+          `/api/v1/candidates?page=1&limit=100&electionId=${encodeURIComponent(currentElectionId)}&status=APPROVED`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+
+        if (!mounted) return;
+
+        setCandidatePreview(
+          Array.isArray(response.data)
+            ? response.data
+                .map((candidate) => ({
+                  id: candidate.id,
+                  fullName: candidate.fullName,
+                  party: candidate.party,
+                  symbol: candidate.symbol || candidate.partyCode || "🗳️",
+                }))
+                .slice(0, 6)
+            : [],
+        );
+      } catch {
+        if (!mounted) return;
+        setCandidatePreview([]);
+      }
+    };
+
+    void loadCandidates();
+
+    return () => {
+      mounted = false;
+    };
+  }, [currentElectionId, token]);
 
   const displayHasVoted = votingStatus.hasVoted;
   const displayReceiptHash = votingStatus.receiptHash;
@@ -231,6 +273,52 @@ export function VoterHub({
             )}
           </div>
         </div>
+
+        {candidatePreview.length > 0 && (
+          <div className="mt-8 border-t border-slate-100 pt-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.3em] text-slate-400 font-black">
+                  Approved candidates
+                </p>
+                <h3 className="text-lg font-black text-slate-900 mt-1">
+                  Ready for the ballot
+                </h3>
+              </div>
+              {isVoter && electionPhase === "VOTING" && (
+                <button
+                  onClick={() => setView("voting-booth")}
+                  className="px-4 py-2 rounded-xl bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest"
+                >
+                  Open voting booth
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {candidatePreview.map((candidate) => (
+                <div
+                  key={candidate.id}
+                  className="rounded-2xl border border-slate-100 bg-slate-50 p-4"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-xl bg-white border border-slate-100 flex items-center justify-center text-xl">
+                      {candidate.symbol}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-black text-slate-900 truncate">
+                        {candidate.fullName}
+                      </p>
+                      <p className="text-[10px] uppercase tracking-widest text-slate-400 truncate">
+                        {candidate.party}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="mt-6 text-right">
           <button

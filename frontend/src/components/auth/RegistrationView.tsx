@@ -440,6 +440,17 @@ export function RegistrationView({
             faceEmbedding,
           }),
         );
+
+        if (result?.votingToken) {
+          localStorage.setItem(
+            "nehs_pending_voting_token",
+            JSON.stringify({
+              token: result.votingToken,
+              electionId: result.votingElectionId || null,
+              expiresAt: result.votingTokenExpiresAt || null,
+            }),
+          );
+        }
       } catch {
         // Ignore storage failures in restricted environments.
       }
@@ -550,6 +561,20 @@ export function RegistrationView({
             </p>
             <p className="text-xl font-mono font-bold text-election-dark tracking-tighter">
               {successData.voterId}
+            </p>
+          </div>
+        )}
+
+        {successData?.votingToken && (
+          <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-xl mb-8 text-left">
+            <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-widest mb-1">
+              System-issued voting token
+            </p>
+            <p className="text-xs text-emerald-800 mb-2">
+              This token can be used in the voting booth once the voter logs in.
+            </p>
+            <p className="text-sm font-mono font-bold text-emerald-900 break-all">
+              {successData.votingToken}
             </p>
           </div>
         )}

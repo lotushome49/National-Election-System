@@ -417,6 +417,15 @@ export function LoginView({
           </button>
         </div>
 
+        <div className="absolute top-8 left-8">
+          <button
+            onClick={() => setView("registration")}
+            className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 transition-all text-[10px] font-black uppercase tracking-widest text-white border border-slate-900"
+          >
+            Register
+          </button>
+        </div>
+
         <div className="text-center mb-14 relative z-10">
           <div className="bg-slate-900 w-24 h-24 rounded-[2rem] flex items-center justify-center mx-auto mb-8 shadow-2xl shadow-slate-200">
             <ShieldCheck className="text-white" size={44} />

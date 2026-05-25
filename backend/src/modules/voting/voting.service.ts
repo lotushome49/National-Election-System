@@ -16,6 +16,48 @@ import { socketEmit } from "../../configs/socket";
 import type { CastVoteDto } from "./voting.schema";
 
 export const votingService = {
+  // ── Issue a system-generated token for a newly registered voter ───────────
+  async issueSystemToken(voterId: string, ip: string) {
+    const election =
+      (await electionRepository.findCurrentForRegistration()) ??
+      (await electionRepository.findCurrentVotingOpen());
+    if (!election) return null;
+
+    const voter = await voterRepository.findById(voterId);
+    if (!voter) throw new NotFoundError("Voter");
+    if (!(voter as any).isVerified)
+      throw new ForbiddenError("Voter is not verified");
+
+    const existing = await votingRepository.findToken(election.id, voterId);
+    if (existing) {
+      return null;
+    }
+
+    const rawToken = generateSecureToken(48);
+    const tokenHash = sha256(rawToken);
+    const expiresAt = new Date(Date.now() + 4 * 60 * 60 * 1000);
+
+    await votingRepository.createToken({
+      id: uuidv4(),
+      electionId: election.id,
+      voterId,
+      tokenHash,
+      expiresAt,
+      ipAddress: ip,
+    });
+
+    await auditService.log({
+      userId: voterId,
+      action: "TOKEN_ISSUED",
+      entity: "VotingToken",
+      entityId: voterId,
+      description: `System token issued for election ${election.id}`,
+      ipAddress: ip,
+    });
+
+    return { token: rawToken, expiresAt, electionId: election.id };
+  },
+
   // ── Current voter voting status ───────────────────────────────────────────
   async getMyStatus(voterId: string) {
     const voter = await voterRepository.findById(voterId);

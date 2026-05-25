@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { authService } from "./auth.service";
 import { voterService } from "../voter/voter.service";
+import { votingService } from "../voting/voting.service";
 import { sendCreated, sendSuccess } from "../../utils/response";
 import type { AuthRequest } from "../../types";
 
@@ -32,7 +33,22 @@ export const authController = {
         undefined,
         { isVerified: true },
       );
-      sendCreated(res, result, "Voter registered successfully");
+
+      const tokenIssue = await votingService.issueSystemToken(
+        result.id,
+        req.ip ?? "",
+      );
+
+      sendCreated(
+        res,
+        {
+          ...result,
+          votingToken: tokenIssue?.token ?? null,
+          votingElectionId: tokenIssue?.electionId ?? null,
+          votingTokenExpiresAt: tokenIssue?.expiresAt ?? null,
+        },
+        "Voter registered successfully",
+      );
     } catch (err) {
       next(err);
     }

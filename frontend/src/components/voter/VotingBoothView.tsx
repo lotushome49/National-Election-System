@@ -50,6 +50,27 @@ export function VotingBoothView({
   const [receiptHash, setReceiptHash] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
 
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("nehs_pending_voting_token");
+      if (!stored) return;
+
+      const parsed = JSON.parse(stored) as {
+        token?: string;
+        electionId?: string | null;
+      };
+
+      if (
+        parsed?.token &&
+        (!parsed.electionId || parsed.electionId === currentElectionId)
+      ) {
+        setVotingToken(parsed.token);
+      }
+    } catch {
+      // ignore malformed localStorage data
+    }
+  }, [currentElectionId]);
+
   const selectedCandidate = useMemo(
     () => candidates.find((candidate) => candidate.id === selected) ?? null,
     [candidates, selected],
@@ -182,6 +203,11 @@ export function VotingBoothView({
       setReceiptHash(nextReceiptHash);
       if (nextReceiptHash) {
         sessionStorage.setItem("nehs_last_receipt_hash", nextReceiptHash);
+        try {
+          localStorage.removeItem("nehs_pending_voting_token");
+        } catch {
+          // ignore storage failures
+        }
       }
       setUser((prev: any) => ({
         ...prev,
