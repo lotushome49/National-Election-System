@@ -49,6 +49,7 @@ export const voterService = {
 
     // Deduplication checks
     const byNationalId = await voterRepository.findByNationalId(dto.nationalId);
+    const isUpdatingExistingVoter = Boolean(byNationalId);
 
     // 1:N fuzzy biometric check
     const allVoters = await prisma.voter.findMany({
@@ -57,6 +58,10 @@ export const voterService = {
     });
 
     for (const v of allVoters) {
+      if (isUpdatingExistingVoter && v.id === byNationalId?.id) {
+        continue;
+      }
+
       if (v.faceEmbedding) {
         try {
           const decrypted = decrypt(v.faceEmbedding);
@@ -76,8 +81,13 @@ export const voterService = {
     const faceEmbeddingHash = sha256(faceEmbedding);
     const byBiometric =
       await voterRepository.findByBiometricHash(faceEmbeddingHash);
-    if (byBiometric)
+    if (byBiometric) {
+      if (!requester || byBiometric.id === byNationalId?.id) {
+        return { id: byBiometric.id, voterId: byBiometric.voterId };
+      }
+
       throw new ConflictError("Face embedding data already registered");
+    }
 
     assertUserScopeAccess(
       requester,
@@ -85,9 +95,7 @@ export const voterService = {
       "voters",
     );
 
-    const voterData = {
-      id: uuidv4(),
-      voterId: `ET-${Date.now()}`,
+    const voterBaseData = {
       fullName: dto.fullName,
       nationalId: dto.nationalId,
       dateOfBirth: new Date(dto.dateOfBirth),
@@ -106,8 +114,12 @@ export const voterService = {
     };
 
     const voter = byNationalId
-      ? await voterRepository.update(byNationalId.id, voterData)
-      : await voterRepository.create(voterData);
+      ? await voterRepository.update(byNationalId.id, voterBaseData)
+      : await voterRepository.create({
+          id: uuidv4(),
+          voterId: `ET-${Date.now()}`,
+          ...voterBaseData,
+        });
 
     await auditService.log({
       userId: actorId,

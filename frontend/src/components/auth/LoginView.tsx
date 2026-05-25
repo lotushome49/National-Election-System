@@ -132,6 +132,24 @@ export function LoginView({
     return createDemoFaceEmbedding(normalized || String(hash));
   };
 
+  const toBase64Url = (value: string) =>
+    btoa(value).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+
+  const createDemoJwtAccessToken = (nationalId: string, voterId: string) => {
+    const header = toBase64Url(JSON.stringify({ alg: "none", typ: "JWT" }));
+    const payload = toBase64Url(
+      JSON.stringify({
+        sub: voterId,
+        nationalId,
+        role: "VOTER",
+        demo: true,
+        iat: Math.floor(Date.now() / 1000),
+      }),
+    );
+
+    return `${header}.${payload}.demo`;
+  };
+
   const getDemoFaceEmbedding = () => {
     try {
       const raw = localStorage.getItem("demoVoterAuth");
@@ -167,6 +185,66 @@ export function LoginView({
     }
   };
 
+  const getStoredVotingToken = () => {
+    try {
+      const raw = localStorage.getItem("nehs_pending_voting_token");
+      if (!raw) return null;
+
+      return JSON.parse(raw) as {
+        token?: string;
+        electionId?: string | null;
+        expiresAt?: string | null;
+      };
+    } catch {
+      return null;
+    }
+  };
+
+  const tryLocalVotingTokenLogin = () => {
+    const profile = getDemoVoterProfile();
+    const storedToken = getStoredVotingToken();
+
+    if (!profile?.nationalId || !profile?.voterId) {
+      return null;
+    }
+
+    const enteredNationalId = voterTokenAuth.nationalId.trim();
+    const enteredVotingToken = voterTokenAuth.votingToken.trim();
+
+    if (profile.nationalId !== enteredNationalId) {
+      throw new Error("National ID does not match the registration record.");
+    }
+
+    if (
+      enteredVotingToken !== profile.voterId &&
+      storedToken?.token !== enteredVotingToken
+    ) {
+      throw new Error("Voting token does not match the registration record.");
+    }
+
+    return {
+      token: createDemoJwtAccessToken(profile.nationalId, profile.voterId),
+      accessToken: createDemoJwtAccessToken(
+        profile.nationalId,
+        profile.voterId,
+      ),
+      sessionId: `demo-session-${profile.voterId}`,
+      user: {
+        id: profile.voterId,
+        fullName: profile.fullName || "Demo Voter",
+        username: profile.nationalId,
+        nationalId: profile.nationalId,
+        uniqueVoterId: profile.voterId,
+        role: "VOTER",
+        sessionId: `demo-session-${profile.voterId}`,
+      },
+      voter: {
+        voterId: profile.voterId,
+        nationalId: profile.nationalId,
+      },
+    };
+  };
+
   const tryDemoLogin = (capturedEmbedding: string) => {
     const profile = getDemoVoterProfile();
     if (!profile?.faceEmbedding) return null;
@@ -179,9 +257,13 @@ export function LoginView({
     if (score < 85) return null;
 
     const demoVoterId = profile.voterId || `DEMO-${Date.now()}`;
+    const accessToken = createDemoJwtAccessToken(
+      profile.nationalId || demoVoterId,
+      demoVoterId,
+    );
     return {
-      token: `demo-token-${demoVoterId}`,
-      accessToken: `demo-token-${demoVoterId}`,
+      token: accessToken,
+      accessToken,
       sessionId: `demo-session-${demoVoterId}`,
       matchScore: score,
       user: {
@@ -386,6 +468,20 @@ export function LoginView({
     setLoading(true);
     setError("");
     try {
+      const hasLocalDemoRegistration = Boolean(
+        getDemoVoterProfile()?.nationalId,
+      );
+
+      if (hasLocalDemoRegistration) {
+        const localDemoLogin = tryLocalVotingTokenLogin();
+        if (localDemoLogin) {
+          finalizeLogin(unwrapApiData(localDemoLogin), "VOTER");
+          return;
+        }
+
+        return;
+      }
+
       const response = await postWithFallback(
         ["/api/v1/auth/login/voter-token", "/api/auth/login/voter-token"],
         {

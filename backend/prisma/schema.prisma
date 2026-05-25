@@ -479,7 +479,7 @@ model Candidate {
   updatedAt    DateTime        @updatedAt @map("updated_at")
   createdBy    String?         @db.VarChar(36) @map("created_by")
   updatedBy    String?         @db.VarChar(36) @map("updated_by")
-  deletedAt    DateTime?       @map("deleted_at")
+  voteCount   Int      @default(0)
   documentsJson String?        @db.Text @map("documents_json")
 
   election     Election        @relation(fields: [electionId], references: [id])

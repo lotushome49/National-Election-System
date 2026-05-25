@@ -30,6 +30,22 @@ function hasJwtAccessToken(token: unknown) {
   return typeof token === "string" && token.split(".").length === 3;
 }
 
+function isDemoAccessToken(token: unknown) {
+  if (!hasJwtAccessToken(token)) return false;
+
+  try {
+    const payloadPart = String(token).split(".")[1];
+    if (!payloadPart) return false;
+
+    const normalized = payloadPart.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+    const payload = JSON.parse(atob(padded));
+    return Boolean(payload?.demo);
+  } catch {
+    return false;
+  }
+}
+
 function mapBallotCandidate(candidate: any): Candidate {
   return {
     id: candidate.id,
@@ -51,6 +67,16 @@ export function VotingBoothView({
   t,
   currentElectionId,
 }: any) {
+  const isDemoSession = useMemo(() => {
+    if (isDemoAccessToken(token)) return true;
+
+    try {
+      return Boolean(localStorage.getItem("demoVoterAuth"));
+    } catch {
+      return false;
+    }
+  }, [token]);
+
   const [selected, setSelected] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [step, setStep] = useState(1);
@@ -103,12 +129,67 @@ export function VotingBoothView({
       return;
     }
 
+    if (isDemoSession) {
+      try {
+        console.debug(
+          "[VotingBooth] demo session detected for candidate load",
+          {
+            hasToken: Boolean(token),
+            tokenMasked: token ? `***${String(token).slice(-6)}` : null,
+            isDemoToken: isDemoAccessToken(token),
+          },
+        );
+      } catch {
+        // ignore
+      }
+
+      const demoCandidates: Candidate[] = [
+        {
+          id: "cand-demo-1",
+          name: "Alemu Tesfaye",
+          party: "Unity Party",
+          symbol: "★",
+          photoUrl: "",
+          bio: "Demo candidate for local voting flow.",
+          manifesto: "Stable services and transparent governance.",
+          platform: "Stable services and transparent governance.",
+          votes: 0,
+        },
+        {
+          id: "cand-demo-2",
+          name: "Saron Bekele",
+          party: "Civic Alliance",
+          symbol: "◆",
+          photoUrl: "",
+          bio: "Demo candidate for local voting flow.",
+          manifesto: "Citizen-first delivery and accountability.",
+          platform: "Citizen-first delivery and accountability.",
+          votes: 0,
+        },
+      ];
+
+      setCandidates(demoCandidates);
+      setCandidateError(null);
+      setLoadingCandidates(false);
+      return;
+    }
+
     if (!hasJwtAccessToken(token)) {
       setCandidates([]);
       setCandidateError(
         "Please log in again. Voting requires the access token from login, not the voting token.",
       );
       return;
+    }
+    try {
+      console.debug("[VotingBooth] loadCandidates token state", {
+        hasToken: Boolean(token),
+        looksLikeJwt: hasJwtAccessToken(token),
+        isDemo: isDemoAccessToken(token),
+        tokenMasked: token ? `***${String(token).slice(-6)}` : null,
+      });
+    } catch {
+      // ignore
     }
 
     const loadCandidates = async () => {
@@ -212,15 +293,56 @@ export function VotingBoothView({
       return;
     }
 
-    if (!hasJwtAccessToken(token)) {
+    if (!hasJwtAccessToken(token) && !isDemoSession) {
       alert(
         "Please log in again. The vote request must use your login access token, not the voting token.",
       );
       return;
     }
 
+    if (isDemoSession) {
+      try {
+        console.debug("[VotingBooth] demo vote cast locally", {
+          selected,
+          electionId,
+          tokenMasked: token ? `***${String(token).slice(-6)}` : null,
+          hasStoredDemoSession: Boolean(localStorage.getItem("demoVoterAuth")),
+        });
+      } catch {
+        // ignore
+      }
+
+      const nextReceiptHash = `demo-receipt-${Date.now()}-${votingToken.trim()}`;
+      setReceiptHash(nextReceiptHash);
+      if (nextReceiptHash) {
+        sessionStorage.setItem("nehs_last_receipt_hash", nextReceiptHash);
+        try {
+          localStorage.removeItem("nehs_pending_voting_token");
+        } catch {
+          // ignore storage failures
+        }
+      }
+      setUser((prev: any) => ({
+        ...prev,
+        hasVoted: true,
+        receiptToken: nextReceiptHash,
+      }));
+      setStep(3);
+      return;
+    }
+
     setSubmitting(true);
     try {
+      try {
+        console.debug("[VotingBooth] casting vote", {
+          url: "/api/v1/voting/cast",
+          tokenMasked: token ? `***${String(token).slice(-6)}` : null,
+          isDemo: isDemoAccessToken(token),
+          votingTokenPreview: votingToken
+            ? String(votingToken).slice(-8)
+            : null,
+        });
+      } catch {}
       const resp = await fetchJson<{ data: { receiptHash: string } }>(
         "/api/v1/voting/cast",
         {

@@ -149,6 +149,9 @@ export function RegistrationView({
     },
   };
 
+  const hasMatchingNationalId = (record: any, nationalId: string) =>
+    Boolean(record?.nationalId) && record.nationalId === nationalId;
+
   function createDeterministicDemoFaceEmbedding(nationalId: string) {
     const normalized = (nationalId || "")
       .toUpperCase()
@@ -189,6 +192,11 @@ export function RegistrationView({
       const simulated = clientSimulatedCitizens[trimmedNid];
 
       if (simulated) {
+        if (!hasMatchingNationalId(simulated, trimmedNid)) {
+          throw new Error(
+            "Simulated citizen record does not match this National ID.",
+          );
+        }
         data = simulated;
       } else {
         let response: Response | null = null;
@@ -232,6 +240,12 @@ export function RegistrationView({
             };
           }
         }
+      }
+
+      if (!hasMatchingNationalId(data, trimmedNid)) {
+        throw new Error(
+          "The verified citizen record does not match the entered National ID.",
+        );
       }
 
       const inferredRegion = inferRegionFromAddress(data.address);
@@ -327,7 +341,7 @@ export function RegistrationView({
       }
     };
 
-    let cleanupScan = () => undefined;
+    let cleanupScan: () => void = () => undefined;
 
     void start().then((cleanup) => {
       if (typeof cleanup === "function") {
@@ -363,67 +377,39 @@ export function RegistrationView({
         "Face matched successfully. Confirm the citizen details to issue the voter ID.",
       );
 
-      let data: any;
+      const useProtectedPath = role !== "NONE" && Boolean(token);
+      const path = useProtectedPath
+        ? "/api/v1/voters"
+        : "/api/v1/auth/register-voter";
+      const response = await fetch(path, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(useProtectedPath ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(buildRegistrationPayload(faceEmbedding)),
+      });
 
-      if (token) {
-        const response = await fetch("/api/v1/voters", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(buildRegistrationPayload(faceEmbedding)),
-        });
-
-        const contentType = response.headers.get("content-type");
-        if (contentType && contentType.includes("application/json")) {
-          data = await response.json();
-        } else {
-          throw new Error(
-            "Registration failed: Server returned an invalid response.",
-          );
+      const responseText = await response.text();
+      let data: any = null;
+      if (responseText) {
+        try {
+          data = JSON.parse(responseText);
+        } catch {
+          data = { message: responseText };
         }
+      }
 
-        if (response.status === 404) {
-          throw new Error(
-            "Registration service is currently unavailable (404).",
-          );
-        }
+      if (response.status === 404) {
+        throw new Error("Registration service is currently unavailable (404).");
+      }
 
-        if (!response.ok) {
-          throw new Error(
-            data?.message || data?.error || "Registration failed",
-          );
-        }
-      } else {
-        const response = await fetch("/api/v1/auth/register-voter", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(buildRegistrationPayload(faceEmbedding)),
-        });
-
-        const contentType = response.headers.get("content-type");
-        if (contentType && contentType.includes("application/json")) {
-          data = await response.json();
-        } else {
-          throw new Error(
-            "Registration failed: Server returned an invalid response.",
-          );
-        }
-
-        if (response.status === 404) {
-          throw new Error(
-            "Registration service is currently unavailable (404).",
-          );
-        }
-
-        if (!response.ok) {
-          throw new Error(
-            data?.message || data?.error || "Registration failed",
-          );
-        }
+      if (!response.ok) {
+        throw new Error(
+          data?.message ||
+            data?.error ||
+            `Registration failed (status ${response.status})`,
+        );
       }
 
       if (data?.error) throw new Error(data.error);
@@ -453,7 +439,7 @@ export function RegistrationView({
           );
         }
 
-        if (result?.accessToken) {
+        if (result?.accessToken && role !== "NONE") {
           localStorage.setItem("nehs_token", result.accessToken);
           localStorage.setItem("nehs_role", "VOTER");
           if (result?.sessionId) {
@@ -493,7 +479,7 @@ export function RegistrationView({
   };
 
   if (successData) {
-    const autoSignedIn = Boolean(successData?.accessToken);
+    const autoSignedIn = role !== "NONE" && Boolean(successData?.accessToken);
     const isAdminAssistedRegistration = Boolean(token) && !autoSignedIn;
     const primaryActionView = autoSignedIn
       ? "voter-hub"

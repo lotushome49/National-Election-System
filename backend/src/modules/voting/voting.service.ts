@@ -81,7 +81,9 @@ export const votingService = {
 
   // ── Current voter voting status ───────────────────────────────────────────
   async getMyStatus(voterId: string) {
-    const voter = await voterRepository.findById(voterId);
+    const voter =
+      (await voterRepository.findByUserId(voterId)) ??
+      (await voterRepository.findById(voterId));
     if (!voter) throw new NotFoundError("Voter");
 
     const latestBallot =
@@ -119,15 +121,17 @@ export const votingService = {
 
     const voter = await voterRepository.findById(voterId);
     if (!voter) throw new NotFoundError("Voter");
-    if (!(voter as any).isVerified)
-      throw new ForbiddenError("Voter is not verified");
+    const existingToken = await votingRepository.findToken(electionId, voterId);
+    if (existingToken) {
+      throw new ConflictError('A voting token has already been issued to this voter');
+    }
 
-    // Prevent duplicate token issuance
-    const existing = await votingRepository.findToken(electionId, voterId);
-    if (existing)
-      throw new ConflictError(
-        "A voting token has already been issued to this voter",
-      );
+    // Prevent issuing a token if the voter has already cast a ballot in this election
+    const priorBallot = await votingRepository.findBallotByVoterAndElection(voterId, electionId);
+    if (priorBallot) {
+      throw new ConflictError('Voter has already voted in this election');
+    }
+
 
     const rawToken = generateSecureToken(48);
     const tokenHash = sha256(rawToken);
@@ -174,11 +178,17 @@ export const votingService = {
       throw new BadRequestError("Candidate is not approved for this election");
     }
 
+    // 5. Get voter for geographic scoping
+    const voter =
+      (await voterRepository.findByUserId(voterId)) ??
+      (await voterRepository.findById(voterId));
+    if (!voter) throw new NotFoundError("Voter");
+
     // 3. Validate token
     const tokenHash = sha256(dto.tokenHash);
     const token = await votingRepository.findTokenByHash(tokenHash);
     if (!token) throw new BadRequestError("Invalid voting token");
-    if (token.voterId !== voterId)
+    if (token.voterId !== voter.id)
       throw new ForbiddenError("Token does not belong to this voter");
     if (token.status !== "UNUSED")
       throw new ConflictError("Voting token has already been used");
@@ -186,13 +196,9 @@ export const votingService = {
       throw new BadRequestError("Voting token has expired");
 
     // 4. Prevent double-voting (DB unique constraint is the final guard)
-    const existingBallot = await votingRepository.findBallotByToken(token.id);
-    if (existingBallot)
-      throw new ConflictError("Vote already cast with this token");
-
-    // 5. Get voter for geographic scoping
-    const voter = await voterRepository.findById(voterId);
-    if (!voter) throw new NotFoundError("Voter");
+    // Additionally ensure the voter hasn't already cast a ballot.
+    const existingVoterBallot = await votingRepository.findBallotByVoterAndElection(voter.id, dto.electionId);
+    if (existingVoterBallot) throw new ConflictError("Voter has already voted in this election");
 
     // 6. Generate verifiable receipt hash (HMAC so only we can verify)
     const receiptHash = hmac(
@@ -208,23 +214,29 @@ export const votingService = {
         electionId: dto.electionId,
         candidateId: dto.candidateId,
         votingTokenId: token.id,
-        voterId,
+        voterId: voter.id,
         regionId: (voter as any).regionId ?? "",
         districtId: (voter as any).districtId ?? undefined,
         pollingStationId: (voter as any).pollingStationId ?? undefined,
         ipAddress: ip,
         receiptHash,
       }),
+      // Increment candidate's vote count atomically
+      candidateRepository.incrementVotes(dto.candidateId),
     ]);
 
-    // 8. Broadcast live results update
+    // 8. Broadcast live results update with per‑candidate count
     const totalVotes = await votingRepository.countByElection(dto.electionId);
+    // fetch updated candidate vote count
+    const updatedCandidate = await candidateRepository.findById(dto.candidateId);
     socketEmit.resultsUpdate({
       electionId: dto.electionId,
       totalVotes,
       regionId: (voter as any).regionId ?? undefined,
       districtId: (voter as any).districtId ?? undefined,
       pollingStationId: (voter as any).pollingStationId ?? undefined,
+      candidateId: dto.candidateId,
+      candidateVotes: updatedCandidate?.voteCount ?? 0,
     });
 
     await auditService.log({

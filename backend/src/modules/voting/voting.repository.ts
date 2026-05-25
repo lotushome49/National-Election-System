@@ -59,7 +59,9 @@ export const votingRepository = {
     receiptHash: string;
   }) => prisma.ballot.create({ data }),
 
-  // ── Count helpers ───────────────────────────────────────────────────────────
+  // Find ballot by voter and election to prevent duplicates
+  findBallotByVoterAndElection: (voterId: string, electionId: string) =>
+    prisma.ballot.findFirst({ where: { voterId, electionId } }),
   countByElection: (electionId: string) =>
     prisma.ballot.count({ where: { electionId } }),
 

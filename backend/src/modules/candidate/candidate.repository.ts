@@ -36,4 +36,11 @@ export const candidateRepository = {
       where: { id },
       data:  { deletedAt: new Date(), updatedBy: deletedBy },
     }),
+
+  // Increment vote count atomically
+  incrementVotes: (id: string) =>
+    prisma.candidate.update({
+      where: { id },
+      data: { voteCount: { increment: 1 } },
+    }),
 };

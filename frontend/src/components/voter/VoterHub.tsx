@@ -29,6 +29,22 @@ function hasJwtAccessToken(token: unknown) {
   return typeof token === "string" && token.split(".").length === 3;
 }
 
+function isDemoAccessToken(token: unknown) {
+  if (!hasJwtAccessToken(token)) return false;
+
+  try {
+    const payloadPart = String(token).split(".")[1];
+    if (!payloadPart) return false;
+
+    const normalized = payloadPart.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+    const payload = JSON.parse(atob(padded));
+    return Boolean(payload?.demo);
+  } catch {
+    return false;
+  }
+}
+
 function mapCandidate(candidate: any) {
   return {
     id: candidate.id,
@@ -200,6 +216,16 @@ export function VoterHub({
       return;
     }
 
+    if (isDemoAccessToken(token)) {
+      setVotingStatus((prev) => ({
+        ...prev,
+        hasVoted: Boolean(user?.hasVoted),
+        receiptHash: user?.receiptToken ?? prev.receiptHash,
+        castAt: prev.castAt ?? new Date().toISOString(),
+      }));
+      return;
+    }
+
     try {
       const response = await fetchJson<{ data: any }>("/api/v1/voting/me", {
         headers: { Authorization: `Bearer ${token}` },
@@ -248,7 +274,7 @@ export function VoterHub({
               party: candidate.party,
               symbol: candidate.symbol || candidate.partyCode || "🗳️",
               electionId: candidate.electionId ?? null,
-              votes: Number(candidate.votes ?? 0),
+              voteCount: Number(candidate.voteCount ?? 0),
             }))
           : [],
       );
@@ -287,6 +313,35 @@ export function VoterHub({
     setCastingVote(true);
     setVoteError(null);
     setVoteNotice(null);
+
+    // Demo session: handle vote locally without hitting the backend.
+    // The global fetch interceptor in main.tsx strips demo tokens from
+    // Authorization headers, which would cause a 401 on the real endpoint.
+    if (isDemoAccessToken(token)) {
+      try {
+        const demoReceiptHash = `demo-receipt-${Date.now()}-${votingKey.trim()}`;
+        sessionStorage.setItem("nehs_last_receipt_hash", demoReceiptHash);
+        try {
+          localStorage.removeItem("nehs_pending_voting_token");
+        } catch {
+          // ignore storage failures
+        }
+        setVotingStatus((prev) => ({
+          ...prev,
+          hasVoted: true,
+          receiptHash: demoReceiptHash,
+          castAt: new Date().toISOString(),
+        }));
+        setVoteNotice("Vote recorded successfully.");
+        setVotingKey("");
+        setVotingCandidate(null);
+      } catch (demoErr: any) {
+        setVoteError("Failed to record demo vote.");
+      } finally {
+        setCastingVote(false);
+      }
+      return;
+    }
 
     try {
       const response = await fetchJson<{ data: { receiptHash: string } }>(
@@ -330,7 +385,7 @@ export function VoterHub({
       }));
       setVoteNotice("Vote recorded successfully.");
       setVotingKey("");
-      await Promise.all([loadVotingStatus(), loadCandidates()]);
+      await loadVotingStatus();
     } catch (error) {
       const body = (error as any)?.body;
       const message =
@@ -565,7 +620,7 @@ export function VoterHub({
                       </div>
                       <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.25em] text-slate-400 font-black">
                         <span>Approved</span>
-                        <span>{candidate.votes ?? 0} votes</span>
+                        <span>{candidate.voteCount ?? 0} votes</span>
                       </div>
                       <button
                         onClick={() => {

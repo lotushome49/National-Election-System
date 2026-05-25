@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { io } from "socket.io-client";
 import { fetchJson } from "../services/api/client";
 import type { ElectionPhase, VoteResults } from "../types/election";
+import { isDemoAccessToken } from "../utils/authToken";
 
 type ElectionSummary = {
   id: string;
@@ -62,6 +63,14 @@ export function useElectionRealtime(token: string | null, enabled = true) {
       (typeof window !== "undefined"
         ? localStorage.getItem("nehs_token")
         : null);
+
+    if (isDemoAccessToken(effectiveToken)) {
+      setResults(null);
+      setCurrentElectionId(null);
+      setCurrentElectionTitle(null);
+      setCurrentElectionStatus(null);
+      return;
+    }
 
     if (!effectiveToken) {
       setResults(null);

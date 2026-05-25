@@ -54,6 +54,20 @@ export function ResultsDashboardView({ setView, token, t, i18n }: any) {
         setResults({ total: 0, counts: [] });
         setLoading(false);
       });
+
+    const handler = (payload: any) => {
+      // payload now may contain candidateId and candidateVotes
+      if (payload.candidateId && typeof payload.candidateVotes === 'number') {
+        setResults((prev: any) => ({
+          ...prev,
+          counts: prev.counts.map((c: any) =>
+            c.id === payload.candidateId ? { ...c, votes: payload.candidateVotes } : c,
+          ),
+        }));
+      }
+      // Optionally handle totalVotes or other updates here
+      console.log('Live update received', payload);
+    };
   }, [token]);
 
   if (loading)

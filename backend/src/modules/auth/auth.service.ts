@@ -1,4 +1,5 @@
 import bcrypt from "bcryptjs";
+import { v4 as uuidv4 } from "uuid";
 import { authRepository } from "./auth.repository";
 import {
   signAccessToken,
@@ -39,6 +40,7 @@ import { prisma } from "../../configs/database";
 import { computeFaceEmbeddingScore } from "../../utils/faceRecognition";
 import { voterRepository } from "../voter/voter.repository";
 import { votingRepository } from "../voting/voting.repository";
+import { generateSecureToken } from "../../utils/crypto";
 
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCK_DURATION_MS = 30 * 60 * 1000;
@@ -89,6 +91,59 @@ function getStoredMfaState(user: any): StoredMfaState {
   }
 
   return parseMfaStateCipher(user.mfaSecret);
+}
+
+async function ensureVoterUserRecord(voter: any) {
+  const existingUser = voter.userId
+    ? await prisma.user.findFirst({
+        where: { id: voter.userId, deletedAt: null },
+        include: { role: { include: { permissions: true } } },
+      })
+    : null;
+
+  if (existingUser) {
+    if (voter.userId !== existingUser.id) {
+      await prisma.voter.update({
+        where: { id: voter.id },
+        data: { userId: existingUser.id },
+      });
+    }
+
+    return existingUser;
+  }
+
+  const voterRole = await prisma.role.findFirst({
+    where: { code: "VOTER", deletedAt: null },
+    include: { permissions: true },
+  });
+
+  if (!voterRole) {
+    throw new NotFoundError("Voter role");
+  }
+
+  const passwordHash = await bcrypt.hash(generateSecureToken(32), 12);
+  const user = await prisma.user.create({
+    data: {
+      id: uuidv4(),
+      roleId: voterRole.id,
+      fullName: voter.fullName,
+      username: voter.nationalId,
+      email: voter.email ?? null,
+      passwordHash,
+      status: "ACTIVE",
+      assignedRegionId: voter.regionId ?? null,
+      assignedDistrictId: voter.districtId ?? null,
+      createdBy: voter.createdBy ?? "PUBLIC",
+    },
+    include: { role: { include: { permissions: true } } },
+  });
+
+  await prisma.voter.update({
+    where: { id: voter.id },
+    data: { userId: user.id },
+  });
+
+  return user;
 }
 
 export const authService = {
@@ -240,17 +295,19 @@ export const authService = {
       );
     }
 
+    const voterUser = await ensureVoterUserRecord(voter);
+
     const session = await authRepository.createSession({
-      userId: voter.id,
+      userId: voterUser.id,
       expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       ipAddress: ip,
     });
 
     const accessToken = signAccessToken(
       {
-        sub: voter.id,
+        sub: voterUser.id,
         sid: session.id,
-        role: "VOTER",
+        role: voterUser.role.code,
         regionId: voter.regionId ?? undefined,
         districtId: voter.districtId ?? undefined,
       },
@@ -258,7 +315,7 @@ export const authService = {
     );
 
     await auditService.log({
-      userId: voter.id,
+      userId: voterUser.id,
       action: "LOGIN",
       entity: "Voter",
       entityId: voter.id,
@@ -306,17 +363,19 @@ export const authService = {
       throw new ForbiddenError("Voting token has expired");
     }
 
+    const voterUser = await ensureVoterUserRecord(voter);
+
     const session = await authRepository.createSession({
-      userId: voter.id,
+      userId: voterUser.id,
       expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       ipAddress: ip,
     });
 
     const accessToken = signAccessToken(
       {
-        sub: voter.id,
+        sub: voterUser.id,
         sid: session.id,
-        role: "VOTER",
+        role: voterUser.role.code,
         regionId: voter.regionId ?? undefined,
         districtId: voter.districtId ?? undefined,
       },
@@ -326,7 +385,7 @@ export const authService = {
     await authRepository.touchSession(session.id);
 
     await auditService.log({
-      userId: voter.id,
+      userId: voterUser.id,
       action: "LOGIN",
       entity: "Voter",
       entityId: voter.id,
@@ -339,10 +398,43 @@ export const authService = {
       token: accessToken,
       sessionId: session.id,
       user: {
-        id: voter.id,
+        id: voterUser.id,
         fullName: voter.fullName,
         username: voter.nationalId,
-        role: "VOTER",
+        role: voterUser.role.code,
+        voterId: voter.voterId,
+        uniqueVoterId: voter.voterId,
+      },
+      voter: { id: voter.id, voterId: voter.voterId },
+    };
+  },
+
+  async createVoterSession(voterId: string, ip: string) {
+    const voter = await voterRepository.findById(voterId);
+    if (!voter) {
+      throw new NotFoundError("Voter");
+    }
+
+    const voterUser = await ensureVoterUserRecord(voter);
+
+    const session = await authRepository.createSession({
+      userId: voterUser.id,
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      ipAddress: ip,
+    });
+
+    const tokens = await this._issueTokens(voterUser, session.id);
+
+    await authRepository.touchSession(session.id);
+
+    return {
+      ...tokens,
+      sessionId: session.id,
+      user: {
+        id: voterUser.id,
+        fullName: voter.fullName,
+        username: voter.nationalId,
+        role: voterUser.role.code,
         voterId: voter.voterId,
         uniqueVoterId: voter.voterId,
       },

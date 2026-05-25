@@ -67,6 +67,7 @@ import {
 import { fetchJson } from "../services/api/client";
 import type { Candidate, Role } from "../types/election";
 import { cn } from "../utils/cn";
+import { isDemoAccessToken } from "../utils/authToken";
 import { isMfaEligibleRole, unwrapApiData } from "../utils/mfa";
 import {
   getScopeAccessModel,
@@ -108,6 +109,7 @@ export default function AppShell() {
   };
   const isJwtAccessToken = (value: string | null) =>
     Boolean(value && value.split(".").length === 3);
+  const isDemoSession = isDemoAccessToken(token);
   const getAdminPathPrefix = () => {
     if (role === "SUPER_ADMIN") return "/super-admin";
     if (role === "ADMIN") return "/admin";
@@ -215,13 +217,14 @@ export default function AppShell() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { t, i18n } = useTranslation();
   const lang = i18n.language as "en" | "am";
-  const realtimeEnabled = [
-    "dashboard",
-    "registration",
-    "voter-hub",
-    "voting-booth",
-    "results-dashboard",
-  ].includes(view);
+  const realtimeEnabled =
+    [
+      "dashboard",
+      "registration",
+      "voter-hub",
+      "voting-booth",
+      "results-dashboard",
+    ].includes(view) && !isDemoSession;
   const {
     results,
     electionPhase,
@@ -505,7 +508,7 @@ export default function AppShell() {
   }, [token, role, user, sessionId]);
 
   useEffect(() => {
-    if (!token || role === "NONE") {
+    if (!token || role === "NONE" || isDemoSession) {
       setOpenElectionContext({ id: null, title: null, status: null });
       return;
     }

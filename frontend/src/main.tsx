@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
 import "./i18n";
+import { isDemoAccessToken } from "./utils/authToken";
 
 // ── CSRF Fetch Interceptor ───────────────────────────────────────────────────
 const originalFetch = window.fetch;
@@ -93,11 +94,55 @@ window.fetch = async function (
 
       if (shouldAttach) {
         const stored = localStorage.getItem("nehs_token");
-        if (stored) headers.set("Authorization", `Bearer ${stored}`);
+        if (stored) {
+          try {
+            // mask token for logs (show last 6 chars only)
+            const masked = `***${String(stored).slice(-6)}`;
+            console.debug("[fetch wrapper] candidate attach token", {
+              url: typeof input === "string" ? input : String(input),
+              storedMasked: masked,
+              isDemo: isDemoAccessToken(stored),
+              shouldAttach,
+            });
+          } catch {
+            // ignore logging errors
+          }
+
+          if (!isDemoAccessToken(stored)) {
+            headers.set("Authorization", `Bearer ${stored}`);
+          }
+        }
       }
     }
   } catch (e) {
     // ignore localStorage errors
+  }
+
+  // As an extra safety, if any demo token ended up in the header remove it.
+  try {
+    const currentAuth = headers.get("Authorization");
+    if (currentAuth?.startsWith("Bearer ")) {
+      const token = currentAuth.slice(7).trim();
+      const wasDemo = isDemoAccessToken(token);
+      if (wasDemo) {
+        console.debug("[fetch wrapper] removing demo token from headers", {
+          url: typeof input === "string" ? input : String(input),
+          tokenMasked: `***${String(token).slice(-6)}`,
+        });
+        headers.delete("Authorization");
+      } else {
+        try {
+          console.debug("[fetch wrapper] leaving Authorization header", {
+            url: typeof input === "string" ? input : String(input),
+            tokenMasked: `***${String(token).slice(-6)}`,
+          });
+        } catch {
+          // ignore
+        }
+      }
+    }
+  } catch {
+    // ignore
   }
 
   if (!isSafeMethod) {

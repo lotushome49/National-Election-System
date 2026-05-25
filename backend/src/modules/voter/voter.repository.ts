@@ -89,7 +89,9 @@ export const voterRepository = {
       where: { id, deletedAt: null },
       select: {
         id: true,
+        userId: true,
         voterId: true,
+        nationalId: true,
         fullName: true,
         dateOfBirth: true,
         gender: true,
@@ -101,11 +103,15 @@ export const voterRepository = {
         pollingStationId: true,
         isVerified: true,
         registrationDate: true,
+        createdBy: true,
       },
     }),
 
   findByNationalId: (nationalId: string) =>
     prisma.voter.findFirst({ where: { nationalId, deletedAt: null } }),
+
+  findByUserId: (userId: string) =>
+    prisma.voter.findFirst({ where: { userId, deletedAt: null } }),
 
   findByBiometricHash: (hash: string) =>
     prisma.voter.findFirst({

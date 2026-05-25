@@ -426,6 +426,26 @@ async function main() {
       const embeddingHash = sha256(rawEmbedding);
 
       const voterId = `ET-${new Date().getFullYear()}-${String(i).padStart(4, "0")}-${nationalId.slice(-4)}`;
+      const passwordHash = await bcrypt.hash("Demo@12345!", 12);
+
+      const existingUser = await prisma.user.findFirst({
+        where: { username: nationalId, deletedAt: null },
+      });
+
+      const voterUser =
+        existingUser ??
+        (await prisma.user.create({
+          data: {
+            id: uuidv4(),
+            roleId: roleMap.VOTER,
+            fullName,
+            username: nationalId,
+            email: null,
+            passwordHash,
+            status: "ACTIVE",
+            createdBy: "SEED",
+          },
+        }));
 
       await prisma.voter.upsert({
         where: { nationalId },
@@ -442,10 +462,13 @@ async function main() {
           faceEmbeddingHash: embeddingHash,
           isVerified: true,
           voterId,
+          userId: voterUser.id,
+          createdBy: "SEED",
         },
         create: {
           id: uuidv4(),
           voterId,
+          userId: voterUser.id,
           fullName,
           nationalId,
           dateOfBirth: dob,
@@ -458,7 +481,7 @@ async function main() {
           faceEmbedding: encryptedEmbedding,
           faceEmbeddingHash: embeddingHash,
           isVerified: true,
-          createdBy: null,
+          createdBy: "SEED",
           registrationDate: new Date(),
         },
       });
