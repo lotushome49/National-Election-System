@@ -14,6 +14,13 @@ router.use(authenticate);
 // Voter self status for the voter hub
 router.get("/me", requireRole("VOTER"), votingController.me);
 
+// Current votable election and approved candidates for ballot rendering.
+router.get(
+  "/active-ballot",
+  requirePermission("CAST_VOTE"),
+  votingController.activeBallot,
+);
+
 // Staff issues token to a verified voter at the polling station
 router.post(
   "/token",

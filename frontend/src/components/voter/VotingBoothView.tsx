@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   ShieldCheck,
@@ -6,8 +6,6 @@ import {
   AlertCircle,
   Search,
   ChevronRight,
-  Clock,
-  UserCheck,
   Fingerprint,
 } from "lucide-react";
 import { cn } from "../../utils/cn";
@@ -28,6 +26,20 @@ function getErrorMessage(error: unknown, fallback: string) {
   return fallback;
 }
 
+function mapBallotCandidate(candidate: any): Candidate {
+  return {
+    id: candidate.id,
+    name: candidate.fullName,
+    party: candidate.party,
+    symbol: candidate.symbol || candidate.partyCode || "BALLOT",
+    photoUrl: candidate.photoUrl,
+    bio: candidate.bio,
+    manifesto: candidate.manifesto,
+    platform: candidate.manifesto || candidate.party,
+    votes: Number(candidate.votes ?? 0),
+  };
+}
+
 export function VotingBoothView({
   token,
   setView,
@@ -38,8 +50,7 @@ export function VotingBoothView({
 }: any) {
   const [selected, setSelected] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [step, setStep] = useState(role === "ADMIN" ? 1 : 0); // Admins skip biometric auth for this demo bypass
-  const [stream, setStream] = useState<MediaStream | null>(null);
+  const [step, setStep] = useState(1);
   const [expandedCandidate, setExpandedCandidate] = useState<Candidate | null>(
     null,
   );
@@ -51,7 +62,6 @@ export function VotingBoothView({
   const [resolvedElectionId, setResolvedElectionId] = useState<string | null>(
     currentElectionId ?? null,
   );
-  const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
     if (currentElectionId) {
@@ -96,6 +106,30 @@ export function VotingBoothView({
       try {
         let electionId = resolvedElectionId;
         if (!electionId) {
+          const ballot = await fetchJson<{
+            data: { election?: { id?: string }; candidates?: any[] };
+          }>("/api/v1/voting/active-ballot", {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+
+          electionId = ballot?.data?.election?.id ?? null;
+          if (electionId) {
+            setResolvedElectionId(electionId);
+          }
+
+          const ballotCandidates = Array.isArray(ballot?.data?.candidates)
+            ? ballot.data.candidates
+            : [];
+
+          if (ballotCandidates.length > 0) {
+            setCandidates(
+              ballotCandidates
+                .map(mapBallotCandidate)
+                .sort((left, right) => left.name.localeCompare(right.name)),
+            );
+            return;
+          }
+
           const openElection = await fetchJson<{ data: { id?: string } }>(
             "/api/v1/elections/current/open",
             {
@@ -149,44 +183,6 @@ export function VotingBoothView({
 
     void loadCandidates();
   }, [resolvedElectionId, step, token]);
-
-  useEffect(() => {
-    if (step === 0 && !stream) {
-      const startCamera = async () => {
-        try {
-          const s = await navigator.mediaDevices.getUserMedia({ video: true });
-          setStream(s);
-          if (videoRef.current) {
-            videoRef.current.srcObject = s;
-          }
-        } catch (err) {
-          console.error("Camera access failed", err);
-          alert("Biometric check required to unlock ballot.");
-          setView("voter-hub");
-        }
-      };
-      startCamera();
-    }
-
-    return () => {
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop());
-      }
-    };
-  }, [step, stream, setView]);
-
-  const handleVerifyBiometrics = () => {
-    // Simulate real-time biometric matching against voter record
-    setSubmitting(true);
-    setTimeout(() => {
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop());
-        setStream(null);
-      }
-      setSubmitting(false);
-      setStep(1);
-    }, 2000);
-  };
 
   const handleCastVote = async () => {
     const electionId = resolvedElectionId ?? currentElectionId;
@@ -252,62 +248,6 @@ export function VotingBoothView({
       animate={{ opacity: 1 }}
       className="max-w-4xl mx-auto"
     >
-      {step === 0 && (
-        <div className="max-w-md mx-auto text-center space-y-8">
-          <div>
-            <h2 className="text-3xl font-bold">{t("step_1_title")}</h2>
-            <p className="text-slate-500 mt-2">{t("step_1_desc")}</p>
-          </div>
-
-          <div className="bg-slate-900 rounded-3xl overflow-hidden aspect-square relative border-8 border-white shadow-2xl">
-            <video
-              ref={videoRef}
-              autoPlay
-              playsInline
-              muted
-              className="w-full h-full object-cover scale-x-[-1]"
-            />
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="w-64 h-64 border-2 border-election-blue rounded-full relative overflow-hidden">
-                <motion.div
-                  animate={{ top: ["0%", "100%", "0%"] }}
-                  transition={{ repeat: Infinity, duration: 4 }}
-                  className="absolute left-0 right-0 h-1 bg-election-blue shadow-[0_0_20px_white]"
-                />
-              </div>
-            </div>
-            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur-xl px-4 py-2 rounded-full flex gap-3 items-center">
-              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-              <span className="text-[10px] font-mono text-white/80 uppercase tracking-widest leading-none">
-                {t("terminal_id")}: {token?.slice(-8)}
-              </span>
-            </div>
-          </div>
-
-          <button
-            disabled={submitting}
-            onClick={handleVerifyBiometrics}
-            className="w-full bg-election-blue text-white p-5 rounded-2xl font-bold text-lg shadow-xl shadow-blue-100 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-3"
-          >
-            {submitting ? (
-              <>
-                <Clock className="animate-spin" /> {t("logging_in")}
-              </>
-            ) : (
-              <>
-                <UserCheck /> {t("access_portal")}
-              </>
-            )}
-          </button>
-          <button
-            onClick={() => setView("voter-hub")}
-            className="text-slate-400 text-xs font-bold hover:text-slate-600 uppercase tracking-widest"
-          >
-            {t("return_portal")}
-          </button>
-        </div>
-      )}
-
       {step === 1 && (
         <>
           <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8 mb-16 animate-in fade-in slide-in-from-bottom-4 duration-700">

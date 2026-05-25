@@ -30,10 +30,38 @@ export const electionRepository = {
       },
     }),
 
-  findCurrentVotingOpen: () =>
-    prisma.election.findFirst({
+  findCurrentVotingOpen: async () => {
+    const elections = await prisma.election.findMany({
       where: { deletedAt: null, status: "VOTING_OPEN" },
       orderBy: { updatedAt: "desc" },
+      include: {
+        candidates: { where: { deletedAt: null, status: "APPROVED" } },
+      },
+    });
+
+    return (
+      elections.find((election) => election.candidates.length > 0) ??
+      elections[0] ??
+      null
+    );
+  },
+
+  countApprovedCandidates: (electionId: string) =>
+    prisma.candidate.count({
+      where: { electionId, deletedAt: null, status: "APPROVED" },
+    }),
+
+  closeOtherOpenElections: (id: string, updatedBy: string) =>
+    prisma.election.updateMany({
+      where: {
+        id: { not: id },
+        deletedAt: null,
+        status: "VOTING_OPEN",
+      },
+      data: {
+        status: "VOTING_CLOSED",
+        updatedBy,
+      },
     }),
 
   findCurrentForRegistration: () =>

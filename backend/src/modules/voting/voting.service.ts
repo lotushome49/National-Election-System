@@ -16,6 +16,27 @@ import { socketEmit } from "../../configs/socket";
 import type { CastVoteDto } from "./voting.schema";
 
 export const votingService = {
+  async getActiveBallot() {
+    const election = await electionRepository.findCurrentVotingOpen();
+    if (!election) throw new NotFoundError("Election");
+
+    const candidates = Array.isArray((election as any).candidates)
+      ? (election as any).candidates
+      : [];
+
+    return {
+      election: {
+        id: election.id,
+        title: election.title,
+        status: election.status,
+        type: election.type,
+        isNational: election.isNational,
+        maxVotesPerVoter: election.maxVotesPerVoter,
+      },
+      candidates,
+    };
+  },
+
   // ── Issue a system-generated token for a newly registered voter ───────────
   async issueSystemToken(voterId: string, ip: string) {
     const election =

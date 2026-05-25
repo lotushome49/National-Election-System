@@ -118,6 +118,17 @@ export const electionService = {
       );
     }
 
+    if (dto.status === "VOTING_OPEN") {
+      const approvedCandidates =
+        await electionRepository.countApprovedCandidates(id);
+      if (approvedCandidates === 0) {
+        throw new BadRequestError(
+          "Cannot open voting until this election has at least one approved candidate",
+        );
+      }
+      await electionRepository.closeOtherOpenElections(id, actorId);
+    }
+
     const updated = await electionRepository.update(id, {
       status: dto.status,
       updatedBy: actorId,

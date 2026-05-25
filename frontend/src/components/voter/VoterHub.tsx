@@ -14,6 +14,29 @@ import { cn } from "../../utils/cn";
 import { getScopeAccessModel } from "../../utils/scope";
 import { fetchJson } from "../../services/api/client";
 
+function statusToPhase(status?: string | null) {
+  if (status === "VOTING_OPEN") return "VOTING";
+  if (
+    status === "VOTING_CLOSED" ||
+    status === "COUNTING" ||
+    status === "RESULTS_DECLARED"
+  ) {
+    return "CLOSED";
+  }
+  return null;
+}
+
+function mapCandidate(candidate: any) {
+  return {
+    id: candidate.id,
+    fullName: candidate.fullName,
+    party: candidate.party,
+    symbol: candidate.symbol || candidate.partyCode || "BALLOT",
+    electionId: candidate.electionId ?? null,
+    votes: Number(candidate.votes ?? 0),
+  };
+}
+
 export function VoterHub({
   user,
   setView,
@@ -207,6 +230,30 @@ export function VoterHub({
       return;
     }
 
+    try {
+      const ballot = await fetchJson<{
+        data: { election?: any; candidates?: any[] };
+      }>("/api/v1/voting/active-ballot", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const election = ballot?.data?.election ?? null;
+      if (election?.id) {
+        setResolvedElectionId(election.id);
+        setResolvedElectionTitle(election.title ?? null);
+        setResolvedElectionStatus(election.status ?? null);
+      }
+
+      setCandidatePreview(
+        Array.isArray(ballot?.data?.candidates)
+          ? ballot.data.candidates.map(mapCandidate)
+          : [],
+      );
+      return;
+    } catch {
+      // Fall back to older endpoints for staff/admin preview access.
+    }
+
     let electionId = currentElectionId ?? resolvedElectionId;
     let electionTitle = currentElectionTitle ?? resolvedElectionTitle;
     let electionStatus = currentElectionStatus ?? resolvedElectionStatus;
@@ -373,6 +420,9 @@ export function VoterHub({
 
   const displayHasVoted = votingStatus.hasVoted;
   const displayReceiptHash = votingStatus.receiptHash;
+  const displayElectionPhase =
+    statusToPhase(resolvedElectionStatus ?? currentElectionStatus) ??
+    electionPhase;
 
   return (
     <motion.div
@@ -385,7 +435,7 @@ export function VoterHub({
         <div
           className={cn(
             "px-4 py-2 rounded-xl inline-flex items-center gap-3",
-            electionPhase === "VOTING"
+            displayElectionPhase === "VOTING"
               ? "bg-emerald-50 text-emerald-700"
               : "bg-blue-50 text-blue-700",
           )}
@@ -393,11 +443,13 @@ export function VoterHub({
           <div
             className={cn(
               "w-2 h-2 rounded-full",
-              electionPhase === "VOTING" ? "bg-emerald-500" : "bg-blue-500",
+              displayElectionPhase === "VOTING"
+                ? "bg-emerald-500"
+                : "bg-blue-500",
             )}
           />
           <span className="text-xs font-black uppercase tracking-wide">
-            {t(`phase_${electionPhase.toLowerCase()}`)}
+            {t(`phase_${displayElectionPhase.toLowerCase()}`)}
           </span>
         </div>
       </div>
@@ -419,7 +471,9 @@ export function VoterHub({
                 {resolvedElectionTitle ??
                   currentElectionTitle ??
                   currentElectionId ??
-                  "No active election"}
+                  (displayElectionPhase === "VOTING"
+                    ? "Voting is open"
+                    : "Election not selected")}
               </p>
               {(resolvedElectionStatus ?? currentElectionStatus) && (
                 <p className="text-xs text-slate-500 mt-1 uppercase tracking-[0.2em] font-semibold">
@@ -432,12 +486,12 @@ export function VoterHub({
             <span
               className={cn(
                 "px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-[0.25em]",
-                electionPhase === "VOTING"
+                displayElectionPhase === "VOTING"
                   ? "bg-emerald-50 text-emerald-700"
                   : "bg-slate-100 text-slate-500",
               )}
             >
-              {t(`phase_${electionPhase.toLowerCase()}`)}
+              {t(`phase_${displayElectionPhase.toLowerCase()}`)}
             </span>
           </div>
           {!isVoter && (
@@ -465,7 +519,7 @@ export function VoterHub({
                 {t("voting_availability")}
               </p>
               <p className="font-bold mt-1">
-                {electionPhase === "VOTING" ? t("open") : t("closed")}
+                {displayElectionPhase === "VOTING" ? t("open") : t("closed")}
               </p>
             </div>
           </div>
@@ -520,18 +574,19 @@ export function VoterHub({
               <div className="flex items-center gap-4">
                 <button
                   onClick={() =>
-                    electionPhase === "VOTING" && setView("voting-booth")
+                    displayElectionPhase === "VOTING" &&
+                    setView("voting-booth")
                   }
-                  disabled={electionPhase !== "VOTING"}
+                  disabled={displayElectionPhase !== "VOTING"}
                   className={cn(
                     "px-6 py-3 rounded-xl font-black",
-                    electionPhase === "VOTING"
+                    displayElectionPhase === "VOTING"
                       ? "bg-slate-900 text-white"
                       : "bg-slate-200 text-slate-400",
                   )}
                 >
                   <Vote className="inline-block mr-2" />{" "}
-                  {electionPhase === "VOTING"
+                  {displayElectionPhase === "VOTING"
                     ? t("cast_ballot")
                     : t("voting_inactive")}
                 </button>
@@ -588,17 +643,20 @@ export function VoterHub({
                   </div>
                   <button
                     onClick={() => {
-                      if (electionPhase !== "VOTING" || !isVoter) return;
+                      if (displayElectionPhase !== "VOTING" || !isVoter)
+                        return;
                       setVotingCandidate(candidate);
                       setVoteError(null);
                       setVoteNotice(null);
                     }}
                     disabled={
-                      electionPhase !== "VOTING" || votingStatus.hasVoted
+                      displayElectionPhase !== "VOTING" ||
+                      votingStatus.hasVoted
                     }
                     className={cn(
                       "mt-auto w-full rounded-2xl px-4 py-3 font-black uppercase tracking-[0.25em] text-[10px] inline-flex items-center justify-center gap-2 transition-all",
-                      electionPhase === "VOTING" && !votingStatus.hasVoted
+                      displayElectionPhase === "VOTING" &&
+                        !votingStatus.hasVoted
                         ? "bg-slate-900 text-white hover:bg-slate-800"
                         : "bg-slate-200 text-slate-400 cursor-not-allowed",
                     )}

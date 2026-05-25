@@ -16,7 +16,28 @@ export function AdminOpenElectionView({ token, setView, t }: any) {
         "/api/v1/elections?page=1&limit=100",
         { headers: { Authorization: `Bearer ${token}` } },
       );
-      setElections(Array.isArray(res.data) ? res.data : []);
+
+      const loadedElections = Array.isArray(res.data) ? res.data : [];
+      const electionsWithCounts = await Promise.all(
+        loadedElections.map(async (election) => {
+          try {
+            const candidates = await fetchJson<{ data: any[] }>(
+              `/api/v1/candidates?page=1&limit=1&electionId=${encodeURIComponent(
+                election.id,
+              )}&status=APPROVED`,
+              { headers: { Authorization: `Bearer ${token}` } },
+            );
+            return {
+              ...election,
+              approvedCandidateCount: candidates?.data?.length ?? 0,
+            };
+          } catch {
+            return { ...election, approvedCandidateCount: 0 };
+          }
+        }),
+      );
+
+      setElections(electionsWithCounts);
     } catch (e: any) {
       setElections([]);
       setError(
@@ -35,6 +56,17 @@ export function AdminOpenElectionView({ token, setView, t }: any) {
 
   const handleOpen = async () => {
     if (!selected) return;
+
+    const selectedElection = elections.find(
+      (election) => election.id === selected,
+    );
+    if ((selectedElection?.approvedCandidateCount ?? 0) === 0) {
+      setError(
+        "This election has no approved candidates. Approve candidates before opening voting.",
+      );
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
@@ -65,6 +97,10 @@ export function AdminOpenElectionView({ token, setView, t }: any) {
     }
   };
 
+  const selectedElection = elections.find((el) => el.id === selected);
+  const selectedHasCandidates =
+    (selectedElection?.approvedCandidateCount ?? 0) > 0;
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -86,17 +122,25 @@ export function AdminOpenElectionView({ token, setView, t }: any) {
             <option value="">Select an election</option>
             {elections.map((el) => (
               <option key={el.id} value={el.id}>
-                {el.title} — {el.status}
+                {el.title} - {el.status} -{" "}
+                {el.approvedCandidateCount ?? 0} approved candidate(s)
               </option>
             ))}
           </select>
+
+          {selected && !selectedHasCandidates && (
+            <p className="mt-3 text-sm text-amber-600 font-semibold">
+              This election cannot be opened for voters until it has approved
+              candidates.
+            </p>
+          )}
         </div>
 
         <div className="flex gap-3">
           <button
-            disabled={!selected || loading}
+            disabled={!selected || loading || !selectedHasCandidates}
             onClick={handleOpen}
-            className="px-6 py-3 rounded-xl bg-election-dark text-white font-black"
+            className="px-6 py-3 rounded-xl bg-election-dark text-white font-black disabled:opacity-50"
           >
             {t("open_election_now")}
           </button>

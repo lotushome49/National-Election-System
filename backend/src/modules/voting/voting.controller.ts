@@ -4,6 +4,15 @@ import { sendSuccess, sendCreated } from "../../utils/response";
 import type { AuthRequest } from "../../types";
 
 export const votingController = {
+  activeBallot: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const result = await votingService.getActiveBallot();
+      sendSuccess(res, result, "Active ballot loaded");
+    } catch (err) {
+      next(err);
+    }
+  },
+
   me: async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       const result = await votingService.getMyStatus(req.user!.sub);
