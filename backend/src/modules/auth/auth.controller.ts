@@ -26,6 +26,15 @@ export const authController = {
     }
   },
 
+  voterTokenLogin: async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await authService.voterTokenLogin(req.body, req.ip ?? "");
+      sendSuccess(res, result, "Voter token login successful");
+    } catch (err) {
+      next(err);
+    }
+  },
+
   registerVoter: async (req: Request, res: Response, next: NextFunction) => {
     try {
       const result = await voterService.register(

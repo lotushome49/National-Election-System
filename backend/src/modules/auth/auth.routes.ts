@@ -7,6 +7,7 @@ import { registerVoterSchema } from "../voter/voter.schema";
 import {
   loginSchema,
   biometricLoginSchema,
+  voterTokenLoginSchema,
   refreshTokenSchema,
   mfaChallengeSchema,
   mfaEnrollmentVerifySchema,
@@ -24,6 +25,14 @@ router.post(
   authLimiter,
   validate(biometricLoginSchema),
   authController.biometricLogin,
+);
+
+// POST /api/v1/auth/login/voter-token
+router.post(
+  "/login/voter-token",
+  authLimiter,
+  validate(voterTokenLoginSchema),
+  authController.voterTokenLogin,
 );
 
 // POST /api/v1/auth/register-voter

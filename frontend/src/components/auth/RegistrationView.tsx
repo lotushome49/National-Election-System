@@ -493,6 +493,19 @@ export function RegistrationView({
   };
 
   if (successData) {
+    const autoSignedIn = Boolean(successData?.accessToken);
+    const isAdminAssistedRegistration = Boolean(token) && !autoSignedIn;
+    const primaryActionView = autoSignedIn
+      ? "voter-hub"
+      : isAdminAssistedRegistration
+        ? "dashboard"
+        : "login";
+    const primaryActionLabel = autoSignedIn
+      ? "Continue to voter hub"
+      : isAdminAssistedRegistration
+        ? "Return to dashboard"
+        : "Go to login";
+
     return (
       <motion.div
         initial={{ scale: 0.9, opacity: 0 }}
@@ -504,6 +517,34 @@ export function RegistrationView({
         </div>
         <h2 className="text-2xl font-bold mb-2">{t("reg_success")}</h2>
         <p className="text-slate-500 mb-4">{t("reg_success_desc")}</p>
+
+        <div
+          className={cn(
+            "border rounded-xl p-4 mb-4 text-left",
+            autoSignedIn
+              ? "bg-blue-50 border-blue-100"
+              : "bg-amber-50 border-amber-100",
+          )}
+        >
+          <p
+            className={cn(
+              "text-[10px] font-bold uppercase tracking-widest mb-1",
+              autoSignedIn ? "text-blue-700" : "text-amber-700",
+            )}
+          >
+            Session status
+          </p>
+          <p
+            className={cn(
+              "text-xs",
+              autoSignedIn ? "text-blue-800" : "text-amber-800",
+            )}
+          >
+            {autoSignedIn
+              ? "The voter is signed in and can continue to the voter hub."
+              : "Registration is complete. The voter must log in before casting a vote."}
+          </p>
+        </div>
 
         <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 mb-4 text-left">
           <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold mb-3">
@@ -600,7 +641,9 @@ export function RegistrationView({
               System-issued voting token
             </p>
             <p className="text-xs text-emerald-800 mb-2">
-              This token can be used in the voting booth once the voter logs in.
+              {autoSignedIn
+                ? "Use this token as the Unique Voting ID inside the voting booth."
+                : "This token can be used in the voting booth once the voter logs in."}
             </p>
             <p className="text-sm font-mono font-bold text-emerald-900 break-all">
               {successData.votingToken}
@@ -609,10 +652,10 @@ export function RegistrationView({
         )}
 
         <button
-          onClick={() => setView("login")}
+          onClick={() => setView(primaryActionView)}
           className="bg-election-blue text-white px-8 py-3 rounded-xl font-medium w-full"
         >
-          {t("return_home")}
+          {primaryActionLabel}
         </button>
       </motion.div>
     );

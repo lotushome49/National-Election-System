@@ -9,6 +9,11 @@ export const biometricLoginSchema = z.object({
   faceEmbedding: z.string().min(10),
 });
 
+export const voterTokenLoginSchema = z.object({
+  nationalId: z.string().min(5).max(50).trim(),
+  votingToken: z.string().min(16).max(256).trim(),
+});
+
 export const refreshTokenSchema = z.object({
   refreshToken: z.string().min(10),
 });
@@ -64,6 +69,7 @@ export const changePasswordSchema = z.object({
 
 export type LoginDto = z.infer<typeof loginSchema>;
 export type BiometricLoginDto = z.infer<typeof biometricLoginSchema>;
+export type VoterTokenLoginDto = z.infer<typeof voterTokenLoginSchema>;
 export type RefreshTokenDto = z.infer<typeof refreshTokenSchema>;
 export type MfaChallengeDto = z.infer<typeof mfaChallengeSchema>;
 export type MfaEnrollmentVerifyDto = z.infer<typeof mfaEnrollmentVerifySchema>;

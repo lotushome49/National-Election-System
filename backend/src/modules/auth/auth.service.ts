@@ -29,6 +29,7 @@ import {
 import type {
   LoginDto,
   BiometricLoginDto,
+  VoterTokenLoginDto,
   RefreshTokenDto,
   MfaChallengeDto,
   MfaEnrollmentVerifyDto,
@@ -36,6 +37,8 @@ import type {
 } from "./auth.schema";
 import { prisma } from "../../configs/database";
 import { computeFaceEmbeddingScore } from "../../utils/faceRecognition";
+import { voterRepository } from "../voter/voter.repository";
+import { votingRepository } from "../voting/voting.repository";
 
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCK_DURATION_MS = 30 * 60 * 1000;
@@ -271,6 +274,79 @@ export const authService = {
       sessionId: session.id,
       voter: { id: voter.id, voterId: voter.voterId },
       matchScore: highestScore,
+    };
+  },
+
+  async voterTokenLogin(dto: VoterTokenLoginDto, ip: string) {
+    const nationalId = dto.nationalId.trim();
+    const votingToken = dto.votingToken.trim();
+
+    const voter = await voterRepository.findByNationalId(nationalId);
+    if (!voter) {
+      throw new UnauthorizedError("Invalid national ID or voting token");
+    }
+
+    if (!(voter as any).isVerified) {
+      throw new ForbiddenError(
+        "Voter registration is awaiting verification approval.",
+      );
+    }
+
+    const tokenHash = sha256(votingToken);
+    const tokenRecord = await votingRepository.findTokenByHash(tokenHash);
+    if (!tokenRecord || tokenRecord.voterId !== voter.id) {
+      throw new UnauthorizedError("Invalid national ID or voting token");
+    }
+
+    if (tokenRecord.status !== "UNUSED") {
+      throw new ForbiddenError("Voting token has already been used");
+    }
+
+    if (tokenRecord.expiresAt < new Date()) {
+      throw new ForbiddenError("Voting token has expired");
+    }
+
+    const session = await authRepository.createSession({
+      userId: voter.id,
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      ipAddress: ip,
+    });
+
+    const accessToken = signAccessToken(
+      {
+        sub: voter.id,
+        sid: session.id,
+        role: "VOTER",
+        regionId: voter.regionId ?? undefined,
+        districtId: voter.districtId ?? undefined,
+      },
+      session.id,
+    );
+
+    await authRepository.touchSession(session.id);
+
+    await auditService.log({
+      userId: voter.id,
+      action: "LOGIN",
+      entity: "Voter",
+      entityId: voter.id,
+      description: "Voter token login",
+      ipAddress: ip,
+    });
+
+    return {
+      accessToken,
+      token: accessToken,
+      sessionId: session.id,
+      user: {
+        id: voter.id,
+        fullName: voter.fullName,
+        username: voter.nationalId,
+        role: "VOTER",
+        voterId: voter.voterId,
+        uniqueVoterId: voter.voterId,
+      },
+      voter: { id: voter.id, voterId: voter.voterId },
     };
   },
 

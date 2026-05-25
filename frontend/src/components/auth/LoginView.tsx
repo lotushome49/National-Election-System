@@ -47,6 +47,11 @@ export function LoginView({
   const [useRecoveryCode, setUseRecoveryCode] = useState(false);
   const [pendingUser, setPendingUser] = useState<any>(null);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [showTokenLoginPanel, setShowTokenLoginPanel] = useState(false);
+  const [voterTokenAuth, setVoterTokenAuth] = useState({
+    nationalId: "",
+    votingToken: "",
+  });
   const lang = i18n.language as "en" | "am";
 
   const [biometricState, setBiometricState] = useState<
@@ -370,6 +375,42 @@ export function LoginView({
     }
   };
 
+  const loginWithVotingToken = async () => {
+    if (
+      !voterTokenAuth.nationalId.trim() ||
+      !voterTokenAuth.votingToken.trim()
+    ) {
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+    try {
+      const response = await postWithFallback(
+        ["/api/v1/auth/login/voter-token", "/api/auth/login/voter-token"],
+        {
+          nationalId: voterTokenAuth.nationalId.trim(),
+          votingToken: voterTokenAuth.votingToken.trim(),
+        },
+      );
+
+      const data = unwrapApiData(await readResponseBody(response));
+      if (!response.ok) {
+        throw new Error(
+          data?.message ||
+            data?.error ||
+            `Authentication failed (status ${response.status})`,
+        );
+      }
+
+      finalizeLogin(data, "VOTER");
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const completeMfaLogin = async () => {
     if (!mfaChallengeToken || (!mfaCode && !recoveryCode)) {
       return;
@@ -620,6 +661,69 @@ export function LoginView({
                     className="opacity-30 group-hover:translate-x-1 transition-transform"
                   />
                 </button>
+
+                <div className="rounded-[2rem] border border-slate-200 bg-white px-6 py-5 shadow-sm">
+                  <button
+                    onClick={() => setShowTokenLoginPanel((prev) => !prev)}
+                    className="w-full flex items-center justify-between text-left"
+                  >
+                    <div>
+                      <p className="text-sm font-black text-slate-800 uppercase tracking-wider">
+                        Login With Voting ID
+                      </p>
+                      <p className="text-[10px] text-slate-400 uppercase tracking-widest mt-1">
+                        Use National ID + issued voting token
+                      </p>
+                    </div>
+                    <ChevronRight
+                      size={18}
+                      className={cn(
+                        "text-slate-300 transition-transform",
+                        showTokenLoginPanel && "rotate-90",
+                      )}
+                    />
+                  </button>
+
+                  {showTokenLoginPanel && (
+                    <div className="mt-4 space-y-3">
+                      <input
+                        type="text"
+                        value={voterTokenAuth.nationalId}
+                        onChange={(event) =>
+                          setVoterTokenAuth((prev) => ({
+                            ...prev,
+                            nationalId: event.target.value,
+                          }))
+                        }
+                        placeholder="National ID"
+                        className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:bg-white focus:ring-4 focus:ring-slate-900/5 focus:border-slate-900 transition-all font-mono"
+                      />
+                      <input
+                        type="text"
+                        value={voterTokenAuth.votingToken}
+                        onChange={(event) =>
+                          setVoterTokenAuth((prev) => ({
+                            ...prev,
+                            votingToken: event.target.value,
+                          }))
+                        }
+                        placeholder="Voting token"
+                        className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:bg-white focus:ring-4 focus:ring-slate-900/5 focus:border-slate-900 transition-all font-mono"
+                      />
+                      <button
+                        onClick={loginWithVotingToken}
+                        disabled={
+                          loading ||
+                          !voterTokenAuth.nationalId.trim() ||
+                          !voterTokenAuth.votingToken.trim()
+                        }
+                        className="w-full bg-slate-900 text-white py-3 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 transition-all disabled:opacity-50"
+                      >
+                        Continue
+                      </button>
+                    </div>
+                  )}
+                </div>
 
                 <button
                   onClick={() => setView("registration")}
