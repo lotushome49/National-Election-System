@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useRef } from "react";
 import {
   ChevronLeft,
   Plus,
@@ -211,7 +211,12 @@ export function ElectionManagementView({ setView, token }: Props) {
     },
   };
 
-  const loadElections = useCallback(async () => {
+  const setViewRef = useRef(setView);
+  useEffect(() => {
+    setViewRef.current = setView;
+  }, [setView]);
+
+  const loadElections = async () => {
     setLoading(true);
     setLoadError(null);
     try {
@@ -223,7 +228,7 @@ export function ElectionManagementView({ setView, token }: Props) {
       setElections(serverElections);
     } catch (err) {
       if (isUnauthorized(err)) {
-        setView("login");
+        setViewRef.current("login");
         return;
       }
       setElections([]);
@@ -237,11 +242,18 @@ export function ElectionManagementView({ setView, token }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [token, setView]);
+  };
 
   useEffect(() => {
-    void loadElections();
-  }, [loadElections]);
+    let mounted = true;
+    void (async () => {
+      if (!mounted) return;
+      await loadElections();
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [token]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -389,13 +401,21 @@ export function ElectionManagementView({ setView, token }: Props) {
           </p>
         </div>
 
-        <button
-          onClick={openCreate}
-          className="px-8 py-4 bg-slate-900 text-white rounded-[2rem] text-[10px] font-black uppercase tracking-[0.35em] shadow-xl hover:bg-slate-800 transition-all flex items-center gap-3"
-        >
-          <Plus size={16} />
-          Create Election
-        </button>
+        <div className="flex flex-col sm:flex-row gap-3">
+          <button
+            onClick={() => setView("voter-hub-admin")}
+            className="px-8 py-4 bg-white border border-slate-100 text-slate-600 rounded-[2rem] text-[10px] font-black uppercase tracking-[0.35em] shadow-sm hover:text-slate-900 transition-all flex items-center gap-3"
+          >
+            Manage Election Opening
+          </button>
+          <button
+            onClick={openCreate}
+            className="px-8 py-4 bg-slate-900 text-white rounded-[2rem] text-[10px] font-black uppercase tracking-[0.35em] shadow-xl hover:bg-slate-800 transition-all flex items-center gap-3"
+          >
+            <Plus size={16} />
+            Create Election
+          </button>
+        </div>
       </div>
 
       {/* Main List */}

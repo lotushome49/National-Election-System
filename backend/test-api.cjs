@@ -1,0 +1,1 @@
+fetch('http://localhost:3001/api/v1/elections/current/open').then(r => Promise.all([r.status, r.text()])).then(console.log).catch(console.error);

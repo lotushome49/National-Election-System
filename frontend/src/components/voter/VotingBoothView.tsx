@@ -48,7 +48,16 @@ export function VotingBoothView({
   const [candidateError, setCandidateError] = useState<string | null>(null);
   const [votingToken, setVotingToken] = useState("");
   const [receiptHash, setReceiptHash] = useState<string | null>(null);
+  const [resolvedElectionId, setResolvedElectionId] = useState<string | null>(
+    currentElectionId ?? null,
+  );
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    if (currentElectionId) {
+      setResolvedElectionId(currentElectionId);
+    }
+  }, [currentElectionId]);
 
   useEffect(() => {
     try {
@@ -62,14 +71,14 @@ export function VotingBoothView({
 
       if (
         parsed?.token &&
-        (!parsed.electionId || parsed.electionId === currentElectionId)
+        (!parsed.electionId || parsed.electionId === resolvedElectionId)
       ) {
         setVotingToken(parsed.token);
       }
     } catch {
       // ignore malformed localStorage data
     }
-  }, [currentElectionId]);
+  }, [resolvedElectionId]);
 
   const selectedCandidate = useMemo(
     () => candidates.find((candidate) => candidate.id === selected) ?? null,
@@ -81,18 +90,32 @@ export function VotingBoothView({
       return;
     }
 
-    if (!currentElectionId) {
-      setCandidates([]);
-      setCandidateError("No active election is available for voting.");
-      return;
-    }
-
     const loadCandidates = async () => {
       setLoadingCandidates(true);
       setCandidateError(null);
       try {
+        let electionId = resolvedElectionId;
+        if (!electionId) {
+          const openElection = await fetchJson<{ data: { id?: string } }>(
+            "/api/v1/elections/current/open",
+            {
+              headers: { Authorization: `Bearer ${token}` },
+            },
+          );
+          electionId = openElection?.data?.id ?? null;
+          if (electionId) {
+            setResolvedElectionId(electionId);
+          }
+        }
+
+        if (!electionId) {
+          setCandidates([]);
+          setCandidateError("No active election is available for voting.");
+          return;
+        }
+
         const response = await fetchJson<{ data: Candidate[] }>(
-          `/api/v1/candidates?page=1&limit=100&electionId=${encodeURIComponent(currentElectionId)}&status=APPROVED`,
+          `/api/v1/candidates?page=1&limit=100&electionId=${encodeURIComponent(electionId)}&status=APPROVED`,
           {
             headers: { Authorization: `Bearer ${token}` },
           },
@@ -125,7 +148,7 @@ export function VotingBoothView({
     };
 
     void loadCandidates();
-  }, [currentElectionId, step, token]);
+  }, [resolvedElectionId, step, token]);
 
   useEffect(() => {
     if (step === 0 && !stream) {
@@ -166,7 +189,8 @@ export function VotingBoothView({
   };
 
   const handleCastVote = async () => {
-    if (!currentElectionId) {
+    const electionId = resolvedElectionId ?? currentElectionId;
+    if (!electionId) {
       alert("No active election is available.");
       return;
     }
@@ -192,7 +216,7 @@ export function VotingBoothView({
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
-            electionId: currentElectionId,
+            electionId,
             candidateId: selected,
             tokenHash: votingToken.trim(),
           }),

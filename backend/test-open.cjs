@@ -1,0 +1,1 @@
+const { PrismaClient } = require('@prisma/client'); const prisma = new PrismaClient(); prisma.election.findFirst({ where: { deletedAt: null, status: 'VOTING_OPEN' } }).then(e => console.log('OPEN:', e)).catch(console.error).finally(() => prisma.$disconnect());

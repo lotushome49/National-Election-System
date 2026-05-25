@@ -44,6 +44,7 @@ import { PasswordResetView } from "../components/auth/PasswordResetView";
 import { SessionManagementView } from "../components/admin/SessionManagementView";
 import { ObserverEvidenceView } from "../components/observer/ObserverEvidenceView";
 import { ElectionManagementView } from "../components/admin/ElectionManagementView";
+import AdminOpenElectionView from "../components/admin/AdminOpenElectionView";
 import { CandidateManagementView } from "../components/admin/CandidateManagementView";
 import { LoginView } from "../components/auth/LoginView";
 import { RegistrationView } from "../components/auth/RegistrationView";
@@ -60,7 +61,11 @@ import { ResultsDashboardView } from "../components/admin/ResultsDashboardView";
 import { LogItem } from "../components/results/LogItem";
 import { StatCard } from "../components/results/StatCard";
 import { checkPerm } from "../constants/permissions";
-import { useElectionRealtime } from "../hooks/useElectionRealtime";
+import {
+  mapStatusToPhase,
+  useElectionRealtime,
+} from "../hooks/useElectionRealtime";
+import { fetchJson } from "../services/api/client";
 import type { Candidate, Role } from "../types/election";
 import { cn } from "../utils/cn";
 import { isMfaEligibleRole, unwrapApiData } from "../utils/mfa";
@@ -78,6 +83,11 @@ export default function AppShell() {
   const [user, setUser] = useState<any>(null);
   const [token, setToken] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [openElectionContext, setOpenElectionContext] = useState<{
+    id: string | null;
+    title: string | null;
+    status: string | null;
+  }>({ id: null, title: null, status: null });
   const [authHydrated, setAuthHydrated] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
@@ -86,6 +96,13 @@ export default function AppShell() {
     window.location.hostname === "127.0.0.1";
   const normalizePath = (pathname: string) => {
     const trimmed = pathname.replace(/\/+$/, "") || "/";
+
+    if (
+      trimmed === "/admin/voter-hub" ||
+      trimmed === "/super-admin/voter-hub"
+    ) {
+      return trimmed;
+    }
 
     if (trimmed.startsWith("/super-admin/")) {
       return trimmed.replace("/super-admin", "");
@@ -137,6 +154,10 @@ export default function AppShell() {
         return "observer-evidence";
       case "/voter-hub":
         return "voter-hub";
+      case "/admin/voter-hub":
+      case "/super-admin/voter-hub":
+      case "/voter-hub-admin":
+        return "voter-hub-admin";
       case "/registration":
         return "registration";
       case "/voting-booth":
@@ -186,6 +207,8 @@ export default function AppShell() {
           : "/observer-evidence";
       case "voter-hub":
         return "/voter-hub";
+      case "voter-hub-admin":
+        return adminPrefix ? `${adminPrefix}/voter-hub` : "/voter-hub-admin";
       case "registration":
         return adminPrefix ? `${adminPrefix}/registration` : "/registration";
       case "voting-booth":
@@ -211,8 +234,14 @@ export default function AppShell() {
     "voting-booth",
     "results-dashboard",
   ].includes(view);
-  const { results, electionPhase, currentElectionId, setElectionPhase } =
-    useElectionRealtime(token, realtimeEnabled);
+  const {
+    results,
+    electionPhase,
+    currentElectionId,
+    currentElectionTitle,
+    currentElectionStatus,
+    setElectionPhase,
+  } = useElectionRealtime(token, realtimeEnabled);
   const canManageObserverEvidence =
     role === "OBSERVER" || role === "ADMIN" || role === "SUPER_ADMIN";
 
@@ -265,13 +294,13 @@ export default function AppShell() {
       case "observer-evidence":
         return canManageObserverEvidence;
       case "voter-hub":
-        return role === "VOTER" || checkPerm(role, "MANAGE_VOTERS");
+        return role === "VOTER";
+      case "voter-hub-admin":
+        return checkPerm(role, "MANAGE_ELECTIONS");
       case "registration":
         return true;
       case "voting-booth":
         return Boolean(token);
-      case "receipt-verification":
-        return true;
       case "dashboard":
         return Boolean(token) && role !== "NONE";
       default:
@@ -295,14 +324,16 @@ export default function AppShell() {
 
     const items: SidebarItem[] = [];
 
-    if (role === "VOTER" || checkPerm(role, "MANAGE_VOTERS")) {
+    if (role === "VOTER") {
       items.push({
         key: "voter-hub",
         label: t("voter_hub"),
         icon: <User size={18} />,
         view: "voter-hub",
       });
-    } else if (role !== "NONE") {
+    }
+
+    if (role !== "NONE") {
       items.push({
         key: "dashboard",
         label: t("dashboard"),
@@ -336,6 +367,12 @@ export default function AppShell() {
     }
 
     if (checkPerm(role, "MANAGE_ELECTIONS")) {
+      items.push({
+        key: "voter-hub-admin",
+        label: "Manage Election Opening",
+        icon: <Vote size={18} />,
+        view: "voter-hub-admin",
+      });
       items.push({
         key: "elections",
         label: lang === "en" ? "Elections" : "ምርጫዎች",
@@ -464,6 +501,52 @@ export default function AppShell() {
     if (sessionId) localStorage.setItem("nehs_sessionId", sessionId);
     else localStorage.removeItem("nehs_sessionId");
   }, [token, role, user, sessionId]);
+
+  useEffect(() => {
+    if (!token || role === "NONE") {
+      setOpenElectionContext({ id: null, title: null, status: null });
+      return;
+    }
+
+    let active = true;
+    let timer: ReturnType<typeof setInterval> | null = null;
+
+    const loadOpenElection = async () => {
+      try {
+        const response = await fetchJson<{ data: any }>(
+          "/api/v1/elections/current/open",
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+
+        const election = response?.data ?? null;
+        if (!active) return;
+
+        setOpenElectionContext({
+          id: election?.id ?? null,
+          title: election?.title ?? null,
+          status: election?.status ?? null,
+        });
+        if (election?.status) {
+          setElectionPhase(mapStatusToPhase(election.status));
+        }
+      } catch {
+        if (!active) return;
+        setOpenElectionContext({ id: null, title: null, status: null });
+      }
+    };
+
+    void loadOpenElection();
+    timer = setInterval(() => {
+      void loadOpenElection();
+    }, 5000);
+
+    return () => {
+      active = false;
+      if (timer) {
+        clearInterval(timer);
+      }
+    };
+  }, [token, role]);
 
   useEffect(() => {
     if (!authHydrated) return;
@@ -847,17 +930,33 @@ export default function AppShell() {
                   setView={setView}
                 />
               )}
-            {effectiveView === "voter-hub" &&
-              (role === "VOTER" || checkPerm(role, "MANAGE_VOTERS")) && (
-                <VoterHub
-                  key="voter"
-                  user={user}
-                  token={token}
+            {effectiveView === "voter-hub" && role === "VOTER" && (
+              <VoterHub
+                key="voter"
+                user={user}
+                token={token}
+                setView={setView}
+                t={t}
+                role={role}
+                electionPhase={electionPhase}
+                currentElectionId={openElectionContext.id ?? currentElectionId}
+                currentElectionTitle={
+                  openElectionContext.title ?? currentElectionTitle
+                }
+                currentElectionStatus={
+                  openElectionContext.status ?? currentElectionStatus
+                }
+                i18n={i18n}
+              />
+            )}
+
+            {effectiveView === "voter-hub-admin" &&
+              checkPerm(role, "MANAGE_ELECTIONS") && (
+                <AdminOpenElectionView
+                  key="voter-admin"
                   setView={setView}
+                  token={token}
                   t={t}
-                  role={role}
-                  electionPhase={electionPhase}
-                  currentElectionId={currentElectionId}
                   i18n={i18n}
                 />
               )}
@@ -907,7 +1006,7 @@ export default function AppShell() {
                   setUser={setUser}
                   role={role}
                   t={t}
-                  currentElectionId={currentElectionId}
+                  currentElectionId={openElectionContext.id ?? currentElectionId}
                 />
               ) : (
                 <div className="max-w-md mx-auto text-center py-20">
@@ -951,6 +1050,13 @@ export default function AppShell() {
                 t={t}
                 role={role}
                 electionPhase={electionPhase}
+                currentElectionId={openElectionContext.id ?? currentElectionId}
+                currentElectionTitle={
+                  openElectionContext.title ?? currentElectionTitle
+                }
+                currentElectionStatus={
+                  openElectionContext.status ?? currentElectionStatus
+                }
                 i18n={i18n}
               />
             )}

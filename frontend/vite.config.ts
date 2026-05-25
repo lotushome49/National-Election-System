@@ -23,6 +23,12 @@ export default defineConfig(({ mode }) => {
           secure: false,
           rewrite: (path) => path,
         },
+        "/socket.io": {
+          target: env.VITE_BACKEND_URL || "http://127.0.0.1:3001",
+          changeOrigin: true,
+          secure: false,
+          ws: true,
+        },
       },
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
       // Do not modify—file watching is disabled to prevent flickering during agent edits.

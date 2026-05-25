@@ -9,7 +9,7 @@ type ElectionSummary = {
   title?: string;
 };
 
-function mapStatusToPhase(status: string): ElectionPhase {
+export function mapStatusToPhase(status: string): ElectionPhase {
   if (status === "VOTING_OPEN") return "VOTING";
   if (
     status === "VOTING_CLOSED" ||
@@ -23,11 +23,13 @@ function mapStatusToPhase(status: string): ElectionPhase {
 
 function pickCurrentElection(elections: ElectionSummary[]) {
   return (
+    elections.find((election) => election.status === "VOTING_OPEN") ??
     elections.find(
       (election) =>
         election.status !== "RESULTS_DECLARED" &&
         election.status !== "CANCELLED",
-    ) ?? null
+    ) ??
+    null
   );
 }
 
@@ -38,12 +40,20 @@ export function useElectionRealtime(token: string | null, enabled = true) {
   const [currentElectionId, setCurrentElectionId] = useState<string | null>(
     null,
   );
+  const [currentElectionTitle, setCurrentElectionTitle] = useState<
+    string | null
+  >(null);
+  const [currentElectionStatus, setCurrentElectionStatus] = useState<
+    string | null
+  >(null);
   const currentElectionIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!enabled) {
       setResults(null);
       setCurrentElectionId(null);
+      setCurrentElectionTitle(null);
+      setCurrentElectionStatus(null);
       return;
     }
 
@@ -56,6 +66,8 @@ export function useElectionRealtime(token: string | null, enabled = true) {
     if (!effectiveToken) {
       setResults(null);
       setCurrentElectionId(null);
+      setCurrentElectionTitle(null);
+      setCurrentElectionStatus(null);
       return;
     }
 
@@ -155,6 +167,8 @@ export function useElectionRealtime(token: string | null, enabled = true) {
         if (overview?.election?.id) {
           currentElectionIdRef.current = overview.election.id;
           setCurrentElectionId(overview.election.id);
+          setCurrentElectionTitle(overview.election.title ?? null);
+          setCurrentElectionStatus(overview.election.status ?? null);
           socket.emit("join:election", overview.election.id);
         }
 
@@ -184,20 +198,20 @@ export function useElectionRealtime(token: string | null, enabled = true) {
       } catch (error) {
         // Fallback for roles that cannot access reporting data, such as voters.
         try {
-          const response = await fetchJson<{ data: ElectionSummary[] }>(
-            "/api/v1/elections?page=1&limit=100",
+          const response = await fetchJson<{ data: ElectionSummary }>(
+            "/api/v1/elections/current/open",
             {
               headers: { Authorization: `Bearer ${effectiveToken}` },
             },
           );
 
-          const activeElection = pickCurrentElection(
-            Array.isArray(response?.data) ? response.data : [],
-          );
+          const activeElection = response?.data ?? null;
 
           if (activeElection?.id) {
             currentElectionIdRef.current = activeElection.id;
             setCurrentElectionId(activeElection.id);
+            setCurrentElectionTitle(activeElection.title ?? null);
+            setCurrentElectionStatus(activeElection.status ?? null);
             socket.emit("join:election", activeElection.id);
           }
 
@@ -251,6 +265,8 @@ export function useElectionRealtime(token: string | null, enabled = true) {
     electionPhase,
     results,
     currentElectionId,
+    currentElectionTitle,
+    currentElectionStatus,
     setElectionPhase,
     setResults,
   };

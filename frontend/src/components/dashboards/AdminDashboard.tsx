@@ -95,12 +95,20 @@ export function AdminDashboard({ setView, t, i18n, results, token }: any) {
             {lang === "en" ? "አማርኛ" : "English"}
           </button>
           {setView && (
-            <button
-              onClick={() => setView("users")}
-              className="px-5 py-3 rounded-xl bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest flex items-center gap-2"
-            >
-              Manage Users <ArrowRight size={14} />
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setView("voter-hub-admin")}
+                className="px-5 py-3 rounded-xl bg-white border border-slate-100 text-slate-600 text-[10px] font-black uppercase tracking-widest flex items-center gap-2"
+              >
+                Manage Election Opening <ArrowRight size={14} />
+              </button>
+              <button
+                onClick={() => setView("users")}
+                className="px-5 py-3 rounded-xl bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest flex items-center gap-2"
+              >
+                Manage Users <ArrowRight size={14} />
+              </button>
+            </div>
           )}
         </div>
       </div>
