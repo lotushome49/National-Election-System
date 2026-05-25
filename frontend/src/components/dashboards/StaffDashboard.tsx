@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { motion } from "motion/react";
 import {
   Activity,
@@ -6,14 +6,33 @@ import {
   Fingerprint,
   Search,
   ListChecks,
+  CheckCircle2,
+  AlertCircle,
 } from "lucide-react";
 import { StatCard } from "../results/StatCard";
-import { useEffect, useState } from "react";
 import { fetchOverview } from "../../services/api/reports";
+import { fetchJson } from "../../services/api/client";
+
+function getErrorMessage(error: unknown, fallback: string) {
+  const body = (error as any)?.body;
+  if (typeof body?.message === "string" && body.message.trim()) {
+    return body.message;
+  }
+
+  if (typeof (error as any)?.message === "string") {
+    return (error as any).message;
+  }
+
+  return fallback;
+}
 
 export function StaffDashboard({ setView, t, i18n, token }: any) {
   const lang = i18n.language as "en" | "am";
   const [overview, setOverview] = useState<any>(null);
+  const [voters, setVoters] = useState<any[]>([]);
+  const [loadingVoters, setLoadingVoters] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [actionId, setActionId] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -25,6 +44,88 @@ export function StaffDashboard({ setView, t, i18n, token }: any) {
       mounted = false;
     };
   }, [token]);
+
+  useEffect(() => {
+    let mounted = true;
+    if (!token) return;
+
+    const loadVoters = async () => {
+      setLoadingVoters(true);
+      setError(null);
+      try {
+        const response = await fetchJson<{ data: any[] }>(
+          "/api/v1/voters?page=1&limit=100",
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          },
+        );
+
+        if (mounted) {
+          setVoters(Array.isArray(response.data) ? response.data : []);
+        }
+      } catch (err) {
+        if (mounted) {
+          setError(getErrorMessage(err, "Failed to load voter queue"));
+          setVoters([]);
+        }
+      } finally {
+        if (mounted) {
+          setLoadingVoters(false);
+        }
+      }
+    };
+
+    void loadVoters();
+
+    return () => {
+      mounted = false;
+    };
+  }, [token]);
+
+  const pendingVoters = voters.filter((voter) => !voter.isVerified);
+  const verifiedVoters = voters.filter((voter) => voter.isVerified);
+  const verificationRate =
+    voters.length > 0
+      ? Math.round((verifiedVoters.length / voters.length) * 1000) / 10
+      : 0;
+  const electionStatus = overview?.election?.status || "UNKNOWN";
+  const electionTitle = overview?.election?.title || "Current election";
+
+  const openVoterApprovalQueue = () => {
+    try {
+      localStorage.setItem("nehs_voter_registry_filter", "pending");
+    } catch {
+      // ignore storage failures; the registry will still open normally
+    }
+
+    setView?.("voters");
+  };
+
+  const handleVerification = async (voterId: string, verified: boolean) => {
+    setActionId(voterId);
+    setError(null);
+    try {
+      await fetchJson(`/api/v1/voters/${voterId}/verify`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ verified }),
+      });
+
+      setVoters((prev) =>
+        prev.map((voter) =>
+          voter.id === voterId ? { ...voter, isVerified: verified } : voter,
+        ),
+      );
+    } catch (err) {
+      setError(getErrorMessage(err, "Failed to update voter verification"));
+    } finally {
+      setActionId(null);
+    }
+  };
+
   const cards = [
     {
       title: "Fast Search",
@@ -34,20 +135,20 @@ export function StaffDashboard({ setView, t, i18n, token }: any) {
     },
     {
       title: "Verification Queue",
-      value: "24",
+      value: pendingVoters.length.toLocaleString(),
       sub: "Awaiting review",
       icon: <ListChecks size={24} />,
     },
     {
       title: "Today’s Registrations",
-      value: overview?.todaysRegistrations ?? "124",
+      value: overview?.todaysRegistrations ?? "0",
       sub: "Completed sessions",
       icon: <Fingerprint size={24} />,
     },
     {
-      title: "Match Score",
-      value: "99.2%",
-      sub: "Identity confidence",
+      title: "Verification Rate",
+      value: `${verificationRate.toFixed(1)}%`,
+      sub: "Verified voters in queue",
       icon: <Activity size={24} />,
     },
   ];
@@ -72,6 +173,18 @@ export function StaffDashboard({ setView, t, i18n, token }: any) {
           <p className="text-slate-400 text-sm font-medium leading-relaxed max-w-2xl uppercase tracking-widest">
             Fast verification and registration support for polling staff.
           </p>
+
+          <div className="inline-flex flex-wrap items-center gap-3 px-4 py-3 rounded-2xl bg-slate-50 border border-slate-100">
+            <span className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">
+              Election Status
+            </span>
+            <span className="px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-[0.25em] bg-slate-900 text-white">
+              {electionStatus.replaceAll("_", " ")}
+            </span>
+            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
+              {electionTitle}
+            </span>
+          </div>
         </div>
         <div className="flex flex-col lg:items-end gap-4">
           <button
@@ -81,12 +194,20 @@ export function StaffDashboard({ setView, t, i18n, token }: any) {
             {lang === "en" ? "አማርኛ" : "English"}
           </button>
           {setView && (
-            <button
-              onClick={() => setView("voters")}
-              className="px-5 py-3 rounded-xl bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest"
-            >
-              Queue
-            </button>
+            <div className="flex flex-wrap gap-3 justify-end">
+              <button
+                onClick={openVoterApprovalQueue}
+                className="px-5 py-3 rounded-xl bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest"
+              >
+                Open Voter Approval Queue
+              </button>
+              <button
+                onClick={() => setView("voters")}
+                className="px-5 py-3 rounded-xl bg-white border border-slate-100 text-slate-700 text-[10px] font-black uppercase tracking-widest"
+              >
+                Open Registry
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -95,6 +216,76 @@ export function StaffDashboard({ setView, t, i18n, token }: any) {
         {cards.map((card) => (
           <StatCard key={card.title} {...card} />
         ))}
+      </div>
+
+      <div className="bg-white p-10 rounded-[3rem] border border-slate-100 shadow-sm space-y-8">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <div className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">
+              Live Staff Queue
+            </div>
+            <h3 className="text-2xl font-display font-black tracking-tighter uppercase mt-2">
+              Voter verification approvals
+            </h3>
+          </div>
+          <button
+            onClick={openVoterApprovalQueue}
+            className="px-5 py-3 rounded-xl bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest flex items-center gap-2"
+          >
+            <ListChecks size={14} /> Open Voter Approval Queue
+          </button>
+        </div>
+
+        {error && (
+          <div className="p-4 rounded-2xl bg-rose-50 border border-rose-100 text-rose-700 text-sm font-semibold flex items-center gap-2">
+            <AlertCircle size={16} /> {error}
+          </div>
+        )}
+
+        {loadingVoters ? (
+          <div className="p-12 text-center text-slate-300 font-display font-black uppercase tracking-[0.4em] animate-pulse">
+            Loading voter queue
+          </div>
+        ) : pendingVoters.length === 0 ? (
+          <div className="p-12 text-center text-slate-400 font-bold uppercase tracking-widest text-sm">
+            No voters awaiting approval.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {pendingVoters.slice(0, 6).map((voter) => (
+              <div
+                key={voter.id}
+                className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-4 rounded-2xl border border-slate-100 bg-slate-50/60"
+              >
+                <div className="space-y-1">
+                  <p className="font-black uppercase tracking-tight text-slate-900">
+                    {voter.fullName}
+                  </p>
+                  <p className="text-[10px] font-mono uppercase tracking-widest text-slate-400">
+                    {voter.nationalId} · {voter.regionId || "National"}
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={() => handleVerification(voter.id, true)}
+                    disabled={actionId === voter.id}
+                    className="px-4 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-100 text-[9px] font-black uppercase tracking-widest flex items-center gap-2 disabled:opacity-50"
+                  >
+                    <CheckCircle2 size={14} />
+                    {actionId === voter.id ? "Approving..." : "Approve"}
+                  </button>
+                  <button
+                    onClick={() => setView?.("voters")}
+                    className="px-4 py-2 rounded-xl bg-slate-900 text-white text-[9px] font-black uppercase tracking-widest"
+                  >
+                    Review
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="bg-white p-10 rounded-[3rem] border border-slate-100 shadow-sm">

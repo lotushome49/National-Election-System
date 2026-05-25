@@ -49,6 +49,7 @@ import { LoginView } from "../components/auth/LoginView";
 import { RegistrationView } from "../components/auth/RegistrationView";
 import { VoterHub } from "../components/voter/VoterHub";
 import { VotingBoothView } from "../components/voter/VotingBoothView";
+import { ReceiptVerificationView } from "../components/voter/ReceiptVerificationView";
 import { DashboardView } from "../components/admin/DashboardView";
 import { VoterRegistryView } from "../components/admin/VoterRegistryView";
 import { AuditLogsView } from "../components/admin/AuditLogsView";
@@ -140,6 +141,8 @@ export default function AppShell() {
         return "registration";
       case "/voting-booth":
         return "voting-booth";
+      case "/receipt-verification":
+        return "receipt-verification";
       case "/dashboard":
         return "dashboard";
       default:
@@ -187,6 +190,8 @@ export default function AppShell() {
         return adminPrefix ? `${adminPrefix}/registration` : "/registration";
       case "voting-booth":
         return "/voting-booth";
+      case "receipt-verification":
+        return "/receipt-verification";
       case "dashboard":
         return adminPrefix ? `${adminPrefix}/dashboard` : "/dashboard";
       default:
@@ -206,10 +211,8 @@ export default function AppShell() {
     "voting-booth",
     "results-dashboard",
   ].includes(view);
-  const { results, electionPhase, setElectionPhase } = useElectionRealtime(
-    token,
-    realtimeEnabled,
-  );
+  const { results, electionPhase, currentElectionId, setElectionPhase } =
+    useElectionRealtime(token, realtimeEnabled);
   const canManageObserverEvidence =
     role === "OBSERVER" || role === "ADMIN" || role === "SUPER_ADMIN";
 
@@ -220,7 +223,13 @@ export default function AppShell() {
         ? "login"
         : "dashboard";
 
-  const publicViews = new Set(["login", "password-reset", "help", "history"]);
+  const publicViews = new Set([
+    "login",
+    "password-reset",
+    "help",
+    "history",
+    "receipt-verification",
+  ]);
 
   const canAccessView = (nextView: string) => {
     switch (nextView) {
@@ -228,6 +237,7 @@ export default function AppShell() {
       case "password-reset":
       case "help":
       case "history":
+      case "receipt-verification":
         return true;
       case "voters":
         return checkPerm(role, "MANAGE_VOTERS");
@@ -259,6 +269,8 @@ export default function AppShell() {
         return Boolean(token);
       case "voting-booth":
         return Boolean(token);
+      case "receipt-verification":
+        return true;
       case "dashboard":
         return Boolean(token) && role !== "NONE";
       default:
@@ -758,6 +770,7 @@ export default function AppShell() {
                 t={t}
                 i18n={i18n}
                 user={user}
+                currentElectionId={currentElectionId}
               />
             )}
             {effectiveView === "users" && checkPerm(role, "MANAGE_USERS") && (
@@ -891,7 +904,7 @@ export default function AppShell() {
                   setUser={setUser}
                   role={role}
                   t={t}
-                  i18n={i18n}
+                  currentElectionId={currentElectionId}
                 />
               ) : (
                 <div className="max-w-md mx-auto text-center py-20">
@@ -936,6 +949,14 @@ export default function AppShell() {
                 role={role}
                 electionPhase={electionPhase}
                 i18n={i18n}
+              />
+            )}
+            {effectiveView === "receipt-verification" && (
+              <ReceiptVerificationView
+                token={token}
+                setView={setView}
+                t={t}
+                homeView={getHomeViewForRole(role)}
               />
             )}
           </AnimatePresence>

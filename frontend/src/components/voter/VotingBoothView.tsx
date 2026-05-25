@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   ShieldCheck,
@@ -11,20 +11,31 @@ import {
   Fingerprint,
 } from "lucide-react";
 import { cn } from "../../utils/cn";
-import { checkPerm } from "../../constants/permissions";
 import { CandidateDetailModal } from "../candidates/CandidateDetailModal";
+import { fetchJson } from "../../services/api/client";
 import type { Candidate } from "../../types/election";
+
+function getErrorMessage(error: unknown, fallback: string) {
+  const body = (error as any)?.body;
+  if (typeof body?.message === "string" && body.message.trim()) {
+    return body.message;
+  }
+
+  if (typeof (error as any)?.message === "string") {
+    return (error as any).message;
+  }
+
+  return fallback;
+}
 
 export function VotingBoothView({
   token,
   setView,
   setUser,
-  fpHash,
   role,
   t,
-  i18n,
+  currentElectionId,
 }: any) {
-  const lang = i18n.language as "en" | "am";
   const [selected, setSelected] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [step, setStep] = useState(role === "ADMIN" ? 1 : 0); // Admins skip biometric auth for this demo bypass
@@ -32,80 +43,68 @@ export function VotingBoothView({
   const [expandedCandidate, setExpandedCandidate] = useState<Candidate | null>(
     null,
   );
+  const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [loadingCandidates, setLoadingCandidates] = useState(false);
+  const [candidateError, setCandidateError] = useState<string | null>(null);
+  const [votingToken, setVotingToken] = useState("");
+  const [receiptHash, setReceiptHash] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  const candidates: Candidate[] = [
-    {
-      id: "c1",
-      name: t("c1_name"),
-      party: "Prosperity Party",
-      symbol: "💡",
-      photoUrl:
-        "https://upload.wikimedia.org/wikipedia/commons/thumb/c/cd/Prime_Minister_of_Ethiopia_Abiy_Ahmed_Ali_%28cropped%29.jpg/500px-Prime_Minister_of_Ethiopia_Abiy_Ahmed_Ali_%28cropped%29.jpg?v=2",
-      bio: t("c1_bio"),
-      manifesto: t("c1_manifesto"),
-      platform: t("c1_platform"),
-      votes: 0,
-    },
-    {
-      id: "c2",
-      name: t("c2_name"),
-      party: "OFN",
-      symbol: "⛰️",
-      photoUrl:
-        "https://upload.wikimedia.org/wikipedia/commons/thumb/6/62/Jawar_Mohammed_%28cropped%29.jpg/500px-Jawar_Mohammed_%28cropped%29.jpg",
-      bio: t("c2_bio"),
-      manifesto: t("c2_manifesto"),
-      platform: t("c2_platform"),
-      votes: 0,
-    },
-    {
-      id: "c3",
-      name: t("c3_name"),
-      party: "EZEMA",
-      symbol: "🛡️",
-      photoUrl:
-        "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8b/Minister_of_Education_Birhanu_Nega.jpg/500px-Minister_of_Education_Birhanu_Nega.jpg",
-      bio: t("c3_bio"),
-      manifesto: t("c3_manifesto"),
-      platform: t("c3_platform"),
-      votes: 0,
-    },
-    {
-      id: "c4",
-      name: t("c4_name"),
-      party: "Coalition of Youth",
-      symbol: "🦅",
-      photoUrl: "https://picsum.photos/seed/independent/400/400",
-      bio: t("c4_bio"),
-      manifesto: t("c4_manifesto"),
-      platform: t("c4_platform"),
-      votes: 0,
-    },
-  ];
+  const selectedCandidate = useMemo(
+    () => candidates.find((candidate) => candidate.id === selected) ?? null,
+    [candidates, selected],
+  );
 
-  const handleForceFinalize = async () => {
-    if (!confirm(t("confirm_finalize"))) return;
-
-    setSubmitting(true);
-    try {
-      const resp = await fetch("/api/admin/force-finalize", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      const data = await resp.json();
-      if (data.error) throw new Error(data.error);
-
-      setView("dashboard");
-    } catch (e: any) {
-      alert(e.message);
-    } finally {
-      setSubmitting(false);
+  useEffect(() => {
+    if (step !== 1) {
+      return;
     }
-  };
+
+    if (!currentElectionId) {
+      setCandidates([]);
+      setCandidateError("No active election is available for voting.");
+      return;
+    }
+
+    const loadCandidates = async () => {
+      setLoadingCandidates(true);
+      setCandidateError(null);
+      try {
+        const response = await fetchJson<{ data: Candidate[] }>(
+          `/api/v1/candidates?page=1&limit=100&electionId=${encodeURIComponent(currentElectionId)}&status=APPROVED`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          },
+        );
+
+        const payload = Array.isArray(response?.data) ? response.data : [];
+        setCandidates(
+          payload
+            .map((candidate: any) => ({
+              id: candidate.id,
+              name: candidate.fullName,
+              party: candidate.party,
+              symbol: candidate.symbol || candidate.partyCode || "🗳️",
+              photoUrl: candidate.photoUrl,
+              bio: candidate.bio,
+              manifesto: candidate.manifesto,
+              platform: candidate.manifesto || candidate.party,
+              votes: Number(candidate.votes ?? 0),
+            }))
+            .sort((left, right) => left.name.localeCompare(right.name)),
+        );
+      } catch (error) {
+        setCandidates([]);
+        setCandidateError(
+          getErrorMessage(error, "Failed to load candidates for this election"),
+        );
+      } finally {
+        setLoadingCandidates(false);
+      }
+    };
+
+    void loadCandidates();
+  }, [currentElectionId, step, token]);
 
   useEffect(() => {
     if (step === 0 && !stream) {
@@ -146,23 +145,52 @@ export function VotingBoothView({
   };
 
   const handleCastVote = async () => {
+    if (!currentElectionId) {
+      alert("No active election is available.");
+      return;
+    }
+
+    if (!selected) {
+      alert("Please select a candidate first.");
+      return;
+    }
+
+    if (!votingToken.trim()) {
+      alert("Enter the voting token issued by staff.");
+      return;
+    }
+
     setSubmitting(true);
     try {
-      const resp = await fetch("/api/vote/cast", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+      const resp = await fetchJson<{ data: { receiptHash: string } }>(
+        "/api/v1/voting/cast",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            electionId: currentElectionId,
+            candidateId: selected,
+            tokenHash: votingToken.trim(),
+          }),
         },
-        body: JSON.stringify({ candidateId: selected }),
-      });
-      const data = await resp.json();
-      if (data.error) throw new Error(data.error);
+      );
+      const nextReceiptHash = resp?.data?.receiptHash ?? null;
 
-      setUser((prev: any) => ({ ...prev, hasVoted: true }));
+      setReceiptHash(nextReceiptHash);
+      if (nextReceiptHash) {
+        sessionStorage.setItem("nehs_last_receipt_hash", nextReceiptHash);
+      }
+      setUser((prev: any) => ({
+        ...prev,
+        hasVoted: true,
+        receiptToken: nextReceiptHash,
+      }));
       setStep(3);
     } catch (e: any) {
-      alert(e.message);
+      alert(getErrorMessage(e, "Failed to cast vote"));
     } finally {
       setSubmitting(false);
     }
@@ -267,111 +295,124 @@ export function VotingBoothView({
             </div>
           </div>
 
-          <motion.div
-            initial="hidden"
-            animate="visible"
-            variants={{
-              visible: { transition: { staggerChildren: 0.1 } },
-            }}
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"
-          >
-            {candidates.map((c) => (
-              <motion.div
-                key={c.id}
-                variants={{
-                  hidden: { opacity: 0, y: 20 },
-                  visible: { opacity: 1, y: 0 },
-                }}
-                className="relative"
-              >
-                <motion.button
-                  whileHover={{ y: -5 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => setSelected(c.id)}
-                  className={cn(
-                    "w-full text-left p-10 rounded-[3rem] border transition-all duration-500 relative overflow-hidden group",
-                    selected === c.id
-                      ? "bg-slate-900 text-white border-slate-900 shadow-[0_30px_60px_-15px_rgba(0,0,0,0.3)]"
-                      : "bg-white border-slate-100 hover:border-slate-300 shadow-sm",
-                  )}
+          {candidateError ? (
+            <div className="p-8 rounded-[2rem] bg-rose-50 border border-rose-100 text-rose-600 text-sm font-semibold">
+              {candidateError}
+            </div>
+          ) : loadingCandidates ? (
+            <div className="p-20 text-center text-slate-300 font-display font-black uppercase tracking-[0.4em] animate-pulse">
+              Loading candidates
+            </div>
+          ) : candidates.length === 0 ? (
+            <div className="p-8 rounded-[2rem] bg-amber-50 border border-amber-100 text-amber-700 text-sm font-semibold">
+              No approved candidates are available for this election yet.
+            </div>
+          ) : (
+            <motion.div
+              initial="hidden"
+              animate="visible"
+              variants={{
+                visible: { transition: { staggerChildren: 0.1 } },
+              }}
+              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"
+            >
+              {candidates.map((c) => (
+                <motion.div
+                  key={c.id}
+                  variants={{
+                    hidden: { opacity: 0, y: 20 },
+                    visible: { opacity: 1, y: 0 },
+                  }}
+                  className="relative"
                 >
-                  {/* Highlight */}
-                  <div
+                  <motion.button
+                    whileHover={{ y: -5 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => setSelected(c.id)}
                     className={cn(
-                      "absolute top-0 right-0 w-32 h-32 rounded-full blur-3xl -mr-16 -mt-16 opacity-30 transition-opacity",
-                      selected === c.id ? "bg-white/20" : "bg-slate-100",
+                      "w-full text-left p-10 rounded-[3rem] border transition-all duration-500 relative overflow-hidden group",
+                      selected === c.id
+                        ? "bg-slate-900 text-white border-slate-900 shadow-[0_30px_60px_-15px_rgba(0,0,0,0.3)]"
+                        : "bg-white border-slate-100 hover:border-slate-300 shadow-sm",
                     )}
-                  />
+                  >
+                    <div
+                      className={cn(
+                        "absolute top-0 right-0 w-32 h-32 rounded-full blur-3xl -mr-16 -mt-16 opacity-30 transition-opacity",
+                        selected === c.id ? "bg-white/20" : "bg-slate-100",
+                      )}
+                    />
 
-                  <div className="flex items-center gap-6 relative z-10">
-                    <div className="w-20 h-20 shrink-0 relative">
-                      {c.photoUrl ? (
-                        <img
-                          src={c.photoUrl}
-                          alt={c.name}
-                          className="w-full h-full object-cover rounded-2xl shadow-xl border-2 border-white/10"
-                          referrerPolicy="no-referrer"
-                        />
-                      ) : (
-                        <div className="text-4xl bg-slate-50 w-full h-full flex items-center justify-center rounded-2xl border border-slate-100 font-display font-black">
+                    <div className="flex items-center gap-6 relative z-10">
+                      <div className="w-20 h-20 shrink-0 relative">
+                        {c.photoUrl ? (
+                          <img
+                            src={c.photoUrl}
+                            alt={c.name}
+                            className="w-full h-full object-cover rounded-2xl shadow-xl border-2 border-white/10"
+                            referrerPolicy="no-referrer"
+                          />
+                        ) : (
+                          <div className="text-4xl bg-slate-50 w-full h-full flex items-center justify-center rounded-2xl border border-slate-100 font-display font-black">
+                            {c.symbol}
+                          </div>
+                        )}
+                        <div
+                          className={cn(
+                            "absolute -bottom-1 -right-1 p-1 rounded-lg shadow-sm text-[10px] font-black border",
+                            selected === c.id
+                              ? "bg-white text-slate-900 border-white/20"
+                              : "bg-white text-slate-400 border-slate-50",
+                          )}
+                        >
                           {c.symbol}
                         </div>
-                      )}
-                      <div
-                        className={cn(
-                          "absolute -bottom-1 -right-1 p-1 rounded-lg shadow-sm text-[10px] font-black border",
-                          selected === c.id
-                            ? "bg-white text-slate-900 border-white/20"
-                            : "bg-white text-slate-400 border-slate-50",
-                        )}
-                      >
-                        {c.symbol}
+                      </div>
+                      <div>
+                        <h4
+                          className={cn(
+                            "font-display font-black text-2xl tracking-tighter uppercase leading-none mb-1",
+                            selected === c.id ? "text-white" : "text-slate-900",
+                          )}
+                        >
+                          {c.name}
+                        </h4>
+                        <p
+                          className={cn(
+                            "text-[10px] font-black uppercase tracking-widest",
+                            selected === c.id
+                              ? "text-white/40"
+                              : "text-slate-400",
+                          )}
+                        >
+                          {c.party}
+                        </p>
                       </div>
                     </div>
-                    <div>
-                      <h4
-                        className={cn(
-                          "font-display font-black text-2xl tracking-tighter uppercase leading-none mb-1",
-                          selected === c.id ? "text-white" : "text-slate-900",
-                        )}
+                    {selected === c.id && (
+                      <motion.div
+                        initial={{ scale: 0, rotate: -45 }}
+                        animate={{ scale: 1, rotate: 0 }}
+                        className="absolute top-10 left-10 p-2 bg-white text-slate-900 rounded-full shadow-xl z-20"
                       >
-                        {c.name}
-                      </h4>
-                      <p
-                        className={cn(
-                          "text-[10px] font-black uppercase tracking-widest",
-                          selected === c.id
-                            ? "text-white/40"
-                            : "text-slate-400",
-                        )}
-                      >
-                        {c.party}
-                      </p>
-                    </div>
-                  </div>
-                  {selected === c.id && (
-                    <motion.div
-                      initial={{ scale: 0, rotate: -45 }}
-                      animate={{ scale: 1, rotate: 0 }}
-                      className="absolute top-10 left-10 p-2 bg-white text-slate-900 rounded-full shadow-xl z-20"
-                    >
-                      <CheckCircle2 size={24} />
-                    </motion.div>
-                  )}
-                </motion.button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setExpandedCandidate(c);
-                  }}
-                  className="absolute bottom-4 right-4 p-2 bg-slate-100 hover:bg-slate-900 hover:text-white rounded-xl transition-all shadow-sm flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-500"
-                >
-                  <Search size={14} />
-                  {t("view_details")}
-                </button>
-              </motion.div>
-            ))}
-          </motion.div>
+                        <CheckCircle2 size={24} />
+                      </motion.div>
+                    )}
+                  </motion.button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setExpandedCandidate(c);
+                    }}
+                    className="absolute bottom-4 right-4 p-2 bg-slate-100 hover:bg-slate-900 hover:text-white rounded-xl transition-all shadow-sm flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-500"
+                  >
+                    <Search size={14} />
+                    {t("view_details")}
+                  </button>
+                </motion.div>
+              ))}
+            </motion.div>
+          )}
 
           <AnimatePresence>
             {expandedCandidate && (
@@ -396,17 +437,6 @@ export function VotingBoothView({
                   className="group-hover:translate-x-1 transition-transform"
                 />
               </button>
-
-              {checkPerm(role, "MANAGE_ELECTION") && (
-                <button
-                  onClick={handleForceFinalize}
-                  disabled={submitting}
-                  className="px-10 py-5 bg-red-50 text-red-600 rounded-[2rem] text-[10px] font-black uppercase tracking-[0.3em] hover:bg-red-600 hover:text-white transition-all flex items-center gap-3 shadow-sm"
-                >
-                  <AlertCircle size={18} />
-                  {t("emergency_finalize")}
-                </button>
-              )}
             </div>
             <div className="mt-10 flex items-center gap-4 text-[10px] text-slate-300 font-black uppercase tracking-[0.3em] bg-slate-50 px-8 py-3 rounded-2xl border border-slate-100">
               <ShieldCheck size={14} />
@@ -455,23 +485,38 @@ export function VotingBoothView({
               {t("step_3_desc")}
             </p>
 
-            <div className="p-12 bg-slate-900 text-white rounded-[3rem] mb-12 shadow-2xl shadow-slate-300 border border-white/10 relative overflow-hidden group">
+            <div className="p-12 bg-slate-900 text-white rounded-[3rem] mb-8 shadow-2xl shadow-slate-300 border border-white/10 relative overflow-hidden group">
               <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent" />
               <div className="relative z-10 flex flex-col items-center">
                 <div className="text-6xl mb-6 bg-white/10 w-24 h-24 flex items-center justify-center rounded-[2rem] border border-white/20 shadow-inner group-hover:scale-110 transition-transform">
-                  {candidates.find((c) => c.id === selected)?.symbol}
+                  {selectedCandidate?.symbol}
                 </div>
                 <div className="text-3xl font-display font-black tracking-tighter uppercase mb-2">
-                  {candidates.find((c) => c.id === selected)?.name}
+                  {selectedCandidate?.name}
                 </div>
                 <div className="text-[10px] text-white/40 uppercase font-black tracking-[0.4em]">
-                  {candidates.find((c) => c.id === selected)?.party}
+                  {selectedCandidate?.party}
                 </div>
               </div>
               <Fingerprint
                 size={200}
                 className="absolute -right-16 -bottom-16 opacity-5"
               />
+            </div>
+
+            <div className="space-y-1 mb-12 text-left">
+              <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 px-2 block">
+                Voting Token
+              </label>
+              <input
+                value={votingToken}
+                onChange={(event) => setVotingToken(event.target.value)}
+                placeholder="Enter the token issued by staff"
+                className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-mono text-slate-900 focus:outline-none"
+              />
+              <p className="text-[10px] text-slate-400 font-medium uppercase tracking-widest px-2">
+                The token is required once and will be verified by the backend.
+              </p>
             </div>
 
             <div className="bg-red-50 p-6 rounded-3xl mb-12 flex items-start gap-4 text-left border border-red-100">
@@ -528,6 +573,13 @@ export function VotingBoothView({
             {t("return_terminal")}
           </button>
 
+          <button
+            onClick={() => setView("receipt-verification")}
+            className="mt-4 w-full py-5 rounded-[2rem] font-black text-[10px] uppercase tracking-[0.3em] bg-emerald-50 text-emerald-700 border border-emerald-100"
+          >
+            Verify Receipt
+          </button>
+
           <div className="mt-16 p-8 bg-slate-50 rounded-3xl font-mono text-[10px] text-slate-400 text-left border border-slate-100 relative overflow-hidden group">
             <div className="flex items-center justify-between mb-4 border-b border-slate-200 pb-4">
               <div className="font-black text-slate-900 uppercase tracking-widest">
@@ -536,9 +588,7 @@ export function VotingBoothView({
               <ShieldCheck size={16} className="text-emerald-500" />
             </div>
             <div className="break-all opacity-60 font-medium leading-relaxed group-hover:opacity-100 transition-opacity">
-              NEHS—TX—
-              {Math.random().toString(36).substring(2, 15).toUpperCase()}—
-              {Date.now()}—ANCHORED—BLOCK—{Math.floor(Math.random() * 100000)}
+              {receiptHash || "Receipt hash unavailable"}
             </div>
           </div>
         </motion.div>

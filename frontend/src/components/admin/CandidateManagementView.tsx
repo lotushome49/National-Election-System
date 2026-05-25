@@ -110,6 +110,10 @@ function getErrorMessage(error: unknown, fallback: string) {
   return fallback;
 }
 
+function isNominationReady(status: Election["status"]) {
+  return ["NOMINATION_OPEN", "NOMINATION_CLOSED"].includes(status);
+}
+
 async function apiRequest<T>(
   path: string,
   token: string | null,
@@ -169,11 +173,13 @@ export function CandidateManagementView({ setView, token, user }: Props) {
   });
 
   const nominationEligibleElections = useMemo(
-    () =>
-      elections.filter((election) =>
-        ["NOMINATION_OPEN", "NOMINATION_CLOSED"].includes(election.status),
-      ),
+    () => elections.filter((election) => isNominationReady(election.status)),
     [elections],
+  );
+
+  const selectedElection = useMemo(
+    () => elections.find((election) => election.id === form.electionId) ?? null,
+    [elections, form.electionId],
   );
 
   const filteredDistricts = useMemo(() => {
@@ -196,23 +202,31 @@ export function CandidateManagementView({ setView, token, user }: Props) {
       setCandidates(
         Array.isArray(candidatesRes.data) ? candidatesRes.data : [],
       );
-      setElections(Array.isArray(electionsRes.data) ? electionsRes.data : []);
+      const serverElections = Array.isArray(electionsRes.data)
+        ? electionsRes.data
+        : [];
+      setElections(serverElections);
       setRegions(Array.isArray(regionsRes.data) ? regionsRes.data : []);
       setDistricts(Array.isArray(districtsRes.data) ? districtsRes.data : []);
 
-      if (
-        Array.isArray(electionsRes.data) &&
-        electionsRes.data.length > 0 &&
-        !form.electionId
-      ) {
-        setForm((prev) => ({ ...prev, electionId: electionsRes.data[0].id }));
+      if (!form.electionId) {
+        const defaultElection =
+          serverElections.find((election) =>
+            isNominationReady(election.status),
+          ) ??
+          serverElections[0] ??
+          null;
+
+        if (defaultElection) {
+          setForm((prev) => ({ ...prev, electionId: defaultElection.id }));
+        }
       }
     } catch (err) {
       if (isUnauthorized(err)) {
         setView("login");
         return;
       }
-      console.error("Failed to load candidate management data", err);
+      setElections([]);
     } finally {
       setLoading(false);
     }
@@ -224,7 +238,24 @@ export function CandidateManagementView({ setView, token, user }: Props) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.fullName.trim() || !form.party.trim() || !form.electionId) return;
+    if (!form.fullName.trim() || !form.party.trim() || !form.electionId) {
+      alert(
+        "Please fill in the election, full name, and party before registering a candidate.",
+      );
+      return;
+    }
+
+    if (!selectedElection) {
+      alert("Please select a target election first.");
+      return;
+    }
+
+    if (!isNominationReady(selectedElection.status)) {
+      alert(
+        `${selectedElection.title} is currently ${selectedElection.status.replace("_", " ")}. Open nomination before registering candidates.`,
+      );
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -299,7 +330,7 @@ export function CandidateManagementView({ setView, token, user }: Props) {
     setModalMode("create");
     setEditingId(null);
     setForm({
-      electionId: nominationEligibleElections[0]?.id || "",
+      electionId: nominationEligibleElections[0]?.id || elections[0]?.id || "",
       fullName: "",
       party: "",
       bio: "",
@@ -535,26 +566,42 @@ export function CandidateManagementView({ setView, token, user }: Props) {
                   Select Target Election
                 </label>
                 {modalMode === "create" ? (
-                  nominationEligibleElections.length > 0 ? (
-                    <select
-                      required
-                      value={form.electionId}
-                      onChange={(e) =>
-                        setForm({ ...form, electionId: e.target.value })
-                      }
-                      className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-bold text-slate-900 focus:outline-none"
-                    >
-                      <option value="">Select an election</option>
-                      {nominationEligibleElections.map((el) => (
-                        <option key={el.id} value={el.id}>
-                          {el.title}
-                        </option>
-                      ))}
-                    </select>
+                  elections.length > 0 ? (
+                    <>
+                      <select
+                        required
+                        value={form.electionId}
+                        onChange={(e) =>
+                          setForm({ ...form, electionId: e.target.value })
+                        }
+                        className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-bold text-slate-900 focus:outline-none"
+                      >
+                        <option value="">Select an election</option>
+                        {elections.map((el) => (
+                          <option key={el.id} value={el.id}>
+                            {el.title} · {el.status.replace("_", " ")}
+                          </option>
+                        ))}
+                      </select>
+                      {selectedElection &&
+                        !isNominationReady(selectedElection.status) && (
+                          <div className="w-full px-6 py-4 bg-amber-50 border border-amber-100 rounded-[1.5rem] text-amber-700 text-sm font-semibold">
+                            {selectedElection.title} is currently{" "}
+                            {selectedElection.status.replace("_", " ")}. Open
+                            nomination before registering candidates.
+                          </div>
+                        )}
+                      {!selectedElection &&
+                        nominationEligibleElections.length === 0 && (
+                          <div className="w-full px-6 py-4 bg-amber-50 border border-amber-100 rounded-[1.5rem] text-amber-700 text-sm font-semibold">
+                            No elections are currently in nomination phase. Open
+                            nomination on an election first.
+                          </div>
+                        )}
+                    </>
                   ) : (
                     <div className="w-full px-6 py-4 bg-amber-50 border border-amber-100 rounded-[1.5rem] text-amber-700 text-sm font-semibold">
-                      No elections are currently in nomination phase. Open
-                      nomination on an election first.
+                      No elections available. Create an election first.
                     </div>
                   )
                 ) : elections.length > 0 ? (
@@ -706,12 +753,7 @@ export function CandidateManagementView({ setView, token, user }: Props) {
 
               <button
                 type="submit"
-                disabled={
-                  submitting ||
-                  (modalMode === "create"
-                    ? nominationEligibleElections.length === 0
-                    : elections.length === 0)
-                }
+                disabled={submitting}
                 className="w-full py-5 bg-slate-900 hover:bg-slate-800 text-white rounded-[1.75rem] text-[10px] font-black uppercase tracking-[0.3em] transition-all disabled:opacity-50"
               >
                 {modalMode === "create"

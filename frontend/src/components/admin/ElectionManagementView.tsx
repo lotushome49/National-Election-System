@@ -11,8 +11,6 @@ import { motion } from "motion/react";
 import { fetchJson } from "../../services/api/client";
 import { cn } from "../../utils/cn";
 
-const DEMO_ELECTIONS_STORAGE_KEY = "nehs_demo_elections";
-
 type Election = {
   id: string;
   title: string;
@@ -78,83 +76,6 @@ function getErrorMessage(error: unknown, fallback: string) {
   return fallback;
 }
 
-function getDemoElectionSeed(): Election[] {
-  const now = new Date();
-  const plusDays = (days: number) =>
-    new Date(now.getTime() + days * 24 * 60 * 60 * 1000).toISOString();
-
-  return [
-    {
-      id: "demo-election-presidential",
-      title: "2026 National Presidential Election",
-      description:
-        "Demo election used when the backend database is not returning rows.",
-      type: "PRESIDENTIAL",
-      status: "NOMINATION_OPEN",
-      isNational: true,
-      maxVotesPerVoter: 1,
-      nominationStart: plusDays(-10),
-      nominationEnd: plusDays(10),
-      campaignStart: plusDays(11),
-      campaignEnd: plusDays(40),
-      votingStart: plusDays(45),
-      votingEnd: plusDays(46),
-    },
-    {
-      id: "demo-election-local",
-      title: "2026 Addis Ababa Council Election",
-      description: "Demo regional election for transition testing.",
-      type: "LOCAL",
-      status: "DRAFT",
-      isNational: false,
-      maxVotesPerVoter: 1,
-      nominationStart: null,
-      nominationEnd: null,
-      campaignStart: null,
-      campaignEnd: null,
-      votingStart: null,
-      votingEnd: null,
-    },
-  ];
-}
-
-function loadDemoElections(): Election[] {
-  try {
-    const raw = localStorage.getItem(DEMO_ELECTIONS_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveDemoElections(elections: Election[]) {
-  try {
-    localStorage.setItem(DEMO_ELECTIONS_STORAGE_KEY, JSON.stringify(elections));
-  } catch {
-    // ignore storage failures
-  }
-}
-
-function upsertDemoElection(election: Election) {
-  const current = loadDemoElections();
-  const next = [election, ...current.filter((item) => item.id !== election.id)];
-  saveDemoElections(next);
-  return next;
-}
-
-function replaceDemoElection(election: Election) {
-  return upsertDemoElection(election);
-}
-
-function removeDemoElection(id: string) {
-  const current = loadDemoElections();
-  const next = current.filter((item) => item.id !== id);
-  saveDemoElections(next);
-  return next;
-}
-
 async function apiRequest<T>(
   path: string,
   token: string | null,
@@ -173,6 +94,7 @@ async function apiRequest<T>(
 export function ElectionManagementView({ setView, token }: Props) {
   const [elections, setElections] = useState<Election[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [modalMode, setModalMode] = useState<"create" | "edit">("create");
@@ -291,34 +213,27 @@ export function ElectionManagementView({ setView, token }: Props) {
 
   const loadElections = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const res = await apiRequest<{ data: Election[] }>(
-        "/elections?page=1&limit=1000",
+        "/elections?page=1&limit=100",
         token,
       );
       const serverElections = Array.isArray(res.data) ? res.data : [];
-      if (serverElections.length > 0) {
-        setElections(serverElections);
-        saveDemoElections(serverElections);
-      } else {
-        const demoElections = loadDemoElections();
-        setElections(
-          demoElections.length > 0 ? demoElections : getDemoElectionSeed(),
-        );
-      }
+      setElections(serverElections);
     } catch (err) {
       if (isUnauthorized(err)) {
         setView("login");
         return;
       }
-      const demoElections = loadDemoElections();
-      setElections(
-        demoElections.length > 0 ? demoElections : getDemoElectionSeed(),
+      setElections([]);
+      setLoadError(
+        getErrorMessage(
+          err,
+          "Failed to load elections from the online database",
+        ),
       );
-      console.warn(
-        "Using demo elections because the backend list request failed",
-        err,
-      );
+      console.error("Failed to load elections", err);
     } finally {
       setLoading(false);
     }
@@ -335,45 +250,10 @@ export function ElectionManagementView({ setView, token }: Props) {
     setSubmitting(true);
     try {
       if (modalMode === "create") {
-        try {
-          const created = await apiRequest<{ data?: Election }>(
-            "/elections",
-            token,
-            {
-              method: "POST",
-              body: JSON.stringify(buildPayload()),
-            },
-          );
-          if (created?.data?.id) {
-            upsertDemoElection(created.data);
-          }
-        } catch (createErr: any) {
-          const fallbackElection: Election = {
-            id: `demo-election-${Date.now()}`,
-            title: form.title.trim(),
-            description: form.description.trim() || null,
-            type: form.type,
-            status: "DRAFT",
-            isNational: form.isNational,
-            maxVotesPerVoter: Number(form.maxVotesPerVoter),
-            nominationStart: form.nominationStart || null,
-            nominationEnd: form.nominationEnd || null,
-            campaignStart: form.campaignStart || null,
-            campaignEnd: form.campaignEnd || null,
-            votingStart: form.votingStart || null,
-            votingEnd: form.votingEnd || null,
-          };
-
-          if (
-            (createErr as any)?.status >= 400 &&
-            (createErr as any)?.status < 500
-          ) {
-            throw createErr;
-          }
-
-          upsertDemoElection(fallbackElection);
-          setElections((current) => [fallbackElection, ...current]);
-        }
+        await apiRequest<{ data: Election }>("/elections", token, {
+          method: "POST",
+          body: JSON.stringify(buildPayload()),
+        });
       } else if (editingId) {
         try {
           await apiRequest(`/elections/${editingId}`, token, {
@@ -387,26 +267,7 @@ export function ElectionManagementView({ setView, token }: Props) {
           ) {
             throw updateErr;
           }
-
-          setElections((current) => {
-            const next = current.map((item) =>
-              item.id === editingId
-                ? {
-                    ...item,
-                    ...buildPayload(),
-                    description: form.description.trim() || null,
-                    nominationStart: form.nominationStart || null,
-                    nominationEnd: form.nominationEnd || null,
-                    campaignStart: form.campaignStart || null,
-                    campaignEnd: form.campaignEnd || null,
-                    votingStart: form.votingStart || null,
-                    votingEnd: form.votingEnd || null,
-                  }
-                : item,
-            ) as Election[];
-            saveDemoElections(next);
-            return next;
-          });
+          throw updateErr;
         }
       }
       setShowModal(false);
@@ -441,19 +302,6 @@ export function ElectionManagementView({ setView, token }: Props) {
         setView("login");
         return;
       }
-      if (
-        (err as any)?.status >= 500 ||
-        typeof (err as any)?.status !== "number"
-      ) {
-        setElections((current) => {
-          const next = current.map((item) =>
-            item.id === id ? { ...item, status: newStatus } : item,
-          );
-          saveDemoElections(next);
-          return next;
-        });
-        return;
-      }
       alert(getErrorMessage(err, "Failed to transition status"));
     }
   };
@@ -473,17 +321,6 @@ export function ElectionManagementView({ setView, token }: Props) {
     } catch (err: any) {
       if (isUnauthorized(err)) {
         setView("login");
-        return;
-      }
-      if (
-        (err as any)?.status >= 500 ||
-        typeof (err as any)?.status !== "number"
-      ) {
-        setElections((current) => {
-          const next = current.filter((item) => item.id !== id);
-          saveDemoElections(next);
-          return next;
-        });
         return;
       }
       alert(getErrorMessage(err, "Failed to delete election"));
@@ -573,6 +410,14 @@ export function ElectionManagementView({ setView, token }: Props) {
         {loading ? (
           <div className="p-24 text-center text-slate-300 font-display font-black uppercase tracking-[0.4em] animate-pulse">
             Fetching Elections
+          </div>
+        ) : loadError ? (
+          <div className="p-24 text-center text-rose-500 font-bold uppercase tracking-widest text-sm space-y-4">
+            <AlertCircle size={40} className="mx-auto text-rose-200" />
+            <p>{loadError}</p>
+            <p className="text-slate-400 text-[10px] tracking-[0.25em]">
+              Check the backend connection to the online database, then reload.
+            </p>
           </div>
         ) : elections.length === 0 ? (
           <div className="p-24 text-center text-slate-400 font-bold uppercase tracking-widest text-sm space-y-4">

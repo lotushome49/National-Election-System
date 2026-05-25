@@ -1,10 +1,10 @@
 import React from "react";
 import { motion } from "motion/react";
-import { Vote, CheckCircle2, ChevronRight, Clock, User } from "lucide-react";
+import { Vote, CheckCircle2, Clock, Search } from "lucide-react";
 import { cn } from "../../utils/cn";
 import { getScopeAccessModel } from "../../utils/scope";
 
-export function VoterHub({ user, setView, t, role, electionPhase, i18n }: any) {
+export function VoterHub({ user, setView, t, electionPhase, i18n }: any) {
   const lang = i18n.language as "en" | "am";
   const scopeAccess = getScopeAccessModel(user);
   return (
@@ -76,6 +76,15 @@ export function VoterHub({ user, setView, t, role, electionPhase, i18n }: any) {
                     </p>
                   </div>
                 </div>
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <button
+                    onClick={() => setView("receipt-verification")}
+                    className="px-5 py-3 rounded-xl font-black uppercase tracking-widest text-[9px] bg-slate-900 text-white"
+                  >
+                    <Search size={14} className="inline-block mr-2" /> Verify
+                    Receipt
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="flex items-center gap-4">
@@ -95,6 +104,13 @@ export function VoterHub({ user, setView, t, role, electionPhase, i18n }: any) {
                   {electionPhase === "VOTING"
                     ? t("cast_ballot")
                     : t("voting_inactive")}
+                </button>
+                <button
+                  onClick={() => setView("receipt-verification")}
+                  className="px-6 py-3 rounded-xl font-black border border-slate-200 text-slate-600 hover:text-slate-900 hover:border-slate-400"
+                >
+                  <Search size={14} className="inline-block mr-2" />
+                  Verify Receipt
                 </button>
                 <div className="text-sm text-slate-500">
                   <Clock size={16} /> {t("polls_close_in_short")}

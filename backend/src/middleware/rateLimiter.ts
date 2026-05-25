@@ -6,7 +6,7 @@ const windowMs = parseInt(env.RATE_LIMIT_WINDOW_MS, 10);
 // ─── Global API limiter ───────────────────────────────────────────────────────
 export const globalLimiter = rateLimit({
   windowMs,
-  max: parseInt(env.RATE_LIMIT_MAX, 10),
+  max: parseInt(env.RATE_LIMIT_MAX, 100),
   standardHeaders: true,
   legacyHeaders: false,
   // Do not apply the global limiter to geography endpoints (they have a dedicated limiter)

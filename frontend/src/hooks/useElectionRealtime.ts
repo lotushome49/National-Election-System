@@ -7,11 +7,15 @@ export function useElectionRealtime(token: string | null, enabled = true) {
   const [results, setResults] = useState<VoteResults | null>(null);
   const [electionPhase, setElectionPhase] =
     useState<ElectionPhase>("REGISTRATION");
+  const [currentElectionId, setCurrentElectionId] = useState<string | null>(
+    null,
+  );
   const currentElectionIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!enabled) {
       setResults(null);
+      setCurrentElectionId(null);
       return;
     }
 
@@ -23,6 +27,7 @@ export function useElectionRealtime(token: string | null, enabled = true) {
 
     if (!effectiveToken) {
       setResults(null);
+      setCurrentElectionId(null);
       return;
     }
 
@@ -59,6 +64,7 @@ export function useElectionRealtime(token: string | null, enabled = true) {
     socket.on("results:update", (data: any) => {
       if (typeof data?.electionId === "string") {
         currentElectionIdRef.current = data.electionId;
+        setCurrentElectionId(data.electionId);
         socket.emit("join:election", data.electionId);
       }
 
@@ -118,6 +124,7 @@ export function useElectionRealtime(token: string | null, enabled = true) {
         const overview = response?.data;
         if (overview?.election?.id) {
           currentElectionIdRef.current = overview.election.id;
+          setCurrentElectionId(overview.election.id);
           socket.emit("join:election", overview.election.id);
         }
 
@@ -174,6 +181,7 @@ export function useElectionRealtime(token: string | null, enabled = true) {
   return {
     electionPhase,
     results,
+    currentElectionId,
     setElectionPhase,
     setResults,
   };

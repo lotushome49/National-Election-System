@@ -13,22 +13,63 @@ import {
 import { cn } from "../../utils/cn";
 import { getScopeAccessModel } from "../../utils/scope";
 import { unwrapApiData } from "../../utils/mfa";
+import { fetchJson } from "../../services/api/client";
 
-export function VoterRegistryView({ setView, token, t, i18n, user }: any) {
+function getErrorMessage(error: unknown, fallback: string) {
+  const body = (error as any)?.body;
+  if (typeof body?.message === "string" && body.message.trim()) {
+    return body.message;
+  }
+
+  if (typeof (error as any)?.message === "string") {
+    return (error as any).message;
+  }
+
+  return fallback;
+}
+
+export function VoterRegistryView({
+  setView,
+  token,
+  t,
+  i18n,
+  user,
+  currentElectionId,
+}: any) {
   const lang = i18n.language as "en" | "am";
   const scopeAccess = getScopeAccessModel(user);
   const [voters, setVoters] = useState<any[]>([]);
+  const [regions, setRegions] = useState<any[]>([]);
+  const [districts, setDistricts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [selectedVoter, setSelectedVoter] = useState<any | null>(null);
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
   const [verificationFilter, setVerificationFilter] = useState<
     "all" | "pending" | "verified"
-  >("all");
+  >(() => {
+    try {
+      const stored = localStorage.getItem("nehs_voter_registry_filter");
+      if (stored === "pending" || stored === "verified" || stored === "all") {
+        localStorage.removeItem("nehs_voter_registry_filter");
+        return stored;
+      }
+    } catch {
+      // ignore storage errors and fall back to all
+    }
+
+    return "all";
+  });
   const [updatingVerificationId, setUpdatingVerificationId] = useState<
     string | null
   >(null);
   const [auditSuccess, setAuditSuccess] = useState(false);
+  const [isTokenModalOpen, setIsTokenModalOpen] = useState(false);
+  const [issuingToken, setIssuingToken] = useState(false);
+  const [issuedToken, setIssuedToken] = useState<string | null>(null);
+  const [issuedTokenExpiry, setIssuedTokenExpiry] = useState<string | null>(
+    null,
+  );
 
   const handleExport = async () => {
     try {
@@ -61,7 +102,7 @@ export function VoterRegistryView({ setView, token, t, i18n, user }: any) {
   useEffect(() => {
     const fetchVoters = async () => {
       try {
-        const response = await fetch("/api/v1/voters?page=1&limit=1000", {
+        const response = await fetch("/api/v1/voters?page=1&limit=100", {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!response.ok) {
@@ -77,6 +118,47 @@ export function VoterRegistryView({ setView, token, t, i18n, user }: any) {
     };
     fetchVoters();
   }, [token]);
+
+  useEffect(() => {
+    const fetchLookups = async () => {
+      try {
+        const [regionsResponse, districtsResponse] = await Promise.all([
+          fetchJson<{ data: any[] }>("/api/v1/regions", {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+          fetchJson<{ data: any[] }>("/api/v1/districts", {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+        ]);
+
+        setRegions(
+          Array.isArray(regionsResponse.data) ? regionsResponse.data : [],
+        );
+        setDistricts(
+          Array.isArray(districtsResponse.data) ? districtsResponse.data : [],
+        );
+      } catch (err) {
+        console.error("Failed to load voter lookup data", err);
+      }
+    };
+
+    if (token) {
+      void fetchLookups();
+    }
+  }, [token]);
+
+  const getRegionName = (regionId?: string | null) => {
+    if (!regionId) return "National";
+    return regions.find((region) => region.id === regionId)?.name || regionId;
+  };
+
+  const getDistrictName = (districtId?: string | null) => {
+    if (!districtId) return "National";
+    return (
+      districts.find((district) => district.id === districtId)?.name ||
+      districtId
+    );
+  };
 
   const filteredVoters = voters.filter((v) => {
     const matchesSearch =
@@ -129,6 +211,46 @@ export function VoterRegistryView({ setView, token, t, i18n, user }: any) {
       alert("Failed to update voter verification status");
     } finally {
       setUpdatingVerificationId(null);
+    }
+  };
+
+  const openTokenModal = (voter: any) => {
+    setSelectedVoter(voter);
+    setIssuedToken(null);
+    setIssuedTokenExpiry(null);
+    setIsTokenModalOpen(true);
+  };
+
+  const handleIssueToken = async () => {
+    if (!selectedVoter) return;
+
+    if (!currentElectionId) {
+      alert("No active election is available for issuing tokens.");
+      return;
+    }
+
+    setIssuingToken(true);
+    try {
+      const response = await fetchJson<{
+        data: { token: string; expiresAt: string };
+      }>("/api/v1/voting/token", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          electionId: currentElectionId,
+          voterId: selectedVoter.id,
+        }),
+      });
+
+      setIssuedToken(response.data.token);
+      setIssuedTokenExpiry(response.data.expiresAt);
+    } catch (error) {
+      alert(getErrorMessage(error, "Failed to issue voting token"));
+    } finally {
+      setIssuingToken(false);
     }
   };
 
@@ -302,15 +424,17 @@ export function VoterRegistryView({ setView, token, t, i18n, user }: any) {
                     </td>
                     <td className="px-10 py-6">
                       <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
-                        {t(voter.regionId)}
+                        {getRegionName(voter.regionId)}
                       </span>
                     </td>
                     <td className="px-10 py-6">
                       <span
                         className="text-[10px] text-slate-300 font-mono uppercase tracking-tighter truncate max-w-[120px] block group-hover:text-slate-900 transition-colors"
-                        title={voter.faceEmbeddingHash}
+                        title={voter.faceEmbeddingHash || "Not available"}
                       >
-                        {voter.faceEmbeddingHash.slice(0, 16)}...
+                        {voter.faceEmbeddingHash
+                          ? `${voter.faceEmbeddingHash.slice(0, 16)}...`
+                          : "N/A"}
                       </span>
                     </td>
                     {/* Verification Status Badge */}
@@ -365,27 +489,37 @@ export function VoterRegistryView({ setView, token, t, i18n, user }: any) {
 
                     {/* Actions Button */}
                     <td className="px-10 py-6 text-right">
-                      <button
-                        onClick={() => {
-                          setSelectedVoter(voter);
-                          setIsAuditModalOpen(true);
-                          setAuditSuccess(false);
-                        }}
-                        className={cn(
-                          "px-5 py-2.5 rounded-xl font-black uppercase tracking-widest text-[9px] shadow-sm transition-all flex items-center gap-2 w-fit ml-auto border",
-                          voter.isVerified
-                            ? "bg-slate-50 hover:bg-slate-100 text-slate-600 border-slate-100"
-                            : "bg-slate-900 hover:bg-slate-800 text-white border-slate-900",
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => {
+                            setSelectedVoter(voter);
+                            setIsAuditModalOpen(true);
+                            setAuditSuccess(false);
+                          }}
+                          className={cn(
+                            "px-5 py-2.5 rounded-xl font-black uppercase tracking-widest text-[9px] shadow-sm transition-all flex items-center gap-2 w-fit border",
+                            voter.isVerified
+                              ? "bg-slate-50 hover:bg-slate-100 text-slate-600 border-slate-100"
+                              : "bg-slate-900 hover:bg-slate-800 text-white border-slate-900",
+                          )}
+                        >
+                          {voter.isVerified
+                            ? lang === "en"
+                              ? "View ID"
+                              : "መታወቂያ"
+                            : lang === "en"
+                              ? "Audit"
+                              : "ኦዲት"}
+                        </button>
+                        {voter.isVerified && !voter.hasVoted && (
+                          <button
+                            onClick={() => openTokenModal(voter)}
+                            className="px-5 py-2.5 rounded-xl font-black uppercase tracking-widest text-[9px] shadow-sm transition-all flex items-center gap-2 w-fit border bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-100"
+                          >
+                            Issue Token
+                          </button>
                         )}
-                      >
-                        {voter.isVerified
-                          ? lang === "en"
-                            ? "View ID"
-                            : "መታወቂያ"
-                          : lang === "en"
-                            ? "Audit"
-                            : "ኦዲት"}
-                      </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -565,8 +699,8 @@ export function VoterRegistryView({ setView, token, t, i18n, user }: any) {
                                   : "ክልል / ወረዳ"}
                               </p>
                               <p className="text-xs font-bold text-white uppercase leading-none">
-                                {t(selectedVoter.regionId)} /{" "}
-                                {selectedVoter.districtId || "Bole"}
+                                {getRegionName(selectedVoter.regionId)} /{" "}
+                                {getDistrictName(selectedVoter.districtId)}
                               </p>
                             </div>
                           </div>
@@ -682,6 +816,104 @@ export function VoterRegistryView({ setView, token, t, i18n, user }: any) {
                     </div>
                   </>
                 )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {isTokenModalOpen && selectedVoter && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-[3rem] border border-slate-100 shadow-2xl overflow-hidden max-w-2xl w-full flex flex-col relative max-h-[90vh]"
+            >
+              <button
+                onClick={() => setIsTokenModalOpen(false)}
+                className="absolute top-6 right-6 p-3 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-950 transition-colors z-20"
+              >
+                <X size={20} />
+              </button>
+
+              <div className="p-8 lg:p-12 space-y-6">
+                <div className="space-y-2">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] flex items-center gap-2">
+                    <ShieldCheck size={14} className="text-emerald-500" />
+                    Voting Token Issuance
+                  </p>
+                  <h3 className="text-3xl font-display font-black tracking-tighter text-slate-900 uppercase">
+                    Issue Ballot Token
+                  </h3>
+                  <p className="text-xs text-slate-400 uppercase tracking-widest leading-relaxed">
+                    {currentElectionId
+                      ? `Election ${currentElectionId}`
+                      : "No active election available"}
+                  </p>
+                </div>
+
+                <div className="rounded-[2rem] border border-slate-100 bg-slate-50 p-6 space-y-3">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                    Selected Voter
+                  </p>
+                  <div className="space-y-1">
+                    <p className="font-black text-slate-900 uppercase tracking-tight">
+                      {selectedVoter.fullName}
+                    </p>
+                    <p className="text-[10px] font-mono text-slate-400 uppercase tracking-widest">
+                      {selectedVoter.nationalId}
+                    </p>
+                  </div>
+                </div>
+
+                {issuedToken ? (
+                  <div className="rounded-[2rem] border border-emerald-100 bg-emerald-50 p-6 space-y-3">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-emerald-700 flex items-center gap-2">
+                      <CheckCircle2 size={14} /> Token Issued
+                    </p>
+                    <p className="font-mono text-sm break-all text-emerald-900">
+                      {issuedToken}
+                    </p>
+                    <p className="text-[10px] uppercase tracking-widest text-emerald-700">
+                      Expires:{" "}
+                      {issuedTokenExpiry
+                        ? new Date(issuedTokenExpiry).toLocaleString()
+                        : "Unknown"}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-sm text-slate-500">
+                      This issues a one-time token that the voter enters on the
+                      voting screen.
+                    </p>
+                    <button
+                      onClick={handleIssueToken}
+                      disabled={
+                        issuingToken ||
+                        !currentElectionId ||
+                        !selectedVoter.isVerified
+                      }
+                      className="w-full py-5 bg-slate-900 hover:bg-slate-800 text-white rounded-[1.75rem] text-[10px] font-black uppercase tracking-[0.3em] transition-all disabled:opacity-50"
+                    >
+                      {issuingToken ? "Issuing..." : "Issue Voting Token"}
+                    </button>
+                    {!selectedVoter.isVerified && (
+                      <p className="text-[10px] uppercase tracking-widest text-amber-600 font-semibold">
+                        Voter must be verified before a token can be issued.
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    onClick={() => setIsTokenModalOpen(false)}
+                    className="flex-1 px-8 py-4 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-[1.8rem] font-black uppercase tracking-widest text-[10px] transition-all"
+                  >
+                    Close
+                  </button>
+                </div>
               </div>
             </motion.div>
           </div>
