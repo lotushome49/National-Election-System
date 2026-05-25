@@ -1,37 +1,39 @@
-import { Router } from 'express';
-import { votingController } from './voting.controller';
-import { authenticate } from '../../middleware/authenticate';
-import { requirePermission, requireRole } from '../../middleware/rbac';
-import { validate } from '../../middleware/validate';
-import { voteLimiter } from '../../middleware/rateLimiter';
-import { castVoteSchema, verifyReceiptSchema } from './voting.schema';
-import { z } from 'zod';
+import { Router } from "express";
+import { votingController } from "./voting.controller";
+import { authenticate } from "../../middleware/authenticate";
+import { requirePermission, requireRole } from "../../middleware/rbac";
+import { validate } from "../../middleware/validate";
+import { voteLimiter } from "../../middleware/rateLimiter";
+import { castVoteSchema, verifyReceiptSchema } from "./voting.schema";
+import { z } from "zod";
 
 const router = Router();
 
 router.use(authenticate);
 
+// Voter self status for the voter hub
+router.get("/me", requireRole("VOTER"), votingController.me);
+
 // Staff issues token to a verified voter at the polling station
 router.post(
-  '/token',
-  requirePermission('MANAGE_VOTERS'),
-  validate(z.object({ electionId: z.string().uuid(), voterId: z.string().uuid() })),
+  "/token",
+  requirePermission("MANAGE_VOTERS"),
+  validate(
+    z.object({ electionId: z.string().uuid(), voterId: z.string().uuid() }),
+  ),
   votingController.issueToken,
 );
 
 // Voter casts their vote
 router.post(
-  '/cast',
-  requirePermission('CAST_VOTE'),
+  "/cast",
+  requirePermission("CAST_VOTE"),
   voteLimiter,
   validate(castVoteSchema),
   votingController.castVote,
 );
 
 // Anyone can verify a receipt (no sensitive data returned)
-router.get(
-  '/verify/:receiptHash',
-  votingController.verifyReceipt,
-);
+router.get("/verify/:receiptHash", votingController.verifyReceipt);
 
 export default router;

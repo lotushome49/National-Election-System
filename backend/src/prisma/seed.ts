@@ -112,40 +112,74 @@ async function main() {
   });
   if (!superAdminRole)
     throw new Error("SUPER_ADMIN role not found after seeding");
+  // Build a map of role code -> role id so default accounts get the
+  // intended role instead of being assigned SUPER_ADMIN by mistake.
+  const roleCodes = [
+    "SUPER_ADMIN",
+    "ADMIN",
+    "REGIONAL_ADMIN",
+    "DISTRICT_ADMIN",
+    "STAFF",
+    "OBSERVER",
+    "VOTER",
+  ] as const;
 
-  const defaultAuthAccounts = [
+  const roleMap: Record<string, string> = {};
+  for (const code of roleCodes) {
+    const r = await prisma.role.findUnique({ where: { code } });
+    if (r) roleMap[code] = r.id;
+  }
+
+  const defaultAuthAccounts: Array<{
+    username: string;
+    email: string;
+    fullName: string;
+    role: string;
+  }> = [
     {
       username: "superadmin",
       email: "superadmin@election.gov.et",
       fullName: "System Super Admin",
+      role: "SUPER_ADMIN",
     },
     {
       username: "admin",
       email: "admin@election.gov.et",
       fullName: "System Admin",
+      role: "ADMIN",
     },
     {
       username: "regional",
       email: "regional@election.gov.et",
       fullName: "Regional Admin",
+      role: "REGIONAL_ADMIN",
     },
     {
       username: "district",
       email: "district@election.gov.et",
       fullName: "District Admin",
+      role: "DISTRICT_ADMIN",
     },
     {
       username: "staff",
       email: "staff@election.gov.et",
       fullName: "Election Staff",
+      role: "STAFF",
     },
     {
       username: "observer",
       email: "observer@election.gov.et",
       fullName: "Election Observer",
+      role: "OBSERVER",
     },
-    { username: "voter", email: "voter@election.gov.et", fullName: "Voter" },
+    {
+      username: "voter",
+      email: "voter@election.gov.et",
+      fullName: "Voter",
+      role: "VOTER",
+    },
   ];
+
   const passwordHash = await bcrypt.hash("Admin@123", 12);
 
   for (const account of defaultAuthAccounts) {
@@ -158,10 +192,12 @@ async function main() {
 
     if (existingUser) continue;
 
+    const assignedRoleId = roleMap[account.role] ?? superAdminRole.id;
+
     await prisma.user.create({
       data: {
         id: uuidv4(),
-        roleId: superAdminRole.id,
+        roleId: assignedRoleId,
         fullName: account.fullName,
         username: account.username,
         email: account.email,

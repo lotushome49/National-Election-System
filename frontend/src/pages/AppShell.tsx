@@ -264,7 +264,7 @@ export default function AppShell() {
       case "observer-evidence":
         return canManageObserverEvidence;
       case "voter-hub":
-        return role === "VOTER";
+        return role === "VOTER" || checkPerm(role, "MANAGE_VOTERS");
       case "registration":
         return Boolean(token);
       case "voting-booth":
@@ -294,7 +294,7 @@ export default function AppShell() {
 
     const items: SidebarItem[] = [];
 
-    if (role === "VOTER") {
+    if (role === "VOTER" || checkPerm(role, "MANAGE_VOTERS")) {
       items.push({
         key: "voter-hub",
         label: t("voter_hub"),
@@ -846,18 +846,20 @@ export default function AppShell() {
                   setView={setView}
                 />
               )}
-            {effectiveView === "voter-hub" && role === "VOTER" && (
-              <VoterHub
-                key="voter"
-                user={user}
-                token={token}
-                setView={setView}
-                t={t}
-                role={role}
-                electionPhase={electionPhase}
-                i18n={i18n}
-              />
-            )}
+            {effectiveView === "voter-hub" &&
+              (role === "VOTER" || checkPerm(role, "MANAGE_VOTERS")) && (
+                <VoterHub
+                  key="voter"
+                  user={user}
+                  token={token}
+                  setView={setView}
+                  t={t}
+                  role={role}
+                  electionPhase={electionPhase}
+                  currentElectionId={currentElectionId}
+                  i18n={i18n}
+                />
+              )}
             {effectiveView === "registration" &&
               (electionPhase === "REGISTRATION" ? (
                 <RegistrationView

@@ -1,12 +1,74 @@
 import React from "react";
+import { useEffect, useState } from "react";
 import { motion } from "motion/react";
-import { Vote, CheckCircle2, Clock, Search } from "lucide-react";
+import { Vote, CheckCircle2, Clock, Search, Users } from "lucide-react";
 import { cn } from "../../utils/cn";
 import { getScopeAccessModel } from "../../utils/scope";
+import { fetchJson } from "../../services/api/client";
 
-export function VoterHub({ user, setView, t, electionPhase, i18n }: any) {
+export function VoterHub({
+  user,
+  setView,
+  t,
+  electionPhase,
+  currentElectionId,
+  token,
+  role,
+  i18n,
+}: any) {
   const lang = i18n.language as "en" | "am";
   const scopeAccess = getScopeAccessModel(user);
+  const [votingStatus, setVotingStatus] = useState<{
+    hasVoted: boolean;
+    receiptHash: string | null;
+    castAt: string | null;
+  }>({
+    hasVoted: Boolean(user?.hasVoted),
+    receiptHash: user?.receiptToken ?? null,
+    castAt: null,
+  });
+  const isVoter = role === "VOTER";
+
+  useEffect(() => {
+    if (!isVoter || !token) {
+      return;
+    }
+
+    let mounted = true;
+    const loadVotingStatus = async () => {
+      try {
+        const response = await fetchJson<{ data: any }>("/api/v1/voting/me", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (!mounted) return;
+
+        const status = response?.data ?? {};
+        setVotingStatus({
+          hasVoted: Boolean(status.hasVoted),
+          receiptHash: status.receiptHash ?? user?.receiptToken ?? null,
+          castAt: status.castAt ?? null,
+        });
+      } catch {
+        if (!mounted) return;
+        setVotingStatus((prev) => ({
+          ...prev,
+          hasVoted: Boolean(user?.hasVoted),
+          receiptHash: user?.receiptToken ?? prev.receiptHash,
+        }));
+      }
+    };
+
+    void loadVotingStatus();
+
+    return () => {
+      mounted = false;
+    };
+  }, [isVoter, token, user]);
+
+  const displayHasVoted = votingStatus.hasVoted;
+  const displayReceiptHash = votingStatus.receiptHash;
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -39,6 +101,35 @@ export function VoterHub({ user, setView, t, electionPhase, i18n }: any) {
         <h2 className="text-2xl font-black mb-4">{t("voter_hub_title")}</h2>
         <p className="text-sm text-slate-500 mb-6">{t("voter_hub_subtitle")}</p>
 
+        <div className="mb-6 rounded-2xl border border-slate-100 bg-slate-50 p-5 flex flex-col gap-2">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.3em] text-slate-400 font-black">
+                Current election
+              </p>
+              <p className="font-black text-slate-900">
+                {currentElectionId ?? "No active election"}
+              </p>
+            </div>
+            <span
+              className={cn(
+                "px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-[0.25em]",
+                electionPhase === "VOTING"
+                  ? "bg-emerald-50 text-emerald-700"
+                  : "bg-slate-100 text-slate-500",
+              )}
+            >
+              {t(`phase_${electionPhase.toLowerCase()}`)}
+            </span>
+          </div>
+          {!isVoter && (
+            <p className="text-xs text-slate-500">
+              Staff can review registration and issue voting tokens from the
+              voter registry.
+            </p>
+          )}
+        </div>
+
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <div>
@@ -46,7 +137,9 @@ export function VoterHub({ user, setView, t, electionPhase, i18n }: any) {
                 {t("registration_status")}
               </p>
               <p className="font-bold mt-1">
-                {user.registered ? t("registered") : t("not_registered")}
+                {isVoter || user.registered
+                  ? t("registered")
+                  : t("not_registered")}
               </p>
             </div>
             <div>
@@ -60,7 +153,7 @@ export function VoterHub({ user, setView, t, electionPhase, i18n }: any) {
           </div>
 
           <div className="pt-4 border-t">
-            {user.hasVoted ? (
+            {displayHasVoted ? (
               <div className="p-4 bg-emerald-50 rounded-lg">
                 <div className="flex items-center gap-3">
                   <CheckCircle2 />
@@ -70,9 +163,7 @@ export function VoterHub({ user, setView, t, electionPhase, i18n }: any) {
                       {t("receipt_token")}
                     </p>
                     <p className="font-mono text-sm">
-                      {user.receiptToken ??
-                        "TX-" +
-                          Math.random().toString(36).slice(2, 12).toUpperCase()}
+                      {displayReceiptHash ?? "Receipt pending"}
                     </p>
                   </div>
                 </div>
@@ -83,6 +174,27 @@ export function VoterHub({ user, setView, t, electionPhase, i18n }: any) {
                   >
                     <Search size={14} className="inline-block mr-2" /> Verify
                     Receipt
+                  </button>
+                </div>
+              </div>
+            ) : !isVoter ? (
+              <div className="p-4 bg-slate-50 rounded-lg border border-slate-100">
+                <div className="flex items-center gap-3">
+                  <Users className="text-slate-500" />
+                  <div>
+                    <p className="font-black text-slate-900">Staff access</p>
+                    <p className="text-xs text-slate-500">
+                      Use the voter registry to verify citizens and issue
+                      tokens.
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <button
+                    onClick={() => setView("voters")}
+                    className="px-5 py-3 rounded-xl font-black uppercase tracking-widest text-[9px] bg-slate-900 text-white"
+                  >
+                    Open Voter Registry
                   </button>
                 </div>
               </div>

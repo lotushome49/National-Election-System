@@ -3,6 +3,34 @@ import { io } from "socket.io-client";
 import { fetchJson } from "../services/api/client";
 import type { ElectionPhase, VoteResults } from "../types/election";
 
+type ElectionSummary = {
+  id: string;
+  status: string;
+  title?: string;
+};
+
+function mapStatusToPhase(status: string): ElectionPhase {
+  if (status === "VOTING_OPEN") return "VOTING";
+  if (
+    status === "VOTING_CLOSED" ||
+    status === "COUNTING" ||
+    status === "RESULTS_DECLARED"
+  ) {
+    return "CLOSED";
+  }
+  return "REGISTRATION";
+}
+
+function pickCurrentElection(elections: ElectionSummary[]) {
+  return (
+    elections.find(
+      (election) =>
+        election.status !== "RESULTS_DECLARED" &&
+        election.status !== "CANCELLED",
+    ) ?? null
+  );
+}
+
 export function useElectionRealtime(token: string | null, enabled = true) {
   const [results, setResults] = useState<VoteResults | null>(null);
   const [electionPhase, setElectionPhase] =
@@ -117,10 +145,12 @@ export function useElectionRealtime(token: string | null, enabled = true) {
       }
     });
 
-    fetchJson<any>("/api/reports/overview", {
-      headers: { Authorization: `Bearer ${effectiveToken}` },
-    })
-      .then((response) => {
+    const loadElectionContext = async () => {
+      try {
+        const response = await fetchJson<any>("/api/reports/overview", {
+          headers: { Authorization: `Bearer ${effectiveToken}` },
+        });
+
         const overview = response?.data;
         if (overview?.election?.id) {
           currentElectionIdRef.current = overview.election.id;
@@ -150,21 +180,60 @@ export function useElectionRealtime(token: string | null, enabled = true) {
         if (overview?.election?.status) {
           setElectionPhase(mapStatusToPhase(overview.election.status));
         }
-      })
-      .catch((error) => {
-        // Surface richer debug info for non-OK responses from fetchJson
-        // eslint-disable-next-line no-console
-        console.error("Failed to fetch initial realtime overview:", error);
-        if (error && (error as any).status) {
+        return;
+      } catch (error) {
+        // Fallback for roles that cannot access reporting data, such as voters.
+        try {
+          const response = await fetchJson<{ data: ElectionSummary[] }>(
+            "/api/v1/elections?page=1&limit=100",
+            {
+              headers: { Authorization: `Bearer ${effectiveToken}` },
+            },
+          );
+
+          const activeElection = pickCurrentElection(
+            Array.isArray(response?.data) ? response.data : [],
+          );
+
+          if (activeElection?.id) {
+            currentElectionIdRef.current = activeElection.id;
+            setCurrentElectionId(activeElection.id);
+            socket.emit("join:election", activeElection.id);
+          }
+
+          if (activeElection?.status) {
+            setElectionPhase(mapStatusToPhase(activeElection.status));
+          }
+
+          setResults({
+            counts: [],
+            total: 0,
+            electionDate: new Date().toISOString(),
+            regional: [],
+          });
+        } catch (fallbackError) {
+          // Surface richer debug info for non-OK responses from fetchJson
           // eslint-disable-next-line no-console
-          console.debug(
-            "[useElectionRealtime] overview fetch error status:",
-            (error as any).status,
-            "body:",
-            (error as any).body ?? null,
+          console.error("Failed to fetch initial realtime context:", error);
+          if (error && (error as any).status) {
+            // eslint-disable-next-line no-console
+            console.debug(
+              "[useElectionRealtime] overview fetch error status:",
+              (error as any).status,
+              "body:",
+              (error as any).body ?? null,
+            );
+          }
+          // eslint-disable-next-line no-console
+          console.error(
+            "Failed to fetch election fallback context:",
+            fallbackError,
           );
         }
-      });
+      }
+    };
+
+    void loadElectionContext();
 
     return () => {
       if (currentElectionIdRef.current) {
@@ -185,16 +254,4 @@ export function useElectionRealtime(token: string | null, enabled = true) {
     setElectionPhase,
     setResults,
   };
-}
-
-function mapStatusToPhase(status: string): ElectionPhase {
-  if (status === "VOTING_OPEN") return "VOTING";
-  if (
-    status === "VOTING_CLOSED" ||
-    status === "COUNTING" ||
-    status === "RESULTS_DECLARED"
-  ) {
-    return "CLOSED";
-  }
-  return "REGISTRATION";
 }
