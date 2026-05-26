@@ -109,6 +109,10 @@ export default function AppShell() {
       return trimmed.replace("/staff-member", "");
     }
 
+    if (/^\/observer\//i.test(trimmed)) {
+      return trimmed.replace(/^\/observer/i, "");
+    }
+
     if (trimmed.startsWith("/district-admin/")) {
       return trimmed.replace("/district-admin", "");
     }
@@ -126,6 +130,7 @@ export default function AppShell() {
     if (role === "SUPER_ADMIN") return "/super-admin";
     if (role === "ADMIN") return "/admin";
     if (role === "STAFF") return "/staff-member";
+    if (role === "OBSERVER") return "/observer";
     if (role === "DISTRICT_ADMIN") return "/district-admin";
     if (role === "REGIONAL_ADMIN") return "/regional-admin";
     return "";
@@ -209,9 +214,7 @@ export default function AppShell() {
       case "security":
         return adminPrefix ? `${adminPrefix}/security` : "/security";
       case "observer-evidence":
-        return adminPrefix
-          ? `${adminPrefix}/observer-evidence`
-          : "/observer-evidence";
+        return "/observer/observer-evidence";
       case "voter-hub":
         return "/voter-hub";
       /* `voter-hub-admin` route removed; no direct path */
@@ -341,12 +344,21 @@ export default function AppShell() {
       });
     }
 
-    if (role !== "NONE") {
+    if (role !== "NONE" && role !== "OBSERVER") {
       items.push({
         key: "dashboard",
         label: t("dashboard"),
         icon: <LayoutDashboard size={18} />,
         view: "dashboard",
+      });
+    }
+
+    if (role === "OBSERVER") {
+      items.push({
+        key: "observer-evidence",
+        label: lang === "en" ? "Observer Workspace" : "የታዛቢ ስራ ቦታ",
+        icon: <FileCheck size={18} />,
+        view: "observer-evidence",
       });
     }
 
@@ -429,7 +441,7 @@ export default function AppShell() {
       });
     }
 
-    if (canManageObserverEvidence) {
+    if (canManageObserverEvidence && role !== "OBSERVER") {
       items.push({
         key: "observer-evidence",
         label: "Evidence",
@@ -447,19 +459,21 @@ export default function AppShell() {
       });
     }
 
-    items.push({
-      key: "help",
-      label: t("help"),
-      icon: <HelpCircle size={18} />,
-      view: "help",
-    });
+    if (role !== "OBSERVER") {
+      items.push({
+        key: "help",
+        label: t("help"),
+        icon: <HelpCircle size={18} />,
+        view: "help",
+      });
 
-    items.push({
-      key: "history",
-      label: t("history"),
-      icon: <History size={18} />,
-      view: "history",
-    });
+      items.push({
+        key: "history",
+        label: t("history"),
+        icon: <History size={18} />,
+        view: "history",
+      });
+    }
 
     return items;
   })();

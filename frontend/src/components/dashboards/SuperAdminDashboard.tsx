@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   BarChart3,
   Database,
+  FileCheck,
   ShieldCheck,
   Users,
   Vote,
@@ -131,6 +132,13 @@ export function SuperAdminDashboard({ setView, t, i18n, results, token }: any) {
                 className="px-4 py-2 rounded-xl bg-white border border-slate-100 text-slate-500 text-[10px] font-black uppercase tracking-widest"
               >
                 Open Election Manager
+              </button>
+              <button
+                onClick={() => setView("observer-evidence")}
+                className="px-4 py-2 rounded-xl bg-white border border-slate-100 text-slate-500 text-[10px] font-black uppercase tracking-widest inline-flex items-center gap-2"
+              >
+                <FileCheck size={14} />
+                Observer evidence
               </button>
               <button
                 onClick={() => setView("users")}

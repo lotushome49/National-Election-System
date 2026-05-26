@@ -349,6 +349,12 @@ export function ObserverEvidenceView({ token, role, setView }: Props) {
   };
 
   const isAdminViewer = role === "ADMIN" || role === "SUPER_ADMIN";
+  const workspaceTitle = isAdminViewer
+    ? "Evidence review"
+    : "Observer evidence";
+  const workspaceSummary = isAdminViewer
+    ? "Review, moderate, and resolve submitted observer evidence and reports."
+    : "Upload photos, videos, and PDFs, preview them locally, and attach selected evidence to a submitted observer report.";
 
   return (
     <motion.div
@@ -372,11 +378,10 @@ export function ObserverEvidenceView({ token, role, setView }: Props) {
               Controlled evidence lifecycle
             </div>
             <h2 className="text-4xl lg:text-6xl font-display font-black tracking-tighter text-slate-900 uppercase leading-[0.9]">
-              Observer evidence
+              {workspaceTitle}
             </h2>
             <p className="text-sm text-slate-400 font-medium max-w-2xl uppercase tracking-widest">
-              Upload photos, videos, and PDFs, preview them locally, and attach
-              selected evidence to a submitted observer report.
+              {workspaceSummary}
             </p>
           </div>
 
@@ -578,17 +583,19 @@ export function ObserverEvidenceView({ token, role, setView }: Props) {
               <div className="flex items-center gap-3">
                 <ShieldCheck size={20} className="text-slate-900" />
                 <h3 className="text-xl font-display font-black tracking-tighter uppercase text-slate-900">
-                  Observer uploads (read-only)
+                  Evidence review mode
                 </h3>
               </div>
               <div className="rounded-[2rem] border border-slate-100 bg-white p-8 text-slate-600">
                 <p className="font-semibold">
-                  Upload and report creation are restricted to accredited
-                  observers.
+                  {isAdminViewer
+                    ? "You can review uploaded evidence, manage report status, and resolve submissions."
+                    : "Upload and report creation are restricted to accredited observers."}
                 </p>
                 <p className="text-sm text-slate-500 mt-2">
-                  You can view uploaded evidence but cannot create or attach new
-                  evidence.
+                  {isAdminViewer
+                    ? "Evidence uploads remain the observer's responsibility; admin-level users focus on review and moderation."
+                    : "You can view uploaded evidence but cannot create or attach new evidence."}
                 </p>
               </div>
             </section>
