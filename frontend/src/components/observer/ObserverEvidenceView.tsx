@@ -66,6 +66,7 @@ interface Props {
   token: string | null;
   role: string;
   setView: (view: string) => void;
+  currentElectionId?: string | null;
 }
 
 type EvidenceListResponse = {
@@ -127,7 +128,7 @@ function previewKind(mimeType: string) {
   return "file";
 }
 
-export function ObserverEvidenceView({ token, role, setView }: Props) {
+export function ObserverEvidenceView({ token, role, setView, currentElectionId }: Props) {
   const [evidence, setEvidence] = useState<EvidenceRecord[]>([]);
   const [reports, setReports] = useState<ReportRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -147,7 +148,7 @@ export function ObserverEvidenceView({ token, role, setView }: Props) {
   >({});
   const [files, setFiles] = useState<File[]>([]);
   const [report, setReport] = useState<ReportDraft>({
-    electionId: "",
+    electionId: currentElectionId || "",
     pollingStationId: "",
     type: "GENERAL_OBSERVATION",
     title: "",
@@ -155,6 +156,13 @@ export function ObserverEvidenceView({ token, role, setView }: Props) {
   });
 
   const ownedOnly = role === "OBSERVER";
+
+  // Sync active election ID when it loads
+  useEffect(() => {
+    if (currentElectionId && !report.electionId) {
+      setReport((prev) => ({ ...prev, electionId: currentElectionId }));
+    }
+  }, [currentElectionId]);
 
   const loadEvidence = async () => {
     if (!token) return;
@@ -169,6 +177,9 @@ export function ObserverEvidenceView({ token, role, setView }: Props) {
       setEvidence(payload.data ?? []);
     } catch (err: any) {
       setError(err.message ?? "Failed to load evidence");
+      if (err.status === 401) {
+        setView("login");
+      }
     } finally {
       setLoading(false);
     }
@@ -207,6 +218,9 @@ export function ObserverEvidenceView({ token, role, setView }: Props) {
       });
     } catch (err: any) {
       setError(err.message ?? "Failed to load reports");
+      if (err.status === 401) {
+        setView("login");
+      }
     } finally {
       setReportsLoading(false);
     }
@@ -315,7 +329,23 @@ export function ObserverEvidenceView({ token, role, setView }: Props) {
       setMessage("Report submitted with attached evidence");
       await loadReports();
     } catch (err: any) {
-      setError(err.message ?? "Failed to submit report");
+      // Prefer server-provided error details when available (Zod validation errors)
+      const body = err?.body;
+      if (body && typeof body === "object") {
+        if (body.message) setError(body.message);
+        else if (body.errors) {
+          try {
+            const fieldErrors = Object.entries(body.errors)
+              .flatMap(([, v]) => (Array.isArray(v) ? v : []))
+              .filter(Boolean);
+            setError(fieldErrors.join("; ") || "Validation failed");
+          } catch {
+            setError("Validation failed");
+          }
+        } else setError(JSON.stringify(body));
+      } else {
+        setError(err.message ?? "Failed to submit report");
+      }
     } finally {
       setSubmitting(false);
     }

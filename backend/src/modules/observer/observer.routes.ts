@@ -15,6 +15,9 @@ const router = Router();
 
 router.use(authenticate);
 
+// Mount sub-routers first to prevent collisions with dynamic parameter routes
+router.use("/evidence", observerEvidenceRoutes);
+
 // Observers and admins can list/view reports
 router.get(
   "/",
@@ -50,7 +53,5 @@ router.delete(
   requireRole(ROLES.OBSERVER, ROLES.ADMIN, ROLES.SUPER_ADMIN),
   observerController.remove,
 );
-
-router.use("/evidence", observerEvidenceRoutes);
 
 export default router;

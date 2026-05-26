@@ -970,6 +970,7 @@ export default function AppShell() {
                   token={token}
                   role={role}
                   setView={setView}
+                  currentElectionId={openElectionContext.id ?? currentElectionId}
                 />
               )}
             {effectiveView === "voter-hub" && role === "VOTER" && (
