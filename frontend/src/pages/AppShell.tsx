@@ -56,6 +56,7 @@ import { HistoryView } from "../components/common/HistoryView";
 import { HelpView } from "../components/common/HelpView";
 import { UserManagementView } from "../components/admin/UserManagementView";
 import { ResultsDashboardView } from "../components/admin/ResultsDashboardView";
+import { StaffDashboard } from "../components/dashboards/StaffDashboard";
 import { LogItem } from "../components/results/LogItem";
 import { StatCard } from "../components/results/StatCard";
 import { checkPerm } from "../constants/permissions";
@@ -172,6 +173,8 @@ export default function AppShell() {
         return "receipt-verification";
       case "/dashboard":
         return "dashboard";
+      case "/verification":
+        return "verification";
       default:
         return "dashboard";
     }
@@ -220,6 +223,8 @@ export default function AppShell() {
         return "/receipt-verification";
       case "dashboard":
         return adminPrefix ? `${adminPrefix}/dashboard` : "/dashboard";
+      case "verification":
+        return adminPrefix ? `${adminPrefix}/verification` : "/verification";
       default:
         return "/login";
     }
@@ -300,6 +305,8 @@ export default function AppShell() {
       /* `voter-hub-admin` removed; manage opening via the `elections` view */
       case "registration":
         return checkPerm(role, "MANAGE_VOTERS");
+      case "verification":
+        return role === "STAFF";
       case "voting-booth":
         return Boolean(token);
       case "dashboard":
@@ -340,6 +347,15 @@ export default function AppShell() {
         label: t("dashboard"),
         icon: <LayoutDashboard size={18} />,
         view: "dashboard",
+      });
+    }
+
+    if (role === "STAFF") {
+      items.push({
+        key: "verification",
+        label: lang === "en" ? "Verification" : "ማረጋገጫ",
+        icon: <FileCheck size={18} />,
+        view: "verification",
       });
     }
 
@@ -911,6 +927,16 @@ export default function AppShell() {
                   i18n={i18n}
                 />
               )}
+            {effectiveView === "verification" && role === "STAFF" && (
+              <StaffDashboard
+                setView={setView}
+                token={token}
+                t={t}
+                i18n={i18n}
+                user={user}
+                role={role}
+              />
+            )}
             {effectiveView === "geography" &&
               (checkPerm(role, "MANAGE_REGIONS") ||
                 checkPerm(role, "MANAGE_DISTRICTS") ||
