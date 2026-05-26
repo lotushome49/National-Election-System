@@ -27,6 +27,14 @@ type RegionalBreakdown = {
   totalBallots: number;
 };
 
+type DistrictBreakdown = {
+  districtId: string;
+  districtName: string;
+  totalBallots: number;
+  registeredVoters: number;
+  turnoutPercentage: number;
+};
+
 export const reportsService = {
   // Simple in-memory cache to reduce load for expensive aggregation queries.
   // Keyed by electionId + region/district/polling scope.
@@ -70,13 +78,27 @@ export const reportsService = {
       requester,
     );
 
-    const [totalBallots, totalRegisteredVoters, candidateVotes, regionalVotes] =
-      await Promise.all([
-        reportsRepository.countBallots(election.id, scoped),
-        reportsRepository.countRegisteredVoters(scoped),
-        reportsRepository.aggregateVotesByCandidate(election.id, scoped),
-        reportsRepository.aggregateVotesByRegion(election.id, scoped),
-      ]);
+    const [
+      totalBallots,
+      totalRegisteredVoters,
+      candidateVotes,
+      regionalVotes,
+      districtVotes,
+      districtVoters,
+      districtCount,
+      pollingStationCount,
+      scopedDistricts,
+    ] = await Promise.all([
+      reportsRepository.countBallots(election.id, scoped),
+      reportsRepository.countRegisteredVoters(scoped),
+      reportsRepository.aggregateVotesByCandidate(election.id, scoped),
+      reportsRepository.aggregateVotesByRegion(election.id, scoped),
+      reportsRepository.aggregateVotesByDistrict(election.id, scoped),
+      reportsRepository.countRegisteredVotersByDistrict(scoped),
+      reportsRepository.countDistricts(scoped),
+      reportsRepository.countPollingStations(scoped),
+      reportsRepository.findDistrictsByScope(scoped),
+    ]);
 
     const candidateIds = candidateVotes.map((row) => row.candidateId);
     const [candidateDetails, regions] = await Promise.all([
@@ -92,6 +114,16 @@ export const reportsService = {
 
     const candidateMap = new Map(candidateDetails.map((c) => [c.id, c]));
     const regionMap = new Map(regions.map((r) => [r.id, r.name]));
+
+    const districtVoteMap = new Map(
+      districtVotes.map((row) => [row.districtId, row._count.id]),
+    );
+    const districtVoterMap = new Map(
+      districtVoters.map((row) => [row.districtId, row._count.id]),
+    );
+    const districtNameMap = new Map(
+      scopedDistricts.map((district) => [district.id, district.name]),
+    );
 
     const standingsBase = candidateVotes.map((row) => {
       const candidate = candidateMap.get(row.candidateId);
@@ -129,6 +161,25 @@ export const reportsService = {
       }))
       .sort((a, b) => b.totalBallots - a.totalBallots);
 
+    const districtBreakdown: DistrictBreakdown[] = scopedDistricts
+      .map((district) => {
+        const totalBallots = districtVoteMap.get(district.id) ?? 0;
+        const registeredVoters = districtVoterMap.get(district.id) ?? 0;
+        const turnoutPercentage =
+          registeredVoters > 0
+            ? Math.round((totalBallots / registeredVoters) * 10000) / 100
+            : 0;
+
+        return {
+          districtId: district.id,
+          districtName: district.name,
+          totalBallots,
+          registeredVoters,
+          turnoutPercentage,
+        };
+      })
+      .sort((a, b) => b.turnoutPercentage - a.turnoutPercentage);
+
     const turnoutPercentage =
       totalRegisteredVoters > 0
         ? Math.round((totalBallots / totalRegisteredVoters) * 10000) / 100
@@ -141,6 +192,9 @@ export const reportsService = {
       turnoutPercentage,
       candidateStandings,
       regionalBreakdown,
+      districtBreakdown,
+      districtCount,
+      pollingStationCount,
     };
 
     (reportsService as any)._cache.set(cacheKey, {

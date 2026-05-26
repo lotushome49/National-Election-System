@@ -5,16 +5,26 @@ import { StatCard } from "../results/StatCard";
 import { useEffect, useState } from "react";
 import { fetchOverview } from "../../services/api/reports";
 
+type DistrictOverview = {
+  districtId: string;
+  districtName: string;
+  totalBallots: number;
+  registeredVoters: number;
+  turnoutPercentage: number;
+};
+
 export function RegionalDashboard({ setView, t, i18n, user, token }: any) {
   const lang = i18n.language as "en" | "am";
   const [overview, setOverview] = useState<any>(null);
+  const districtRows: DistrictOverview[] = Array.isArray(
+    overview?.districtBreakdown,
+  )
+    ? overview.districtBreakdown
+    : [];
   useEffect(() => {
     let mounted = true;
     if (!token) return;
-    const params = user?.regionId
-      ? { regionId: String(user.regionId) }
-      : undefined;
-    fetchOverview(token, params)
+    fetchOverview(token)
       .then((d) => mounted && setOverview(d))
       .catch(() => {});
     return () => {
@@ -31,7 +41,7 @@ export function RegionalDashboard({ setView, t, i18n, user, token }: any) {
     },
     {
       title: "Districts",
-      value: overview?.regionalBreakdown?.length ?? user?.districtCount ?? "-",
+      value: overview?.districtCount ?? user?.districtCount ?? "-",
       sub: "Monitored from this view",
       icon: <Building2 size={24} />,
     },
@@ -56,30 +66,16 @@ export function RegionalDashboard({ setView, t, i18n, user, token }: any) {
   ];
 
   const turnout =
-    overview?.regionalBreakdown && overview.totalRegisteredVoters
-      ? overview.regionalBreakdown.map((r: any) =>
-          Math.round(
-            ((r.totalBallots || 0) / (overview.totalRegisteredVoters || 1)) *
-              100,
-          ),
-        )
-      : [86, 74, 81, 69, 92, 77];
+    districtRows.length > 0
+      ? districtRows.map((district) => Math.round(district.turnoutPercentage))
+      : [];
 
-  const districts =
-    overview?.regionalBreakdown && overview.totalRegisteredVoters
-      ? overview.regionalBreakdown.map((r: any) => ({
-          label: r.regionName || r.regionId,
-          value: Math.round(
-            ((r.totalBallots || 0) / (overview.totalRegisteredVoters || 1)) *
-              100,
-          ),
-        }))
-      : [
-          { label: "North", value: 91 },
-          { label: "Central", value: 84 },
-          { label: "East", value: 72 },
-          { label: "South", value: 88 },
-        ];
+  const districts = districtRows.map((district) => ({
+    label: district.districtName || district.districtId,
+    value: Math.round(district.turnoutPercentage),
+    registeredVoters: district.registeredVoters,
+    totalBallots: district.totalBallots,
+  }));
 
   return (
     <motion.div
@@ -125,22 +121,28 @@ export function RegionalDashboard({ setView, t, i18n, user, token }: any) {
             </h3>
           </div>
           <div className="space-y-5">
-            {turnout.map((value, index) => (
-              <div key={index} className="space-y-2">
-                <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-slate-400">
-                  <span>District {index + 1}</span>
-                  <span>{value}%</span>
+            {districts.length > 0 ? (
+              districts.map((district) => (
+                <div key={district.label} className="space-y-2">
+                  <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-slate-400">
+                    <span>{district.label}</span>
+                    <span>{district.value}%</span>
+                  </div>
+                  <div className="h-3 rounded-full bg-slate-50 border border-slate-100 overflow-hidden">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${district.value}%` }}
+                      transition={{ duration: 1 }}
+                      className="h-full rounded-full bg-slate-900"
+                    />
+                  </div>
                 </div>
-                <div className="h-3 rounded-full bg-slate-50 border border-slate-100 overflow-hidden">
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${value}%` }}
-                    transition={{ duration: 1 }}
-                    className="h-full rounded-full bg-slate-900"
-                  />
-                </div>
+              ))
+            ) : (
+              <div className="text-[10px] uppercase tracking-[0.3em] text-slate-300">
+                No district data available yet.
               </div>
-            ))}
+            )}
           </div>
         </div>
 
@@ -148,22 +150,30 @@ export function RegionalDashboard({ setView, t, i18n, user, token }: any) {
           <h3 className="text-xl font-display font-black uppercase tracking-tighter">
             District status
           </h3>
-          {districts.map((district) => (
-            <div key={district.label} className="space-y-2">
-              <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-white/50">
-                <span>{district.label}</span>
-                <span>{district.value}%</span>
+          {districts.length > 0 ? (
+            districts.map((district) => (
+              <div key={district.label} className="space-y-2">
+                <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-white/50">
+                  <span>{district.label}</span>
+                  <span>
+                    {district.registeredVoters.toLocaleString()} voters
+                  </span>
+                </div>
+                <div className="h-3 rounded-full bg-white/10 overflow-hidden">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${district.value}%` }}
+                    transition={{ duration: 1 }}
+                    className="h-full rounded-full bg-white"
+                  />
+                </div>
               </div>
-              <div className="h-3 rounded-full bg-white/10 overflow-hidden">
-                <motion.div
-                  initial={{ width: 0 }}
-                  animate={{ width: `${district.value}%` }}
-                  transition={{ duration: 1 }}
-                  className="h-full rounded-full bg-white"
-                />
-              </div>
+            ))
+          ) : (
+            <div className="text-[10px] uppercase tracking-[0.3em] text-white/40">
+              No district data available yet.
             </div>
-          ))}
+          )}
         </div>
       </div>
     </motion.div>
