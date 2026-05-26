@@ -163,7 +163,7 @@ export function ObserverEvidenceView({ token, role, setView }: Props) {
     setError("");
     try {
       const payload = await fetchAuthedRaw<EvidenceListResponse>(
-        `/api/observer/evidence?ownedOnly=${ownedOnly ? "true" : "false"}`,
+        `/api/v1/observer/evidence?ownedOnly=${ownedOnly ? "true" : "false"}`,
         token,
       );
       setEvidence(payload.data ?? []);
@@ -185,7 +185,7 @@ export function ObserverEvidenceView({ token, role, setView }: Props) {
       }
 
       const payload = await fetchAuthedRaw<ReportListResponse>(
-        `/api/observer${params.toString() ? `?${params.toString()}` : ""}`,
+        `/api/v1/observer${params.toString() ? `?${params.toString()}` : ""}`,
         token,
       );
 
@@ -239,7 +239,7 @@ export function ObserverEvidenceView({ token, role, setView }: Props) {
       files.forEach((file) => formData.append("files", file));
 
       const payload = await fetchAuthed<EvidenceRecord[]>(
-        "/api/observer/evidence/upload",
+        "/api/v1/observer/evidence/upload",
         token,
         {
           method: "POST",
@@ -275,7 +275,7 @@ export function ObserverEvidenceView({ token, role, setView }: Props) {
 
     setError("");
     try {
-      await fetchAuthed(`/api/observer/evidence/${id}`, token, {
+      await fetchAuthed(`/api/v1/observer/evidence/${id}`, token, {
         method: "DELETE",
       });
       setEvidence((current) => current.filter((item) => item.id !== id));
@@ -295,7 +295,7 @@ export function ObserverEvidenceView({ token, role, setView }: Props) {
     setError("");
     setMessage("");
     try {
-      await fetchAuthed("/api/observer", token, {
+      await fetchAuthed("/api/v1/observer", token, {
         method: "POST",
         body: JSON.stringify({
           ...report,
@@ -331,7 +331,7 @@ export function ObserverEvidenceView({ token, role, setView }: Props) {
       const nextStatus = reportStatusDrafts[reportId] ?? "SUBMITTED";
       const resolution = reportResolutionDrafts[reportId]?.trim() ?? "";
 
-      await fetchAuthed(`/api/observer/${reportId}/status`, token, {
+      await fetchAuthed(`/api/v1/observer/${reportId}/status`, token, {
         method: "PATCH",
         body: JSON.stringify({
           status: nextStatus,
