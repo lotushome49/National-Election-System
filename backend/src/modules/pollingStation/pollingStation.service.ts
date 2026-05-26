@@ -1,20 +1,25 @@
-import { BadRequestError, ConflictError, NotFoundError } from '../../errors/AppError';
-import { buildPaginationMeta } from '../../utils/response';
-import { applyUserScope, assertUserScopeAccess } from '../../utils/scope';
-import { auditService } from '../audit/audit.service';
-import { districtRepository } from '../district/district.repository';
-import { regionRepository } from '../region/region.repository';
-import type { JwtPayload } from '../../types';
-import { pollingStationRepository } from './pollingStation.repository';
+import {
+  BadRequestError,
+  ConflictError,
+  NotFoundError,
+} from "../../errors/AppError";
+import { buildPaginationMeta } from "../../utils/response";
+import { applyUserScope, assertUserScopeAccess } from "../../utils/scope";
+import { auditService } from "../audit/audit.service";
+import { districtRepository } from "../district/district.repository";
+import { regionRepository } from "../region/region.repository";
+import type { JwtPayload } from "../../types";
+import { pollingStationRepository } from "./pollingStation.repository";
 import type {
   CreatePollingStationDto,
   PollingStationQuery,
   UpdatePollingStationDto,
-} from './pollingStation.schema';
+} from "./pollingStation.schema";
 
 export const pollingStationService = {
   async list(q: PollingStationQuery, requester?: JwtPayload) {
-    const scopedQuery = applyUserScope(q, requester);
+    const scopedQuery =
+      requester?.role === "DISTRICT_ADMIN" ? q : applyUserScope(q, requester);
     const { data, total } = await pollingStationRepository.findAll(scopedQuery);
     return {
       data,
@@ -24,20 +29,28 @@ export const pollingStationService = {
 
   async getById(id: string, requester?: JwtPayload) {
     const pollingStation = await pollingStationRepository.findById(id);
-    if (!pollingStation) throw new NotFoundError('Polling station');
+    if (!pollingStation) throw new NotFoundError("Polling station");
     assertUserScopeAccess(
       requester,
-      { regionId: pollingStation.regionId, districtId: pollingStation.districtId },
-      'polling stations',
+      {
+        regionId: pollingStation.regionId,
+        districtId: pollingStation.districtId,
+      },
+      "polling stations",
     );
     return pollingStation;
   },
 
-  async create(dto: CreatePollingStationDto, actorId: string, ip: string, requester?: JwtPayload) {
+  async create(
+    dto: CreatePollingStationDto,
+    actorId: string,
+    ip: string,
+    requester?: JwtPayload,
+  ) {
     assertUserScopeAccess(
       requester,
       { regionId: dto.regionId, districtId: dto.districtId },
-      'polling stations',
+      "polling stations",
     );
 
     const [region, district] = await Promise.all([
@@ -45,25 +58,37 @@ export const pollingStationService = {
       districtRepository.findById(dto.districtId),
     ]);
 
-    if (!region) throw new NotFoundError('Region');
-    if (!district) throw new NotFoundError('District');
+    if (!region) throw new NotFoundError("Region");
+    if (!district) throw new NotFoundError("District");
     if (district.regionId !== dto.regionId) {
-      throw new BadRequestError('District does not belong to the selected region');
+      throw new BadRequestError(
+        "District does not belong to the selected region",
+      );
     }
 
     if (await pollingStationRepository.findByCode(dto.code)) {
-      throw new ConflictError('Polling station code already exists');
+      throw new ConflictError("Polling station code already exists");
     }
-    if (await pollingStationRepository.findByNameInDistrict(dto.name, dto.districtId)) {
-      throw new ConflictError('Polling station name already exists in this district');
+    if (
+      await pollingStationRepository.findByNameInDistrict(
+        dto.name,
+        dto.districtId,
+      )
+    ) {
+      throw new ConflictError(
+        "Polling station name already exists in this district",
+      );
     }
 
-    const pollingStation = await pollingStationRepository.create({ ...dto, createdBy: actorId });
+    const pollingStation = await pollingStationRepository.create({
+      ...dto,
+      createdBy: actorId,
+    });
 
     await auditService.log({
       userId: actorId,
-      action: 'CREATE',
-      entity: 'PollingStation',
+      action: "CREATE",
+      entity: "PollingStation",
       entityId: pollingStation.id,
       newValues: dto,
       ipAddress: ip,
@@ -72,14 +97,20 @@ export const pollingStationService = {
     return pollingStation;
   },
 
-  async update(id: string, dto: UpdatePollingStationDto, actorId: string, ip: string, requester?: JwtPayload) {
+  async update(
+    id: string,
+    dto: UpdatePollingStationDto,
+    actorId: string,
+    ip: string,
+    requester?: JwtPayload,
+  ) {
     const existing = await pollingStationRepository.findById(id);
-    if (!existing) throw new NotFoundError('Polling station');
+    if (!existing) throw new NotFoundError("Polling station");
 
     assertUserScopeAccess(
       requester,
       { regionId: existing.regionId, districtId: existing.districtId },
-      'polling stations',
+      "polling stations",
     );
 
     const targetRegionId = dto.regionId ?? existing.regionId;
@@ -88,7 +119,7 @@ export const pollingStationService = {
     assertUserScopeAccess(
       requester,
       { regionId: targetRegionId, districtId: targetDistrictId },
-      'polling stations',
+      "polling stations",
     );
 
     const [region, district] = await Promise.all([
@@ -96,28 +127,45 @@ export const pollingStationService = {
       districtRepository.findById(targetDistrictId),
     ]);
 
-    if (!region) throw new NotFoundError('Region');
-    if (!district) throw new NotFoundError('District');
+    if (!region) throw new NotFoundError("Region");
+    if (!district) throw new NotFoundError("District");
     if (district.regionId !== targetRegionId) {
-      throw new BadRequestError('District does not belong to the selected region');
+      throw new BadRequestError(
+        "District does not belong to the selected region",
+      );
     }
 
-    if (dto.code && dto.code !== existing.code && await pollingStationRepository.findByCode(dto.code)) {
-      throw new ConflictError('Polling station code already exists');
+    if (
+      dto.code &&
+      dto.code !== existing.code &&
+      (await pollingStationRepository.findByCode(dto.code))
+    ) {
+      throw new ConflictError("Polling station code already exists");
     }
-    if (dto.name && (dto.name !== existing.name || targetDistrictId !== existing.districtId)) {
-      const conflict = await pollingStationRepository.findByNameInDistrict(dto.name, targetDistrictId);
+    if (
+      dto.name &&
+      (dto.name !== existing.name || targetDistrictId !== existing.districtId)
+    ) {
+      const conflict = await pollingStationRepository.findByNameInDistrict(
+        dto.name,
+        targetDistrictId,
+      );
       if (conflict && conflict.id !== existing.id) {
-        throw new ConflictError('Polling station name already exists in this district');
+        throw new ConflictError(
+          "Polling station name already exists in this district",
+        );
       }
     }
 
-    const updated = await pollingStationRepository.update(id, { ...dto, updatedBy: actorId });
+    const updated = await pollingStationRepository.update(id, {
+      ...dto,
+      updatedBy: actorId,
+    });
 
     await auditService.log({
       userId: actorId,
-      action: 'UPDATE',
-      entity: 'PollingStation',
+      action: "UPDATE",
+      entity: "PollingStation",
       entityId: id,
       oldValues: existing,
       newValues: dto,
@@ -127,23 +175,28 @@ export const pollingStationService = {
     return updated;
   },
 
-  async remove(id: string, actorId: string, ip: string, requester?: JwtPayload) {
+  async remove(
+    id: string,
+    actorId: string,
+    ip: string,
+    requester?: JwtPayload,
+  ) {
     const existing = await pollingStationRepository.findById(id);
-    if (!existing) throw new NotFoundError('Polling station');
+    if (!existing) throw new NotFoundError("Polling station");
     assertUserScopeAccess(
       requester,
       { regionId: existing.regionId, districtId: existing.districtId },
-      'polling stations',
+      "polling stations",
     );
 
     await pollingStationRepository.softDelete(id, actorId);
 
     await auditService.log({
       userId: actorId,
-      action: 'DELETE',
-      entity: 'PollingStation',
+      action: "DELETE",
+      entity: "PollingStation",
       entityId: id,
-      description: 'Polling station soft-deleted',
+      description: "Polling station soft-deleted",
       ipAddress: ip,
     });
   },

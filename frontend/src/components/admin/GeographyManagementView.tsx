@@ -78,6 +78,37 @@ async function apiRequest<T>(
   });
 }
 
+type PaginatedResponse<T> = {
+  data: T[];
+  meta?: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
+};
+
+async function fetchAllPages<T>(
+  path: string,
+  token: string | null,
+): Promise<T[]> {
+  const items: T[] = [];
+  let page = 1;
+  let totalPages = 1;
+
+  while (page <= totalPages) {
+    const response = await apiRequest<PaginatedResponse<T>>(
+      `${path}${path.includes("?") ? "&" : "?"}page=${page}&limit=100`,
+      token,
+    );
+    items.push(...(Array.isArray(response.data) ? response.data : []));
+    totalPages = response.meta?.totalPages ?? page;
+    page += 1;
+  }
+
+  return items;
+}
+
 export function GeographyManagementView({ setView, token, user }: Props) {
   const scopeAccess = getScopeAccessModel(user);
   const isRegionalAdmin = scopeAccess.role === "REGIONAL_ADMIN";
@@ -132,6 +163,67 @@ export function GeographyManagementView({ setView, token, user }: Props) {
       setTab("stations");
     }
   }, [isDistrictAdmin, tab]);
+
+  const loadAll = async () => {
+    setLoading(true);
+    try {
+      if (isDistrictAdmin) {
+        const [districtList, stationList] = await Promise.all([
+          fetchAllPages<District>("/districts", token),
+          fetchAllPages<PollingStation>("/polling-stations", token),
+        ]);
+
+        setRegions([]);
+        setDistricts(districtList);
+        setStations(stationList);
+        return;
+      }
+
+      const districtPath = selectedRegionId
+        ? `/districts?regionId=${selectedRegionId}`
+        : "/districts";
+      const stationPathParts = ["/polling-stations"];
+      const stationQuery = new URLSearchParams();
+      if (selectedRegionId) stationQuery.set("regionId", selectedRegionId);
+      if (selectedDistrictId)
+        stationQuery.set("districtId", selectedDistrictId);
+      const stationPath = stationQuery.toString()
+        ? `${stationPathParts[0]}?${stationQuery.toString()}`
+        : stationPathParts[0];
+
+      const [regionRes, districtList, stationList] = await Promise.all([
+        apiRequest<{ data: Region[] }>("/regions", token),
+        fetchAllPages<District>(districtPath, token),
+        fetchAllPages<PollingStation>(stationPath, token),
+      ]);
+
+      setRegions(Array.isArray(regionRes.data) ? regionRes.data : []);
+      setDistricts(districtList);
+      setStations(stationList);
+
+      if (!selectedRegionId && regionRes.data.length > 0) {
+        setSelectedRegionId(getUserRegionId(user) ?? regionRes.data[0].id);
+      }
+    } catch (error) {
+      if (isUnauthorized(error)) {
+        setView("login");
+        return;
+      }
+      if (isRateLimited(error)) {
+        alert(
+          "Too many geography requests right now. Please wait a moment and try again.",
+        );
+        return;
+      }
+      console.error("Failed to load geography data", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadAll();
+  }, [selectedRegionId, selectedDistrictId]);
 
   if (isDistrictAdmin) {
     return (
@@ -217,100 +309,24 @@ export function GeographyManagementView({ setView, token, user }: Props) {
                 ) : (
                   stations.map((station) => (
                     <div key={station.id} className="px-10 py-6 space-y-1">
-  });
-
-  const loadAll = async () => {
-    setLoading(true);
-    try {
-      if (isDistrictAdmin) {
-        const districtParams = new URLSearchParams();
-        districtParams.set("page", "1");
-        districtParams.set("limit", "1000");
-        if (scopeAccess.regionId) {
-          districtParams.set("regionId", scopeAccess.regionId);
-        }
-        if (scopeAccess.districtId) {
-          districtParams.set("districtId", scopeAccess.districtId);
-        }
-
-        const stationParams = new URLSearchParams();
-        stationParams.set("page", "1");
-        stationParams.set("limit", "1000");
-        if (scopeAccess.regionId) {
-          stationParams.set("regionId", scopeAccess.regionId);
-        }
-        if (scopeAccess.districtId) {
-          stationParams.set("districtId", scopeAccess.districtId);
-        }
-
-        const [districtRes, stationRes] = await Promise.all([
-          apiRequest<{ data: District[] }>(
-            `/districts?${districtParams.toString()}`,
-            token,
-          ),
-          apiRequest<{ data: PollingStation[] }>(
-            `/polling-stations?${stationParams.toString()}`,
-            token,
-          ),
-        ]);
-
-        setRegions([]);
-        setDistricts(Array.isArray(districtRes.data) ? districtRes.data : []);
-        setStations(Array.isArray(stationRes.data) ? stationRes.data : []);
-        setSelectedRegionId(scopeAccess.regionId);
-        setSelectedDistrictId(scopeAccess.districtId);
-        return;
-      }
-
-      const districtQuery = selectedRegionId
-        ? `?page=1&limit=1000&regionId=${selectedRegionId}`
-        : "";
-      const stationParams = new URLSearchParams();
-      stationParams.set("page", "1");
-      stationParams.set("limit", "100");
-      if (selectedRegionId) stationParams.set("regionId", selectedRegionId);
-      if (selectedDistrictId)
-        stationParams.set("districtId", selectedDistrictId);
-      const stationQuery = stationParams.toString()
-        ? `?${stationParams.toString()}`
-        : "";
-
-      const [regionRes, districtRes, stationRes] = await Promise.all([
-        apiRequest<{ data: Region[] }>("/regions", token),
-        apiRequest<{ data: District[] }>(`/districts${districtQuery}`, token),
-        apiRequest<{ data: PollingStation[] }>(
-          `/polling-stations${stationQuery}`,
-          token,
-        ),
-      ]);
-
-      setRegions(Array.isArray(regionRes.data) ? regionRes.data : []);
-      setDistricts(Array.isArray(districtRes.data) ? districtRes.data : []);
-      setStations(Array.isArray(stationRes.data) ? stationRes.data : []);
-
-      if (!selectedRegionId && regionRes.data.length > 0) {
-        setSelectedRegionId(getUserRegionId(user) ?? regionRes.data[0].id);
-      }
-    } catch (error) {
-      if (isUnauthorized(error)) {
-        setView("login");
-        return;
-      }
-      if (isRateLimited(error)) {
-        alert(
-          "Too many geography requests right now. Please wait a moment and try again.",
-        );
-        return;
-      }
-      console.error("Failed to load geography data", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    void loadAll();
-  }, [selectedRegionId, selectedDistrictId]);
+                      <p className="font-display font-black text-slate-900 text-xl uppercase tracking-tighter">
+                        {station.name}
+                      </p>
+                      <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">
+                        {station.code} ·{" "}
+                        {station.district?.name ?? "Assigned district"} ·
+                        Capacity {station.capacity}
+                      </p>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </section>
+        </div>
+      </motion.div>
+    );
+  }
 
   const createRegion = async () => {
     setSubmitting(true);
@@ -453,106 +469,6 @@ export function GeographyManagementView({ setView, token, user }: Props) {
       alert((error as any)?.message || "Failed to delete item");
     }
   };
-
-  if (isDistrictAdmin) {
-    return (
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        className="max-w-7xl mx-auto pb-20 space-y-10"
-      >
-        <div className="flex flex-col lg:flex-row justify-between gap-8">
-          <div className="space-y-4">
-            <button
-              onClick={() => setView("dashboard")}
-              className="text-[10px] font-black text-slate-400 hover:text-slate-900 uppercase tracking-[0.3em] flex items-center gap-2 transition-colors"
-            >
-              <ChevronLeft size={14} /> Back to dashboard
-            </button>
-            <h2 className="text-4xl lg:text-5xl font-display font-black tracking-tighter text-slate-900 uppercase">
-              District Geography
-            </h2>
-            <p className="text-slate-400 text-sm font-medium uppercase tracking-widest max-w-2xl">
-              Read-only view of the district and polling stations assigned to
-              your scope.
-            </p>
-          </div>
-
-          <div className="px-5 py-3 rounded-[1.5rem] text-[10px] font-black uppercase tracking-widest text-slate-500 bg-slate-50 border border-slate-100 h-fit">
-            {scopeAccess.summaryLabel}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-          <section className="bg-white rounded-[3rem] border border-slate-100 shadow-sm overflow-hidden">
-            <div className="px-10 py-8 border-b border-slate-100 flex items-center gap-4">
-              <MapPinned className="text-slate-900" />
-              <h3 className="font-display font-black text-2xl tracking-tighter text-slate-900 uppercase">
-                Districts
-              </h3>
-            </div>
-            {loading ? (
-              <div className="p-16 text-center text-slate-300 font-display font-black uppercase tracking-[0.4em]">
-                Loading districts
-              </div>
-            ) : (
-              <div className="divide-y divide-slate-50">
-                {districts.length === 0 ? (
-                  <div className="p-10 text-center text-slate-400 font-bold uppercase tracking-widest text-sm">
-                    No districts found in your scope.
-                  </div>
-                ) : (
-                  districts.map((district) => (
-                    <div key={district.id} className="px-10 py-6 space-y-1">
-                      <p className="font-display font-black text-slate-900 text-xl uppercase tracking-tighter">
-                        {district.name}
-                      </p>
-                      <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">
-                        {district.code} · {district.region?.name ?? "Assigned region"}
-                      </p>
-                    </div>
-                  ))
-                )}
-              </div>
-            )}
-          </section>
-
-          <section className="bg-white rounded-[3rem] border border-slate-100 shadow-sm overflow-hidden">
-            <div className="px-10 py-8 border-b border-slate-100 flex items-center gap-4">
-              <Waypoints className="text-slate-900" />
-              <h3 className="font-display font-black text-2xl tracking-tighter text-slate-900 uppercase">
-                Polling Stations
-              </h3>
-            </div>
-            {loading ? (
-              <div className="p-16 text-center text-slate-300 font-display font-black uppercase tracking-[0.4em]">
-                Loading polling stations
-              </div>
-            ) : (
-              <div className="divide-y divide-slate-50">
-                {stations.length === 0 ? (
-                  <div className="p-10 text-center text-slate-400 font-bold uppercase tracking-widest text-sm">
-                    No polling stations found in your scope.
-                  </div>
-                ) : (
-                  stations.map((station) => (
-                    <div key={station.id} className="px-10 py-6 space-y-1">
-                      <p className="font-display font-black text-slate-900 text-xl uppercase tracking-tighter">
-                        {station.name}
-                      </p>
-                      <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">
-                        {station.code} · {station.district?.name ?? "Assigned district"} · Capacity {station.capacity}
-                      </p>
-                    </div>
-                  ))
-                )}
-              </div>
-            )}
-          </section>
-        </div>
-      </motion.div>
-    );
-  }
 
   return (
     <motion.div
