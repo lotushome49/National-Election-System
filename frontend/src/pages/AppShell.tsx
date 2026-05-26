@@ -104,6 +104,10 @@ export default function AppShell() {
       return trimmed.replace("/admin", "");
     }
 
+    if (trimmed.startsWith("/staff-member/")) {
+      return trimmed.replace("/staff-member", "");
+    }
+
     if (trimmed.startsWith("/district-admin/")) {
       return trimmed.replace("/district-admin", "");
     }
@@ -120,6 +124,7 @@ export default function AppShell() {
   const getAdminPathPrefix = () => {
     if (role === "SUPER_ADMIN") return "/super-admin";
     if (role === "ADMIN") return "/admin";
+    if (role === "STAFF") return "/staff-member";
     if (role === "DISTRICT_ADMIN") return "/district-admin";
     if (role === "REGIONAL_ADMIN") return "/regional-admin";
     return "";

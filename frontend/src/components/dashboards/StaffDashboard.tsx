@@ -91,16 +91,6 @@ export function StaffDashboard({ setView, t, i18n, token }: any) {
   const electionStatus = overview?.election?.status || "UNKNOWN";
   const electionTitle = overview?.election?.title || "Current election";
 
-  const openVoterApprovalQueue = () => {
-    try {
-      localStorage.setItem("nehs_voter_registry_filter", "pending");
-    } catch {
-      // ignore storage failures; the registry will still open normally
-    }
-
-    setView?.("voters");
-  };
-
   const handleVerification = async (voterId: string, verified: boolean) => {
     setActionId(voterId);
     setError(null);
@@ -193,22 +183,6 @@ export function StaffDashboard({ setView, t, i18n, token }: any) {
           >
             {lang === "en" ? "አማርኛ" : "English"}
           </button>
-          {setView && (
-            <div className="flex flex-wrap gap-3 justify-end">
-              <button
-                onClick={openVoterApprovalQueue}
-                className="px-5 py-3 rounded-xl bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest"
-              >
-                Open Voter Approval Queue
-              </button>
-              <button
-                onClick={() => setView("voters")}
-                className="px-5 py-3 rounded-xl bg-white border border-slate-100 text-slate-700 text-[10px] font-black uppercase tracking-widest"
-              >
-                Open Registry
-              </button>
-            </div>
-          )}
         </div>
       </div>
 
@@ -228,12 +202,6 @@ export function StaffDashboard({ setView, t, i18n, token }: any) {
               Voter verification approvals
             </h3>
           </div>
-          <button
-            onClick={openVoterApprovalQueue}
-            className="px-5 py-3 rounded-xl bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest flex items-center gap-2"
-          >
-            <ListChecks size={14} /> Open Voter Approval Queue
-          </button>
         </div>
 
         {error && (
