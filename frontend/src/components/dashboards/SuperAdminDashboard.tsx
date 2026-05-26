@@ -127,7 +127,7 @@ export function SuperAdminDashboard({ setView, t, i18n, results, token }: any) {
           {setView && (
             <div className="flex gap-2">
               <button
-                onClick={() => setView("voter-hub-admin")}
+                onClick={() => setView("elections")}
                 className="px-4 py-2 rounded-xl bg-white border border-slate-100 text-slate-500 text-[10px] font-black uppercase tracking-widest"
               >
                 Open Election Manager

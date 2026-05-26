@@ -80,8 +80,10 @@ async function apiRequest<T>(
 
 export function GeographyManagementView({ setView, token, user }: Props) {
   const scopeAccess = getScopeAccessModel(user);
+  const isRegionalAdmin = scopeAccess.role === "REGIONAL_ADMIN";
+  const isDistrictAdmin = scopeAccess.role === "DISTRICT_ADMIN";
   const [tab, setTab] = useState<"regions" | "districts" | "stations">(
-    "regions",
+    isDistrictAdmin ? "stations" : isRegionalAdmin ? "districts" : "regions",
   );
   const [regions, setRegions] = useState<Region[]>([]);
   const [districts, setDistricts] = useState<District[]>([]);
@@ -118,6 +120,18 @@ export function GeographyManagementView({ setView, token, user }: Props) {
     null,
   );
   const [stationEditingId, setStationEditingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isRegionalAdmin && tab === "regions") {
+      setTab("districts");
+    }
+  }, [isRegionalAdmin, tab]);
+
+  useEffect(() => {
+    if (isDistrictAdmin && tab !== "stations") {
+      setTab("stations");
+    }
+  }, [isDistrictAdmin, tab]);
 
   const filteredDistricts = useMemo(
     () =>
@@ -205,6 +219,17 @@ export function GeographyManagementView({ setView, token, user }: Props) {
   const loadAll = async () => {
     setLoading(true);
     try {
+      if (isDistrictAdmin) {
+        const stationRes = await apiRequest<{ data: PollingStation[] }>(
+          "/polling-stations",
+          token,
+        );
+        setStations(Array.isArray(stationRes.data) ? stationRes.data : []);
+        setRegions([]);
+        setDistricts([]);
+        return;
+      }
+
       const districtQuery = selectedRegionId
         ? `?page=1&limit=1000&regionId=${selectedRegionId}`
         : "";
@@ -426,24 +451,30 @@ export function GeographyManagementView({ setView, token, user }: Props) {
       </div>
 
       <div className="flex flex-wrap gap-2 p-2 bg-white border border-slate-100 rounded-[2rem] shadow-sm w-fit">
-        <button
-          onClick={() => setTab("regions")}
-          className={cn(
-            "px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest",
-            tab === "regions" ? "bg-slate-900 text-white" : "text-slate-500",
-          )}
-        >
-          Regions
-        </button>
-        <button
-          onClick={() => setTab("districts")}
-          className={cn(
-            "px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest",
-            tab === "districts" ? "bg-slate-900 text-white" : "text-slate-500",
-          )}
-        >
-          Districts
-        </button>
+        {!isRegionalAdmin && !isDistrictAdmin && (
+          <button
+            onClick={() => setTab("regions")}
+            className={cn(
+              "px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest",
+              tab === "regions" ? "bg-slate-900 text-white" : "text-slate-500",
+            )}
+          >
+            Regions
+          </button>
+        )}
+        {!isDistrictAdmin && (
+          <button
+            onClick={() => setTab("districts")}
+            className={cn(
+              "px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest",
+              tab === "districts"
+                ? "bg-slate-900 text-white"
+                : "text-slate-500",
+            )}
+          >
+            Districts
+          </button>
+        )}
         <button
           onClick={() => setTab("stations")}
           className={cn(
@@ -477,6 +508,7 @@ export function GeographyManagementView({ setView, token, user }: Props) {
           ) : (
             <div className="divide-y divide-slate-50">
               {tab === "regions" &&
+                !isRegionalAdmin &&
                 regions.map((region) => (
                   <div
                     key={region.id}
@@ -625,27 +657,35 @@ export function GeographyManagementView({ setView, token, user }: Props) {
                   : "Polling Station"}
             </h3>
 
-            {tab !== "regions" && (
-              <select
-                value={selectedRegionId ?? ""}
-                onChange={(event) =>
-                  setSelectedRegionId(event.target.value || null)
-                }
-                disabled={
-                  !scopeAccess.canPickRegion && scopeAccess.regionId !== null
-                }
-                className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-bold text-slate-900"
-              >
-                <option value="">Select region</option>
-                {regions.map((region) => (
-                  <option key={region.id} value={region.id}>
-                    {region.name}
-                  </option>
-                ))}
-              </select>
-            )}
+            {tab !== "regions" &&
+              ((isRegionalAdmin || isDistrictAdmin) &&
+              (selectedRegionId || isDistrictAdmin) ? (
+                <div className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-black uppercase tracking-widest text-slate-500">
+                  {isDistrictAdmin
+                    ? "District scope locked to assigned station area"
+                    : "Region locked to assigned scope"}
+                </div>
+              ) : (
+                <select
+                  value={selectedRegionId ?? ""}
+                  onChange={(event) =>
+                    setSelectedRegionId(event.target.value || null)
+                  }
+                  disabled={
+                    !scopeAccess.canPickRegion && scopeAccess.regionId !== null
+                  }
+                  className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-bold text-slate-900"
+                >
+                  <option value="">Select region</option>
+                  {regions.map((region) => (
+                    <option key={region.id} value={region.id}>
+                      {region.name}
+                    </option>
+                  ))}
+                </select>
+              ))}
 
-            {tab === "stations" && (
+            {tab === "stations" && !isDistrictAdmin && (
               <select
                 value={selectedDistrictId ?? ""}
                 onChange={(event) =>
@@ -666,7 +706,18 @@ export function GeographyManagementView({ setView, token, user }: Props) {
               </select>
             )}
 
-            {tab === "regions" && (
+            {tab === "stations" && isDistrictAdmin && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-black uppercase tracking-widest text-slate-500">
+                  Region: {selectedRegionId ?? "Assigned"}
+                </div>
+                <div className="px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-black uppercase tracking-widest text-slate-500">
+                  District: {selectedDistrictId ?? "Assigned"}
+                </div>
+              </div>
+            )}
+
+            {tab === "regions" && !isRegionalAdmin && (
               <>
                 <input
                   value={regionForm.name}
@@ -718,7 +769,7 @@ export function GeographyManagementView({ setView, token, user }: Props) {
               </>
             )}
 
-            {tab === "districts" && (
+            {tab === "districts" && !isDistrictAdmin && (
               <>
                 <input
                   value={districtForm.name}

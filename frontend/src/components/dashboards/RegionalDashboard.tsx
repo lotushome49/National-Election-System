@@ -8,17 +8,19 @@ import { fetchOverview } from "../../services/api/reports";
 export function RegionalDashboard({ setView, t, i18n, user, token }: any) {
   const lang = i18n.language as "en" | "am";
   const [overview, setOverview] = useState<any>(null);
-
   useEffect(() => {
     let mounted = true;
     if (!token) return;
-    fetchOverview(token)
+    const params = user?.regionId
+      ? { regionId: String(user.regionId) }
+      : undefined;
+    fetchOverview(token, params)
       .then((d) => mounted && setOverview(d))
       .catch(() => {});
     return () => {
       mounted = false;
     };
-  }, [token]);
+  }, [token, user?.regionId]);
 
   const cards = [
     {
@@ -29,33 +31,55 @@ export function RegionalDashboard({ setView, t, i18n, user, token }: any) {
     },
     {
       title: "Districts",
-      value: "12",
+      value: overview?.regionalBreakdown?.length ?? user?.districtCount ?? "-",
       sub: "Monitored from this view",
       icon: <Building2 size={24} />,
     },
     {
       title: "Registered Voters",
       value:
-        (overview?.totalRegisteredVoters ?? "286,410").toLocaleString?.() ??
-        String(overview?.totalRegisteredVoters ?? "286,410"),
+        overview?.totalRegisteredVoters != null
+          ? Number(overview.totalRegisteredVoters).toLocaleString()
+          : "-",
       sub: "Regional registry total",
       icon: <Users size={24} />,
     },
     {
       title: "Polling Stations",
-      value: "1,284",
+      value:
+        overview?.pollingStationCount != null
+          ? String(overview.pollingStationCount)
+          : "-",
       sub: "Open and syncing",
       icon: <Vote size={24} />,
     },
   ];
 
-  const turnout = [86, 74, 81, 69, 92, 77];
-  const districts = [
-    { label: "North", value: 91 },
-    { label: "Central", value: 84 },
-    { label: "East", value: 72 },
-    { label: "South", value: 88 },
-  ];
+  const turnout =
+    overview?.regionalBreakdown && overview.totalRegisteredVoters
+      ? overview.regionalBreakdown.map((r: any) =>
+          Math.round(
+            ((r.totalBallots || 0) / (overview.totalRegisteredVoters || 1)) *
+              100,
+          ),
+        )
+      : [86, 74, 81, 69, 92, 77];
+
+  const districts =
+    overview?.regionalBreakdown && overview.totalRegisteredVoters
+      ? overview.regionalBreakdown.map((r: any) => ({
+          label: r.regionName || r.regionId,
+          value: Math.round(
+            ((r.totalBallots || 0) / (overview.totalRegisteredVoters || 1)) *
+              100,
+          ),
+        }))
+      : [
+          { label: "North", value: 91 },
+          { label: "Central", value: 84 },
+          { label: "East", value: 72 },
+          { label: "South", value: 88 },
+        ];
 
   return (
     <motion.div
@@ -83,14 +107,6 @@ export function RegionalDashboard({ setView, t, i18n, user, token }: any) {
           >
             {lang === "en" ? "አማርኛ" : "English"}
           </button>
-          {setView && (
-            <button
-              onClick={() => setView("geography")}
-              className="px-5 py-3 rounded-xl bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest"
-            >
-              Open geography
-            </button>
-          )}
         </div>
       </div>
 

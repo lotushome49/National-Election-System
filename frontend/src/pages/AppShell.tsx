@@ -43,7 +43,6 @@ import { MfaSecurityView } from "../components/admin/MfaSecurityView";
 import { PasswordResetView } from "../components/auth/PasswordResetView";
 import { ObserverEvidenceView } from "../components/observer/ObserverEvidenceView";
 import { ElectionManagementView } from "../components/admin/ElectionManagementView";
-import AdminOpenElectionView from "../components/admin/AdminOpenElectionView";
 import { CandidateManagementView } from "../components/admin/CandidateManagementView";
 import { LoginView } from "../components/auth/LoginView";
 import { RegistrationView } from "../components/auth/RegistrationView";
@@ -105,6 +104,14 @@ export default function AppShell() {
       return trimmed.replace("/admin", "");
     }
 
+    if (trimmed.startsWith("/district-admin/")) {
+      return trimmed.replace("/district-admin", "");
+    }
+
+    if (trimmed.startsWith("/regional-admin/")) {
+      return trimmed.replace("/regional-admin", "");
+    }
+
     return trimmed;
   };
   const isJwtAccessToken = (value: string | null) =>
@@ -113,6 +120,8 @@ export default function AppShell() {
   const getAdminPathPrefix = () => {
     if (role === "SUPER_ADMIN") return "/super-admin";
     if (role === "ADMIN") return "/admin";
+    if (role === "DISTRICT_ADMIN") return "/district-admin";
+    if (role === "REGIONAL_ADMIN") return "/regional-admin";
     return "";
   };
   const viewFromPath = (pathname: string) => {
@@ -149,7 +158,7 @@ export default function AppShell() {
       case "/voter-hub":
         return "voter-hub";
       case "/voter-hub-admin":
-        return "voter-hub-admin";
+        return "elections";
       case "/registration":
         return "registration";
       case "/voting-booth":
@@ -197,8 +206,7 @@ export default function AppShell() {
           : "/observer-evidence";
       case "voter-hub":
         return "/voter-hub";
-      case "voter-hub-admin":
-        return "/voter-hub-admin";
+      /* `voter-hub-admin` route removed; no direct path */
       case "registration":
         return adminPrefix ? `${adminPrefix}/registration` : "/registration";
       case "voting-booth":
@@ -284,10 +292,9 @@ export default function AppShell() {
         return canManageObserverEvidence;
       case "voter-hub":
         return role === "VOTER";
-      case "voter-hub-admin":
-        return checkPerm(role, "MANAGE_ELECTIONS");
+      /* `voter-hub-admin` removed; manage opening via the `elections` view */
       case "registration":
-        return true;
+        return checkPerm(role, "MANAGE_VOTERS");
       case "voting-booth":
         return Boolean(token);
       case "dashboard":
@@ -356,12 +363,6 @@ export default function AppShell() {
     }
 
     if (checkPerm(role, "MANAGE_ELECTIONS")) {
-      items.push({
-        key: "voter-hub-admin",
-        label: "Manage Election Opening",
-        icon: <Vote size={18} />,
-        view: "voter-hub-admin",
-      });
       items.push({
         key: "elections",
         label: lang === "en" ? "Elections" : "ምርጫዎች",
@@ -946,16 +947,7 @@ export default function AppShell() {
               />
             )}
 
-            {effectiveView === "voter-hub-admin" &&
-              checkPerm(role, "MANAGE_ELECTIONS") && (
-                <AdminOpenElectionView
-                  key="voter-admin"
-                  setView={setView}
-                  token={token}
-                  t={t}
-                  i18n={i18n}
-                />
-              )}
+            {/* `voter-hub-admin` removed from routing and rendering */}
             {effectiveView === "registration" &&
               (electionPhase === "REGISTRATION" ? (
                 <RegistrationView

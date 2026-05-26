@@ -1,13 +1,19 @@
-import type { Role } from '../types/election';
+import type { Role } from "../types/election";
 
-export const MFA_ELIGIBLE_ROLES: Role[] = ['SUPER_ADMIN', 'ADMIN', 'REGIONAL_ADMIN', 'DISTRICT_ADMIN'];
+export const MFA_ELIGIBLE_ROLES: Role[] = [
+  "SUPER_ADMIN",
+  "ADMIN",
+  "DISTRICT_ADMIN",
+];
 
-export function isMfaEligibleRole(role: Role | string | null | undefined): boolean {
-  return MFA_ELIGIBLE_ROLES.includes((role ?? 'NONE') as Role);
+export function isMfaEligibleRole(
+  role: Role | string | null | undefined,
+): boolean {
+  return MFA_ELIGIBLE_ROLES.includes((role ?? "NONE") as Role);
 }
 
 export function unwrapApiData<T>(payload: T | { data: T }): T {
-  if (payload && typeof payload === 'object' && 'data' in payload) {
+  if (payload && typeof payload === "object" && "data" in payload) {
     return (payload as { data: T }).data;
   }
 
