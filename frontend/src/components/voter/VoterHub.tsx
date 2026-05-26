@@ -10,6 +10,12 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "../../utils/cn";
+import {
+  persistDemoVoteState,
+  readDemoUserState,
+  readDemoVoterAuth,
+  summarizeDemoVotes,
+} from "../../utils/demoVotingState";
 import { getScopeAccessModel } from "../../utils/scope";
 import { fetchJson } from "../../services/api/client";
 
@@ -217,10 +223,18 @@ export function VoterHub({
     }
 
     if (isDemoAccessToken(token)) {
+      const storedAuth = readDemoVoterAuth();
+      const storedUser = readDemoUserState();
       setVotingStatus((prev) => ({
         ...prev,
-        hasVoted: Boolean(user?.hasVoted),
-        receiptHash: user?.receiptToken ?? prev.receiptHash,
+        hasVoted: Boolean(
+          storedAuth?.hasVoted ?? storedUser?.hasVoted ?? user?.hasVoted,
+        ),
+        receiptHash:
+          storedAuth?.receiptToken ??
+          storedUser?.receiptToken ??
+          user?.receiptToken ??
+          prev.receiptHash,
         castAt: prev.castAt ?? new Date().toISOString(),
       }));
       return;
@@ -251,6 +265,7 @@ export function VoterHub({
       let electionId = currentElectionId ?? resolvedElectionId;
       let electionTitle = currentElectionTitle ?? resolvedElectionTitle;
       let electionStatus = currentElectionStatus ?? resolvedElectionStatus;
+      const demoSession = isDemoAccessToken(token);
 
       if (!electionId) {
         const activeElection = await resolveActiveElection();
@@ -266,17 +281,27 @@ export function VoterHub({
         {},
       );
 
+      const mappedCandidates = Array.isArray(response.data)
+        ? response.data.map((candidate) => ({
+            id: candidate.id,
+            fullName: candidate.fullName,
+            party: candidate.party,
+            symbol: candidate.symbol || candidate.partyCode || "🗳️",
+            electionId: candidate.electionId ?? null,
+            voteCount: Number(candidate.voteCount ?? 0),
+          }))
+        : [];
+
       setCandidatePreview(
-        Array.isArray(response.data)
-          ? response.data.map((candidate) => ({
-              id: candidate.id,
-              fullName: candidate.fullName,
-              party: candidate.party,
-              symbol: candidate.symbol || candidate.partyCode || "🗳️",
-              electionId: candidate.electionId ?? null,
-              voteCount: Number(candidate.voteCount ?? 0),
-            }))
-          : [],
+        demoSession
+          ? summarizeDemoVotes(mappedCandidates, electionId).counts.map(
+              (candidate) => ({
+                ...candidate,
+                fullName: candidate.name,
+                voteCount: Number(candidate.votes ?? 0),
+              }),
+            )
+          : mappedCandidates,
       );
       setResolvedElectionId(electionId);
       setResolvedElectionTitle(electionTitle);
@@ -320,9 +345,16 @@ export function VoterHub({
     if (isDemoAccessToken(token)) {
       try {
         const demoReceiptHash = `demo-receipt-${Date.now()}-${votingKey.trim()}`;
+        const castAt = new Date().toISOString();
         sessionStorage.setItem("nehs_last_receipt_hash", demoReceiptHash);
         try {
           localStorage.removeItem("nehs_pending_voting_token");
+          persistDemoVoteState({
+            receiptHash: demoReceiptHash,
+            castAt,
+            candidateId: votingCandidate.id,
+            electionId: currentElectionId ?? resolvedElectionId,
+          });
         } catch {
           // ignore storage failures
         }
@@ -330,8 +362,21 @@ export function VoterHub({
           ...prev,
           hasVoted: true,
           receiptHash: demoReceiptHash,
-          castAt: new Date().toISOString(),
+          castAt,
         }));
+        setCandidatePreview((prev) =>
+          summarizeDemoVotes(
+            prev.map((candidate) => ({
+              ...candidate,
+              fullName: candidate.fullName ?? candidate.name,
+            })),
+            currentElectionId ?? resolvedElectionId,
+          ).counts.map((candidate) => ({
+            ...candidate,
+            fullName: candidate.name,
+            voteCount: Number(candidate.votes ?? 0),
+          })),
+        );
         setVoteNotice("Vote recorded successfully.");
         setVotingKey("");
         setVotingCandidate(null);

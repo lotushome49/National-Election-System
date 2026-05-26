@@ -8,6 +8,9 @@ import {
   BarChart3,
 } from "lucide-react";
 import { StatCard } from "../results/StatCard";
+import { fetchJson } from "../../services/api/client";
+import { isDemoAccessToken } from "../../utils/authToken";
+import { summarizeDemoVotes } from "../../utils/demoVotingState";
 
 export function ResultsDashboardView({ setView, token, t, i18n }: any) {
   const lang = i18n.language as "en" | "am";
@@ -15,6 +18,57 @@ export function ResultsDashboardView({ setView, token, t, i18n }: any) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let mounted = true;
+
+    const loadDemoResults = async () => {
+      const [candidatesResponse, electionResponse] = await Promise.all([
+        fetchJson<{ data: any[] }>(
+          "/api/v1/candidates/public?page=1&limit=100",
+          {},
+        ),
+        fetchJson<{ data: any }>("/api/v1/elections/current/open", {}),
+      ]);
+
+      const candidates = Array.isArray(candidatesResponse?.data)
+        ? candidatesResponse.data.map((candidate: any) => ({
+            id: candidate.id,
+            fullName: candidate.fullName,
+            name: candidate.fullName,
+            party: candidate.party,
+            symbol: candidate.symbol || candidate.partyCode || "🗳️",
+          }))
+        : [];
+
+      const election = electionResponse?.data ?? null;
+      const summary = summarizeDemoVotes(candidates, election?.id ?? null);
+
+      if (!mounted) return;
+
+      setResults({
+        electionId: election?.id,
+        total: summary.totalBallots,
+        counts: summary.candidateStandings.map((candidate: any) => ({
+          id: candidate.candidateId,
+          displayName: candidate.fullName,
+          party: candidate.party,
+          votes: Number(candidate.votes ?? 0),
+        })),
+      });
+      setLoading(false);
+    };
+
+    if (isDemoAccessToken(token)) {
+      loadDemoResults().catch((err) => {
+        console.error("Failed to load demo results:", err);
+        if (!mounted) return;
+        setResults({ total: 0, counts: [] });
+        setLoading(false);
+      });
+      return () => {
+        mounted = false;
+      };
+    }
+
     fetch("/api/reports/overview", {
       headers: { Authorization: `Bearer ${token}` },
     })
@@ -27,6 +81,8 @@ export function ResultsDashboardView({ setView, token, t, i18n }: any) {
         const rawStandings = Array.isArray(overview?.candidateStandings)
           ? overview.candidateStandings
           : [];
+
+        if (!mounted) return;
 
         setResults({
           electionId: overview?.election?.id,
@@ -49,24 +105,25 @@ export function ResultsDashboardView({ setView, token, t, i18n }: any) {
         });
         setLoading(false);
       })
-      .catch((err) => {
+      .catch(async (err) => {
         console.error("Failed to fetch results:", err);
+
+        if (isDemoAccessToken(token)) {
+          try {
+            await loadDemoResults();
+            return;
+          } catch (demoErr) {
+            console.error("Failed to load demo results:", demoErr);
+          }
+        }
+
+        if (!mounted) return;
         setResults({ total: 0, counts: [] });
         setLoading(false);
       });
 
-    const handler = (payload: any) => {
-      // payload now may contain candidateId and candidateVotes
-      if (payload.candidateId && typeof payload.candidateVotes === 'number') {
-        setResults((prev: any) => ({
-          ...prev,
-          counts: prev.counts.map((c: any) =>
-            c.id === payload.candidateId ? { ...c, votes: payload.candidateVotes } : c,
-          ),
-        }));
-      }
-      // Optionally handle totalVotes or other updates here
-      console.log('Live update received', payload);
+    return () => {
+      mounted = false;
     };
   }, [token]);
 

@@ -406,7 +406,7 @@ export function ElectionManagementView({ setView, token }: Props) {
             onClick={() => setView("voter-hub-admin")}
             className="px-8 py-4 bg-white border border-slate-100 text-slate-600 rounded-[2rem] text-[10px] font-black uppercase tracking-[0.35em] shadow-sm hover:text-slate-900 transition-all flex items-center gap-3"
           >
-            Manage Election Opening
+            Open Election Manager
           </button>
           <button
             onClick={openCreate}

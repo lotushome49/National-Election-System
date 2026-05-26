@@ -3,6 +3,10 @@ import { io } from "socket.io-client";
 import { fetchJson } from "../services/api/client";
 import type { ElectionPhase, VoteResults } from "../types/election";
 import { isDemoAccessToken } from "../utils/authToken";
+import {
+  readDemoVoteLedger,
+  summarizeDemoVotes,
+} from "../utils/demoVotingState";
 
 type ElectionSummary = {
   id: string;
@@ -65,11 +69,86 @@ export function useElectionRealtime(token: string | null, enabled = true) {
         : null);
 
     if (isDemoAccessToken(effectiveToken)) {
-      setResults(null);
-      setCurrentElectionId(null);
-      setCurrentElectionTitle(null);
-      setCurrentElectionStatus(null);
-      return;
+      let active = true;
+
+      const loadDemoContext = async () => {
+        try {
+          const [candidatesResponse, electionResponse] = await Promise.all([
+            fetchJson<{ data: any[] }>(
+              "/api/v1/candidates/public?page=1&limit=100",
+              {},
+            ),
+            fetchJson<{ data: ElectionSummary }>(
+              "/api/v1/elections/current/open",
+              {},
+            ),
+          ]);
+
+          if (!active) return;
+
+          const candidates = Array.isArray(candidatesResponse?.data)
+            ? candidatesResponse.data.map((candidate: any) => ({
+                id: candidate.id,
+                fullName: candidate.fullName,
+                name: candidate.fullName,
+                party: candidate.party,
+                symbol: candidate.symbol || candidate.partyCode || "🗳️",
+              }))
+            : [];
+
+          const election = electionResponse?.data ?? null;
+          const summary = summarizeDemoVotes(candidates, election?.id ?? null);
+
+          currentElectionIdRef.current = election?.id ?? null;
+          setCurrentElectionId(election?.id ?? null);
+          setCurrentElectionTitle(election?.title ?? null);
+          setCurrentElectionStatus(election?.status ?? null);
+          setElectionPhase(
+            mapStatusToPhase(election?.status ?? "REGISTRATION"),
+          );
+          setResults({
+            counts: summary.counts,
+            total: summary.totalBallots,
+            electionDate: new Date().toISOString(),
+            regional: summary.regionalBreakdown,
+            totalBallots: summary.totalBallots,
+            totalRegisteredVoters: summary.totalRegisteredVoters,
+            turnoutPercentage: summary.turnoutPercentage,
+            candidateStandings: summary.candidateStandings,
+            election: summary.election,
+          } as any);
+        } catch {
+          if (!active) return;
+
+          const ledger = readDemoVoteLedger();
+          setResults({
+            counts: [],
+            total: ledger.length,
+            electionDate: new Date().toISOString(),
+            regional: [],
+            totalBallots: ledger.length,
+            totalRegisteredVoters: ledger.length > 0 ? ledger.length : 1,
+            turnoutPercentage: 0,
+            candidateStandings: [],
+            election: null,
+          } as any);
+        }
+      };
+
+      void loadDemoContext();
+
+      const refreshDemoContext = () => {
+        void loadDemoContext();
+      };
+
+      window.addEventListener("nehs:demo-vote-cast", refreshDemoContext);
+      window.addEventListener("storage", refreshDemoContext);
+
+      return () => {
+        active = false;
+        window.removeEventListener("nehs:demo-vote-cast", refreshDemoContext);
+        window.removeEventListener("storage", refreshDemoContext);
+      };
     }
 
     if (!effectiveToken) {

@@ -114,8 +114,10 @@ export function AdminOpenElectionView({ token, setView, t }: any) {
       className="max-w-4xl mx-auto pb-20"
     >
       <div className="bg-white border border-slate-100 p-8 rounded-3xl shadow-sm">
-        <h2 className="text-2xl font-black mb-4">{t("open_election")}</h2>
-        <p className="text-sm text-slate-500 mb-4">{t("open_election_desc")}</p>
+        <h2 className="text-2xl font-black mb-4">Open Election</h2>
+        <p className="text-sm text-slate-500 mb-4">
+          Select an approved election and open it for voting.
+        </p>
 
         {error && <div className="text-red-600 mb-4">{error}</div>}
 
@@ -148,7 +150,7 @@ export function AdminOpenElectionView({ token, setView, t }: any) {
             onClick={handleOpen}
             className="px-6 py-3 rounded-xl bg-election-dark text-white font-black disabled:opacity-50"
           >
-            {t("open_election_now")}
+            Open Voting
           </button>
           <button
             onClick={() => setView("elections")}

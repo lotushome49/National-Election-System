@@ -150,26 +150,6 @@ export function LoginView({
     return `${header}.${payload}.demo`;
   };
 
-  const getDemoFaceEmbedding = () => {
-    try {
-      const raw = localStorage.getItem("demoVoterAuth");
-      if (!raw) return "";
-      const parsed = JSON.parse(raw) as {
-        nationalId?: string;
-        faceEmbedding?: string;
-      };
-
-      if (parsed.faceEmbedding) return parsed.faceEmbedding;
-      if (parsed.nationalId) {
-        return createDeterministicDemoFaceEmbedding(parsed.nationalId);
-      }
-    } catch {
-      return "";
-    }
-
-    return "";
-  };
-
   const getDemoVoterProfile = () => {
     try {
       const raw = localStorage.getItem("demoVoterAuth");
@@ -179,6 +159,16 @@ export function LoginView({
         voterId?: string;
         fullName?: string;
         faceEmbedding?: string;
+        dob?: string;
+        address?: string;
+        email?: string;
+        phone?: string;
+        gender?: string;
+        regionId?: string;
+        profileImage?: string;
+        uniqueVoterId?: string;
+        registered?: boolean;
+        hasVoted?: boolean;
       };
     } catch {
       return null;
@@ -270,8 +260,32 @@ export function LoginView({
         id: demoVoterId,
         fullName: profile.fullName || "Demo Voter",
         username: profile.nationalId || demoVoterId,
+        nationalId: profile.nationalId || demoVoterId,
+        voterId: profile.voterId ?? demoVoterId,
+        uniqueVoterId: profile.uniqueVoterId ?? demoVoterId,
+        dob: profile.dob ?? null,
+        address: profile.address ?? null,
+        email: profile.email ?? null,
+        phone: profile.phone ?? null,
+        gender: profile.gender ?? null,
+        regionId: profile.regionId ?? null,
+        profileImage: profile.profileImage ?? null,
+        registered: Boolean(profile.registered ?? true),
+        hasVoted: Boolean(profile.hasVoted ?? false),
         role: "VOTER",
         sessionId: `demo-session-${demoVoterId}`,
+      },
+      voter: {
+        voterId: profile.voterId ?? demoVoterId,
+        nationalId: profile.nationalId || demoVoterId,
+        fullName: profile.fullName || "Demo Voter",
+        dob: profile.dob ?? null,
+        address: profile.address ?? null,
+        email: profile.email ?? null,
+        phone: profile.phone ?? null,
+        gender: profile.gender ?? null,
+        regionId: profile.regionId ?? null,
+        profileImage: profile.profileImage ?? null,
       },
     };
   };
@@ -285,10 +299,7 @@ export function LoginView({
     try {
       await startCamera();
     } catch (cameraError) {
-      const fallback = getDemoFaceEmbedding();
-      if (!fallback) {
-        throw cameraError;
-      }
+      throw cameraError;
     }
 
     // Simulate sensor initialization while the camera stream settles.
@@ -305,7 +316,9 @@ export function LoginView({
       try {
         faceEmbeddingForLogin = await captureEmbedding();
       } catch {
-        faceEmbeddingForLogin = getDemoFaceEmbedding();
+        throw new Error(
+          "Face capture failed. Please keep your face in view and try again.",
+        );
       }
 
       if (!faceEmbeddingForLogin) {
@@ -395,6 +408,16 @@ export function LoginView({
             ...payload.user,
             uniqueVoterId,
             voterId: payload.user?.voterId ?? payload.voter?.voterId ?? null,
+            nationalId:
+              payload.user?.nationalId ?? payload.voter?.nationalId ?? null,
+            dob: payload.user?.dob ?? payload.voter?.dob ?? null,
+            address: payload.user?.address ?? payload.voter?.address ?? null,
+            email: payload.user?.email ?? payload.voter?.email ?? null,
+            phone: payload.user?.phone ?? payload.voter?.phone ?? null,
+            gender: payload.user?.gender ?? payload.voter?.gender ?? null,
+            regionId: payload.user?.regionId ?? payload.voter?.regionId ?? null,
+            profileImage:
+              payload.user?.profileImage ?? payload.voter?.profileImage ?? null,
             sessionId: payload.sessionId ?? payload.user?.sessionId ?? null,
           }
         : null,
@@ -415,9 +438,7 @@ export function LoginView({
       const requestBody =
         role === "VOTER"
           ? {
-              faceEmbedding:
-                getDemoFaceEmbedding() ||
-                createDemoFaceEmbedding("login-fallback"),
+              faceEmbedding: await captureEmbedding(),
             }
           : { username: authData.username, password: authData.password };
 

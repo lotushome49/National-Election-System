@@ -130,7 +130,7 @@ export function SuperAdminDashboard({ setView, t, i18n, results, token }: any) {
                 onClick={() => setView("voter-hub-admin")}
                 className="px-4 py-2 rounded-xl bg-white border border-slate-100 text-slate-500 text-[10px] font-black uppercase tracking-widest"
               >
-                Manage Election Opening
+                Open Election Manager
               </button>
               <button
                 onClick={() => setView("users")}

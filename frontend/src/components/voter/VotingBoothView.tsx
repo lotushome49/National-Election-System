@@ -12,6 +12,11 @@ import { cn } from "../../utils/cn";
 import { CandidateDetailModal } from "../candidates/CandidateDetailModal";
 import { fetchJson } from "../../services/api/client";
 import type { Candidate } from "../../types/election";
+import {
+  persistDemoVoteState,
+  readDemoUserState,
+  readDemoVoterAuth,
+} from "../../utils/demoVotingState";
 
 function getErrorMessage(error: unknown, fallback: string) {
   const body = (error as any)?.body;
@@ -71,7 +76,7 @@ export function VotingBoothView({
     if (isDemoAccessToken(token)) return true;
 
     try {
-      return Boolean(localStorage.getItem("demoVoterAuth"));
+      return Boolean(readDemoVoterAuth() || readDemoUserState());
     } catch {
       return false;
     }
@@ -313,11 +318,18 @@ export function VotingBoothView({
       }
 
       const nextReceiptHash = `demo-receipt-${Date.now()}-${votingToken.trim()}`;
+      const castAt = new Date().toISOString();
       setReceiptHash(nextReceiptHash);
       if (nextReceiptHash) {
         sessionStorage.setItem("nehs_last_receipt_hash", nextReceiptHash);
         try {
           localStorage.removeItem("nehs_pending_voting_token");
+          persistDemoVoteState({
+            receiptHash: nextReceiptHash,
+            castAt,
+            candidateId: selected,
+            electionId: electionId,
+          });
         } catch {
           // ignore storage failures
         }
@@ -326,6 +338,7 @@ export function VotingBoothView({
         ...prev,
         hasVoted: true,
         receiptToken: nextReceiptHash,
+        castAt,
       }));
       setStep(3);
       return;
