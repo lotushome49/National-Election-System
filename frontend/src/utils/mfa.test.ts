@@ -5,7 +5,7 @@ describe("mfa utilities", () => {
   it("recognizes MFA-eligible roles", () => {
     expect(isMfaEligibleRole("ADMIN")).toBe(true);
     expect(isMfaEligibleRole("REGIONAL_ADMIN")).toBe(false);
-    expect(isMfaEligibleRole("DISTRICT_ADMIN")).toBe(true);
+    expect(isMfaEligibleRole("DISTRICT_ADMIN")).toBe(false);
     expect(isMfaEligibleRole("STAFF")).toBe(false);
   });
 

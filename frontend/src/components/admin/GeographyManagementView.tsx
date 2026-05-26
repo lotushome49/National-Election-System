@@ -133,100 +133,132 @@ export function GeographyManagementView({ setView, token, user }: Props) {
     }
   }, [isDistrictAdmin, tab]);
 
-  const filteredDistricts = useMemo(
-    () =>
-      districts.filter(
-        (district) =>
-          !selectedRegionId || district.regionId === selectedRegionId,
-      ),
-    [districts, selectedRegionId],
-  );
+  if (isDistrictAdmin) {
+    return (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="max-w-7xl mx-auto pb-20 space-y-10"
+      >
+        <div className="flex flex-col lg:flex-row justify-between gap-8">
+          <div className="space-y-4">
+            <button
+              onClick={() => setView("dashboard")}
+              className="text-[10px] font-black text-slate-400 hover:text-slate-900 uppercase tracking-[0.3em] flex items-center gap-2 transition-colors"
+            >
+              <ChevronLeft size={14} /> Back to dashboard
+            </button>
+            <h2 className="text-4xl lg:text-5xl font-display font-black tracking-tighter text-slate-900 uppercase">
+              District Geography
+            </h2>
+            <p className="text-slate-400 text-sm font-medium uppercase tracking-widest max-w-2xl">
+              Read-only view of the district and polling stations assigned to
+              your scope.
+            </p>
+          </div>
 
-  const filteredStations = useMemo(
-    () =>
-      stations.filter((station) => {
-        if (selectedRegionId && station.regionId !== selectedRegionId)
-          return false;
-        if (selectedDistrictId && station.districtId !== selectedDistrictId)
-          return false;
-        return true;
-      }),
-    [stations, selectedRegionId, selectedDistrictId],
-  );
+          <div className="px-5 py-3 rounded-[1.5rem] text-[10px] font-black uppercase tracking-widest text-slate-500 bg-slate-50 border border-slate-100 h-fit">
+            {scopeAccess.summaryLabel}
+          </div>
+        </div>
 
-  useEffect(() => {
-    if (
-      selectedDistrictId &&
-      !districts.some(
-        (district) =>
-          district.id === selectedDistrictId &&
-          (!selectedRegionId || district.regionId === selectedRegionId),
-      )
-    ) {
-      setSelectedDistrictId(null);
-    }
-  }, [districts, selectedDistrictId, selectedRegionId]);
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+          <section className="bg-white rounded-[3rem] border border-slate-100 shadow-sm overflow-hidden">
+            <div className="px-10 py-8 border-b border-slate-100 flex items-center gap-4">
+              <MapPinned className="text-slate-900" />
+              <h3 className="font-display font-black text-2xl tracking-tighter text-slate-900 uppercase">
+                Districts
+              </h3>
+            </div>
+            {loading ? (
+              <div className="p-16 text-center text-slate-300 font-display font-black uppercase tracking-[0.4em]">
+                Loading districts
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-50">
+                {districts.length === 0 ? (
+                  <div className="p-10 text-center text-slate-400 font-bold uppercase tracking-widest text-sm">
+                    No districts found in your scope.
+                  </div>
+                ) : (
+                  districts.map((district) => (
+                    <div key={district.id} className="px-10 py-6 space-y-1">
+                      <p className="font-display font-black text-slate-900 text-xl uppercase tracking-tighter">
+                        {district.name}
+                      </p>
+                      <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">
+                        {district.code} ·{" "}
+                        {district.region?.name ?? "Assigned region"}
+                      </p>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </section>
 
-  const cleanText = (value: string) => value.trim();
-
-  const optionalText = (value: string) => {
-    const trimmed = value.trim();
-    return trimmed.length > 0 ? trimmed : undefined;
-  };
-
-  const optionalNumber = (value: string) => {
-    const trimmed = value.trim();
-    if (!trimmed) return undefined;
-    const parsed = Number(trimmed);
-    return Number.isFinite(parsed) ? parsed : undefined;
-  };
-
-  const buildRegionPayload = () => ({
-    name: cleanText(regionForm.name),
-    code: cleanText(regionForm.code),
-    ...(optionalText(regionForm.description)
-      ? { description: optionalText(regionForm.description) }
-      : {}),
-  });
-
-  const buildDistrictPayload = () => ({
-    regionId: selectedRegionId,
-    name: cleanText(districtForm.name),
-    code: cleanText(districtForm.code),
-    ...(optionalText(districtForm.description)
-      ? { description: optionalText(districtForm.description) }
-      : {}),
-  });
-
-  const buildStationPayload = () => ({
-    regionId: selectedRegionId,
-    districtId: selectedDistrictId,
-    name: cleanText(stationForm.name),
-    code: cleanText(stationForm.code),
-    ...(optionalText(stationForm.address)
-      ? { address: optionalText(stationForm.address) }
-      : {}),
-    ...(optionalNumber(stationForm.latitude) !== undefined
-      ? { latitude: optionalNumber(stationForm.latitude) }
-      : {}),
-    ...(optionalNumber(stationForm.longitude) !== undefined
-      ? { longitude: optionalNumber(stationForm.longitude) }
-      : {}),
-    capacity: Number(stationForm.capacity || 0),
-    isActive: stationForm.isActive,
+          <section className="bg-white rounded-[3rem] border border-slate-100 shadow-sm overflow-hidden">
+            <div className="px-10 py-8 border-b border-slate-100 flex items-center gap-4">
+              <Waypoints className="text-slate-900" />
+              <h3 className="font-display font-black text-2xl tracking-tighter text-slate-900 uppercase">
+                Polling Stations
+              </h3>
+            </div>
+            {loading ? (
+              <div className="p-16 text-center text-slate-300 font-display font-black uppercase tracking-[0.4em]">
+                Loading polling stations
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-50">
+                {stations.length === 0 ? (
+                  <div className="p-10 text-center text-slate-400 font-bold uppercase tracking-widest text-sm">
+                    No polling stations found in your scope.
+                  </div>
+                ) : (
+                  stations.map((station) => (
+                    <div key={station.id} className="px-10 py-6 space-y-1">
   });
 
   const loadAll = async () => {
     setLoading(true);
     try {
       if (isDistrictAdmin) {
-        const stationRes = await apiRequest<{ data: PollingStation[] }>(
-          "/polling-stations",
-          token,
-        );
-        setStations(Array.isArray(stationRes.data) ? stationRes.data : []);
+        const districtParams = new URLSearchParams();
+        districtParams.set("page", "1");
+        districtParams.set("limit", "1000");
+        if (scopeAccess.regionId) {
+          districtParams.set("regionId", scopeAccess.regionId);
+        }
+        if (scopeAccess.districtId) {
+          districtParams.set("districtId", scopeAccess.districtId);
+        }
+
+        const stationParams = new URLSearchParams();
+        stationParams.set("page", "1");
+        stationParams.set("limit", "1000");
+        if (scopeAccess.regionId) {
+          stationParams.set("regionId", scopeAccess.regionId);
+        }
+        if (scopeAccess.districtId) {
+          stationParams.set("districtId", scopeAccess.districtId);
+        }
+
+        const [districtRes, stationRes] = await Promise.all([
+          apiRequest<{ data: District[] }>(
+            `/districts?${districtParams.toString()}`,
+            token,
+          ),
+          apiRequest<{ data: PollingStation[] }>(
+            `/polling-stations?${stationParams.toString()}`,
+            token,
+          ),
+        ]);
+
         setRegions([]);
-        setDistricts([]);
+        setDistricts(Array.isArray(districtRes.data) ? districtRes.data : []);
+        setStations(Array.isArray(stationRes.data) ? stationRes.data : []);
+        setSelectedRegionId(scopeAccess.regionId);
+        setSelectedDistrictId(scopeAccess.districtId);
         return;
       }
 
@@ -421,6 +453,106 @@ export function GeographyManagementView({ setView, token, user }: Props) {
       alert((error as any)?.message || "Failed to delete item");
     }
   };
+
+  if (isDistrictAdmin) {
+    return (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="max-w-7xl mx-auto pb-20 space-y-10"
+      >
+        <div className="flex flex-col lg:flex-row justify-between gap-8">
+          <div className="space-y-4">
+            <button
+              onClick={() => setView("dashboard")}
+              className="text-[10px] font-black text-slate-400 hover:text-slate-900 uppercase tracking-[0.3em] flex items-center gap-2 transition-colors"
+            >
+              <ChevronLeft size={14} /> Back to dashboard
+            </button>
+            <h2 className="text-4xl lg:text-5xl font-display font-black tracking-tighter text-slate-900 uppercase">
+              District Geography
+            </h2>
+            <p className="text-slate-400 text-sm font-medium uppercase tracking-widest max-w-2xl">
+              Read-only view of the district and polling stations assigned to
+              your scope.
+            </p>
+          </div>
+
+          <div className="px-5 py-3 rounded-[1.5rem] text-[10px] font-black uppercase tracking-widest text-slate-500 bg-slate-50 border border-slate-100 h-fit">
+            {scopeAccess.summaryLabel}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+          <section className="bg-white rounded-[3rem] border border-slate-100 shadow-sm overflow-hidden">
+            <div className="px-10 py-8 border-b border-slate-100 flex items-center gap-4">
+              <MapPinned className="text-slate-900" />
+              <h3 className="font-display font-black text-2xl tracking-tighter text-slate-900 uppercase">
+                Districts
+              </h3>
+            </div>
+            {loading ? (
+              <div className="p-16 text-center text-slate-300 font-display font-black uppercase tracking-[0.4em]">
+                Loading districts
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-50">
+                {districts.length === 0 ? (
+                  <div className="p-10 text-center text-slate-400 font-bold uppercase tracking-widest text-sm">
+                    No districts found in your scope.
+                  </div>
+                ) : (
+                  districts.map((district) => (
+                    <div key={district.id} className="px-10 py-6 space-y-1">
+                      <p className="font-display font-black text-slate-900 text-xl uppercase tracking-tighter">
+                        {district.name}
+                      </p>
+                      <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">
+                        {district.code} · {district.region?.name ?? "Assigned region"}
+                      </p>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </section>
+
+          <section className="bg-white rounded-[3rem] border border-slate-100 shadow-sm overflow-hidden">
+            <div className="px-10 py-8 border-b border-slate-100 flex items-center gap-4">
+              <Waypoints className="text-slate-900" />
+              <h3 className="font-display font-black text-2xl tracking-tighter text-slate-900 uppercase">
+                Polling Stations
+              </h3>
+            </div>
+            {loading ? (
+              <div className="p-16 text-center text-slate-300 font-display font-black uppercase tracking-[0.4em]">
+                Loading polling stations
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-50">
+                {stations.length === 0 ? (
+                  <div className="p-10 text-center text-slate-400 font-bold uppercase tracking-widest text-sm">
+                    No polling stations found in your scope.
+                  </div>
+                ) : (
+                  stations.map((station) => (
+                    <div key={station.id} className="px-10 py-6 space-y-1">
+                      <p className="font-display font-black text-slate-900 text-xl uppercase tracking-tighter">
+                        {station.name}
+                      </p>
+                      <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">
+                        {station.code} · {station.district?.name ?? "Assigned district"} · Capacity {station.capacity}
+                      </p>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </section>
+        </div>
+      </motion.div>
+    );
+  }
 
   return (
     <motion.div

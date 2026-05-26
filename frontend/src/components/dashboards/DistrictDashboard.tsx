@@ -1,6 +1,13 @@
 import React from "react";
 import { motion } from "motion/react";
-import { BarChart3, MapPinned, ShieldAlert, Store, Users } from "lucide-react";
+import {
+  BarChart3,
+  Globe2,
+  MapPinned,
+  ShieldAlert,
+  Store,
+  Users,
+} from "lucide-react";
 import { StatCard } from "../results/StatCard";
 import { useEffect, useState } from "react";
 import { fetchOverview } from "../../services/api/reports";
@@ -80,10 +87,10 @@ export function DistrictDashboard({ setView, t, i18n, user, token }: any) {
           </button>
           {setView && (
             <button
-              onClick={() => setView("voters")}
+              onClick={() => setView("geography")}
               className="px-5 py-3 rounded-xl bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest"
             >
-              Open registry
+              Open geography
             </button>
           )}
         </div>

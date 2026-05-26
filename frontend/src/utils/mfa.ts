@@ -1,10 +1,6 @@
 import type { Role } from "../types/election";
 
-export const MFA_ELIGIBLE_ROLES: Role[] = [
-  "SUPER_ADMIN",
-  "ADMIN",
-  "DISTRICT_ADMIN",
-];
+export const MFA_ELIGIBLE_ROLES: Role[] = ["SUPER_ADMIN", "ADMIN"];
 
 export function isMfaEligibleRole(
   role: Role | string | null | undefined,
