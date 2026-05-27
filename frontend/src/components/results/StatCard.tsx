@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { ReactNode } from "react";
 
 interface StatCardProps {
   title: string;
@@ -17,8 +17,12 @@ export function StatCard({ title, value, sub, icon }: StatCardProps) {
         <div className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
       </div>
       <div>
-        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{title}</p>
-        <span className="text-2xl font-display font-black tracking-tight">{value}</span>
+        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">
+          {title}
+        </p>
+        <span className="text-2xl font-display font-black tracking-tight">
+          {value}
+        </span>
         <p className="text-[10px] text-slate-500 mt-1">{sub}</p>
       </div>
     </div>

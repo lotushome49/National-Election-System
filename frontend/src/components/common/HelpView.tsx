@@ -1,46 +1,60 @@
 import React from "react";
 import { motion } from "motion/react";
-import { ShieldCheck, Activity, Shield } from "lucide-react";
+import {
+  ShieldCheck,
+  CircleCheckBig,
+  Fingerprint,
+  HelpCircle,
+  Vote,
+} from "lucide-react";
 import { cn } from "../../utils/cn";
 
 export function HelpView({ setView, role, homeView, t, i18n }: any) {
   const lang = i18n.language as "en" | "am";
   const faqs = [
     {
-      q: t("faq_q1", { defaultValue: "What is the NEHS Platform?" }),
+      q: t("voter_help_q1", {
+        defaultValue: "How do I sign in as a voter?",
+      }),
       a: t("faq_a1", {
         defaultValue:
-          "The National Election Hub System (NEHS) is Ethiopia's state-of-the-art electronic voting platform designed to ensure transparent, secure, and accessible democratic participation.",
+          "Use the voter login on the home screen, then complete biometric verification if prompted. After that, you will be taken to your voter hub.",
       }),
     },
     {
-      q: t("faq_q2", {
-        defaultValue: "How does the biometric verification work?",
+      q: t("voter_help_q2", {
+        defaultValue: "What do I do after I enter the voter hub?",
       }),
       a: t("faq_a2", {
         defaultValue:
-          "We use SHA-256 cryptographic hashing to turn your physical fingerprint or facial features into a unique digital string. Your actual biometric image is never stored, ensuring your privacy is protected even in the event of a breach.",
+          "Check the current election status, read the ballot instructions, and open the voting booth only when voting is active.",
       }),
     },
     {
-      q: t("faq_q3", { defaultValue: "Is my vote anonymous?" }),
+      q: t("voter_help_q3", {
+        defaultValue: "How do I cast my vote?",
+      }),
       a: t("faq_a3", {
         defaultValue:
-          "Yes. NEHS uses a multi-layered encryption protocol (Mix-nets). Your vote is decoupled from your identity using cryptographic shuffling before it is added to the public ledger, making it mathematically impossible to link a specific ballot back to a voter.",
+          "Open the voting booth, select your candidate, review your choice carefully, and submit your ballot once you are certain.",
       }),
     },
     {
-      q: t("faq_q4", { defaultValue: "What is the 'Receipt Hash'?" }),
+      q: t("voter_help_q4", {
+        defaultValue: "How do I verify my voting receipt?",
+      }),
       a: t("faq_a4", {
         defaultValue:
-          "After voting, you receive a unique transaction hash. This hash allows you to independently verify that your ballot was included in the final tally without revealing who you voted for.",
+          "After you vote, save your receipt code and use the receipt verification page if you want to confirm your ballot was recorded.",
       }),
     },
     {
-      q: t("faq_q5", { defaultValue: "How can I register to vote?" }),
+      q: t("voter_help_q5", {
+        defaultValue: "What should I do if I need help?",
+      }),
       a: t("faq_a5", {
         defaultValue:
-          "You can start the pre-registration process online by visiting the registration portal. You'll then need to visit a local election center once to capture your biometric data for identity verification.",
+          "Return to your voter hub, check the help notes on the page, or contact your local election officer if the issue continues.",
       }),
     },
   ];
@@ -55,13 +69,13 @@ export function HelpView({ setView, role, homeView, t, i18n }: any) {
         <div className="space-y-6">
           <div className="flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">
             <ShieldCheck size={14} className="text-slate-900" />
-            {t("support_terminal_active")}
+            {t("voter_help_center")}
           </div>
           <h2 className="text-5xl lg:text-7xl font-display font-black tracking-tighter text-slate-900 leading-[0.9] uppercase">
             {t("help_support")}
           </h2>
           <p className="text-slate-400 text-sm font-medium leading-relaxed max-w-xl uppercase tracking-widest">
-            {t("understanding_infra")}
+            {t("voter_help_intro")}
           </p>
         </div>
 
@@ -76,18 +90,11 @@ export function HelpView({ setView, role, homeView, t, i18n }: any) {
           </button>
           <button
             onClick={() =>
-              setView(
-                homeView ||
-                  (role === "NONE"
-                    ? "login"
-                    : role === "VOTER"
-                      ? "voter-hub"
-                      : "dashboard"),
-              )
+              setView(homeView || (role === "VOTER" ? "voter-hub" : "login"))
             }
             className="text-[10px] font-black text-slate-900 uppercase tracking-[0.3em] hover:underline transition-all"
           >
-            {t("return_portal")}
+            {t("return_voter_hub")}
           </button>
         </div>
       </div>
@@ -96,11 +103,67 @@ export function HelpView({ setView, role, homeView, t, i18n }: any) {
         <div className="lg:col-span-2 space-y-12">
           <section className="bg-white p-12 lg:p-16 rounded-[4rem] border border-slate-100 shadow-sm relative overflow-hidden group">
             <div className="absolute top-0 right-0 p-8 opacity-5">
-              <Activity size={160} />
+              <HelpCircle size={160} />
             </div>
             <h3 className="text-3xl font-display font-black mb-12 flex items-center gap-4 text-slate-900 uppercase tracking-tighter">
-              <Activity className="text-slate-900" size={28} />
-              {t("faq")}
+              <Vote className="text-slate-900" size={28} />
+              {t("voter_help_steps")}
+            </h3>
+            <div className="space-y-6 relative z-10">
+              {[
+                {
+                  title: t("voter_help_step_1_title", {
+                    defaultValue: "Sign in safely",
+                  }),
+                  body: t("voter_help_step_1_body", {
+                    defaultValue:
+                      "Use your voter account and complete biometric verification if requested.",
+                  }),
+                },
+                {
+                  title: t("voter_help_step_2_title", {
+                    defaultValue: "Review your ballot",
+                  }),
+                  body: t("voter_help_step_2_body", {
+                    defaultValue:
+                      "Read the election status and candidate information before you vote.",
+                  }),
+                },
+                {
+                  title: t("voter_help_step_3_title", {
+                    defaultValue: "Cast and confirm",
+                  }),
+                  body: t("voter_help_step_3_body", {
+                    defaultValue:
+                      "Select your choice, submit your ballot, and keep your receipt code for verification.",
+                  }),
+                },
+              ].map((step) => (
+                <div
+                  className="p-6 rounded-[2rem] bg-slate-50 border border-slate-100"
+                  key={step.title}
+                >
+                  <div className="flex items-center gap-3 mb-3">
+                    <CircleCheckBig size={18} className="text-emerald-500" />
+                    <h4 className="font-display font-black text-xl text-slate-900 uppercase tracking-[0.02em]">
+                      {step.title}
+                    </h4>
+                  </div>
+                  <p className="text-sm text-slate-500 font-medium leading-relaxed max-w-2xl">
+                    {step.body}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="bg-white p-12 lg:p-16 rounded-[4rem] border border-slate-100 shadow-sm relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-8 opacity-5">
+              <Fingerprint size={160} />
+            </div>
+            <h3 className="text-3xl font-display font-black mb-12 flex items-center gap-4 text-slate-900 uppercase tracking-tighter">
+              <Fingerprint className="text-slate-900" size={28} />
+              {t("voter_help_faq")}
             </h3>
             <div className="space-y-12 relative z-10">
               {faqs.map((faq, i) => (
@@ -111,39 +174,11 @@ export function HelpView({ setView, role, homeView, t, i18n }: any) {
                   <h4 className="font-display font-black text-xl text-slate-900 mb-4 uppercase tracking-[0.02em]">
                     {faq.q}
                   </h4>
-                  <p className="text-sm text-slate-400 font-medium leading-relaxed max-w-2xl">
+                  <p className="text-sm text-slate-500 font-medium leading-relaxed max-w-2xl">
                     {faq.a}
                   </p>
                 </div>
               ))}
-            </div>
-          </section>
-
-          <section className="bg-white p-12 lg:p-16 rounded-[4rem] border border-slate-100 shadow-sm relative overflow-hidden">
-            <div className="absolute top-0 right-0 p-8 opacity-5">
-              <ShieldCheck size={160} />
-            </div>
-            <h3 className="text-3xl font-display font-black mb-12 flex items-center gap-4 text-slate-900 uppercase tracking-tighter">
-              <ShieldCheck className="text-emerald-500" size={28} />
-              {t("security_whitepaper")}
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 relative z-10">
-              <div className="p-8 bg-slate-50 rounded-[2.5rem] border border-slate-100 hover:bg-white hover:shadow-xl transition-all duration-500">
-                <p className="text-[10px] font-black text-slate-300 uppercase mb-3 tracking-widest">
-                  {t("data_at_rest")}
-                </p>
-                <p className="text-[11px] font-medium text-slate-500 leading-relaxed uppercase tracking-widest">
-                  {t("data_at_rest_desc")}
-                </p>
-              </div>
-              <div className="p-8 bg-slate-50 rounded-[2.5rem] border border-slate-100 hover:bg-white hover:shadow-xl transition-all duration-500">
-                <p className="text-[10px] font-black text-slate-300 uppercase mb-3 tracking-widest">
-                  {t("in_flight_verifiability")}
-                </p>
-                <p className="text-[11px] font-medium text-slate-500 leading-relaxed uppercase tracking-widest">
-                  {t("in_flight_verifiability_desc")}
-                </p>
-              </div>
             </div>
           </section>
         </div>
@@ -152,14 +187,14 @@ export function HelpView({ setView, role, homeView, t, i18n }: any) {
           <div className="bg-slate-900 text-white p-12 rounded-[4rem] shadow-2xl relative overflow-hidden group">
             <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -mr-32 -mt-32 opacity-0 group-hover:opacity-100 transition-opacity" />
             <h3 className="text-2xl font-display font-black mb-6 uppercase tracking-tighter leading-none relative z-10">
-              {t("need_support")}
+              {t("voter_help_tip_title")}
             </h3>
             <p className="text-[10px] text-white/50 mb-10 font-bold uppercase tracking-[0.2em] leading-relaxed relative z-10">
-              {t("support_desc_v2")}
+              {t("voter_help_tip_body")}
             </p>
             <div className="p-8 bg-white/5 rounded-[2.5rem] border border-white/10 shadow-inner relative z-10 group-hover:bg-white/10 transition-colors">
               <p className="text-[9px] uppercase opacity-40 font-black mb-2 tracking-[0.3em]">
-                {t("priority_hotline")}
+                {t("voter_help_hotline_label")}
               </p>
               <p className="text-5xl font-display font-black tracking-tighter text-white">
                 8800
@@ -170,84 +205,33 @@ export function HelpView({ setView, role, homeView, t, i18n }: any) {
           <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm relative overflow-hidden group">
             <h4 className="text-[10px] font-black text-slate-900 mb-8 uppercase tracking-[0.3em] flex items-center gap-3">
               <div className="w-1.5 h-1.5 rounded-full bg-slate-900 animate-pulse" />
-              {t("platform_stats")}
+              {t("voter_help_quick_notes")}
             </h4>
-            <div className="space-y-6 mb-12">
-              <div className="flex justify-between items-center group-hover:translate-x-1 transition-transform">
-                <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest">
-                  {t("system_uptime")}
-                </span>
-                <span className="text-[10px] font-mono text-emerald-500 font-black uppercase">
-                  {t("uptime_val")}
-                </span>
-              </div>
-              <div className="flex justify-between items-center group-hover:translate-x-1 transition-transform">
-                <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest">
-                  {t("encryption_layer")}
-                </span>
-                <span className="text-[10px] font-mono text-slate-900 font-black uppercase">
-                  {t("tls_pgp")}
-                </span>
-              </div>
-              <div className="flex justify-between items-center group-hover:translate-x-1 transition-transform">
-                <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest">
-                  {t("ledger_type")}
-                </span>
-                <span className="text-[10px] font-mono text-slate-900 font-black uppercase">
-                  {t("permissioned")}
-                </span>
-              </div>
-            </div>
-
-            <div className="pt-8 border-t border-slate-50">
-              <h4 className="font-black text-[9px] mb-8 uppercase tracking-[0.3em] text-slate-300 flex items-center gap-2">
-                <Shield size={12} className="text-slate-900" />
-                {t("tech_stack_verified")}
-              </h4>
-              <div className="grid grid-cols-2 gap-4">
-                {[
-                  {
-                    label: "Frontend",
-                    val: "React 18",
-                    color: "bg-emerald-50 text-emerald-600",
-                  },
-                  {
-                    label: "Database",
-                    val: "Node 20",
-                    color: "bg-slate-900 text-white",
-                  },
-                  {
-                    label: "Security",
-                    val: "AES-256",
-                    color: "bg-indigo-50 text-indigo-600",
-                  },
-                  {
-                    label: "Network",
-                    val: "gRPC/TLS",
-                    color: "bg-rose-50 text-rose-600",
-                  },
-                ].map((stat, i) => (
-                  <div key={i} className="space-y-1">
-                    <span
-                      className={cn(
-                        "text-[8px] font-black uppercase px-2 py-0.5 rounded-md inline-block",
-                        stat.color,
-                      )}
-                    >
-                      {stat.label}
-                    </span>
-                    <p className="text-[10px] font-black text-slate-900 uppercase tracking-tighter truncate">
-                      {stat.val}
-                    </p>
-                  </div>
-                ))}
-              </div>
+            <div className="space-y-5">
+              {[
+                t("voter_help_note_1", {
+                  defaultValue:
+                    "Keep your receipt code private until you verify your ballot.",
+                }),
+                t("voter_help_note_2", {
+                  defaultValue:
+                    "Use the voter hub to review election updates and current phase.",
+                }),
+                t("voter_help_note_3", {
+                  defaultValue:
+                    "If voting is closed, return when the election opens again.",
+                }),
+              ].map((note) => (
+                <p
+                  key={note}
+                  className="text-[11px] font-medium text-slate-500 leading-relaxed uppercase tracking-widest"
+                >
+                  {note}
+                </p>
+              ))}
             </div>
           </div>
         </div>
-      </div>
-      <div className="mt-32 text-center text-[9px] text-slate-300 font-black uppercase tracking-[0.4em] pt-12 border-t border-slate-50 italic">
-        {t("unauthorized_access_prohibited")}
       </div>
     </motion.div>
   );

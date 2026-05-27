@@ -20,7 +20,10 @@ export function AuditLogsView({ setView, token, t, i18n }: any) {
         }
         const data = await response.json();
         const entries = unwrapApiData<any[]>(data);
-        setLogs([...entries].reverse()); // Show latest first
+        const normalizedLogs = Array.isArray(entries)
+          ? entries.filter((entry) => entry && typeof entry === "object")
+          : [];
+        setLogs([...normalizedLogs].reverse()); // Show latest first
       } catch (err) {
         console.error(err);
       } finally {
@@ -89,31 +92,38 @@ export function AuditLogsView({ setView, token, t, i18n }: any) {
                 className="p-8 flex flex-col md:flex-row items-start gap-8 hover:bg-slate-50/50 transition-colors group"
               >
                 <div className="shrink-0 w-44 text-slate-300 font-black uppercase tracking-tighter group-hover:text-slate-500 transition-colors">
-                  {new Date(log.timestamp || log.time).toLocaleString()}
+                  {new Date(
+                    log?.timestamp || log?.time || Date.now(),
+                  ).toLocaleString()}
                 </div>
                 <div className="grow">
                   <div className="flex flex-wrap items-center gap-3 mb-4">
-                    <span
-                      className={cn(
-                        "font-black uppercase tracking-[0.2em] text-[9px] px-3 py-1.5 rounded-lg shadow-sm",
-                        log.event.includes("SUCCESS") ||
-                          log.event === "VOTER_REGISTERED"
-                          ? "bg-emerald-500 text-white"
-                          : log.event.includes("FAILED") ||
-                              log.event.includes("LOCKED")
-                            ? "bg-rose-500 text-white"
-                            : "bg-slate-900 text-white font-mono",
-                      )}
-                    >
-                      {log.event}
-                    </span>
+                    {(() => {
+                      const eventName = String(log?.event || "AUDIT_EVENT");
+                      return (
+                        <span
+                          className={cn(
+                            "font-black uppercase tracking-[0.2em] text-[9px] px-3 py-1.5 rounded-lg shadow-sm",
+                            eventName.includes("SUCCESS") ||
+                              eventName === "VOTER_REGISTERED"
+                              ? "bg-emerald-500 text-white"
+                              : eventName.includes("FAILED") ||
+                                  eventName.includes("LOCKED")
+                                ? "bg-rose-500 text-white"
+                                : "bg-slate-900 text-white font-mono",
+                          )}
+                        >
+                          {eventName}
+                        </span>
+                      );
+                    })()}
                     <div className="h-px w-8 bg-slate-100" />
                     <span className="text-slate-300 font-black opacity-40">
                       #{100000 + (logs.length - i)}
                     </span>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 bg-slate-50/50 p-6 rounded-2xl border border-slate-100">
-                    {Object.entries(log)
+                    {Object.entries(log || {})
                       .filter(
                         ([k]) =>
                           k !== "event" && k !== "timestamp" && k !== "time",

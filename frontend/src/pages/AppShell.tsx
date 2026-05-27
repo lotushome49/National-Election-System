@@ -235,6 +235,8 @@ export default function AppShell() {
   const [view, setViewState] = useState<string>(() =>
     viewFromPath(location.pathname),
   );
+  const activeView =
+    role === "VOTER" && view === "dashboard" ? "voter-hub" : view;
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { t, i18n } = useTranslation();
   const lang = i18n.language as "en" | "am";
@@ -245,7 +247,7 @@ export default function AppShell() {
       "voter-hub",
       "voting-booth",
       "results-dashboard",
-    ].includes(view) && !isDemoSession;
+    ].includes(activeView) && !isDemoSession;
   const {
     results,
     electionPhase,
@@ -313,13 +315,14 @@ export default function AppShell() {
       case "voting-booth":
         return Boolean(token);
       case "dashboard":
-        return Boolean(token) && role !== "NONE";
+        return Boolean(token) && role !== "NONE" && role !== "VOTER";
       default:
         return false;
     }
   };
 
-  const effectiveView = !token && !publicViews.has(view) ? "login" : view;
+  const effectiveView =
+    !token && !publicViews.has(activeView) ? "login" : activeView;
   const viewIsBlocked =
     token && effectiveView !== "login" && !canAccessView(effectiveView);
 
@@ -344,7 +347,7 @@ export default function AppShell() {
       });
     }
 
-    if (role !== "NONE" && role !== "OBSERVER") {
+    if (role !== "NONE" && role !== "OBSERVER" && role !== "VOTER") {
       items.push({
         key: "dashboard",
         label: t("dashboard"),
@@ -372,12 +375,6 @@ export default function AppShell() {
     }
 
     if (checkPerm(role, "MANAGE_VOTERS")) {
-      items.push({
-        key: "registration",
-        label: t("registration"),
-        icon: <UserPlus size={18} />,
-        view: "registration",
-      });
       items.push({
         key: "voters",
         label: t("voter_registry"),
@@ -592,7 +589,10 @@ export default function AppShell() {
   useEffect(() => {
     if (!authHydrated) return;
 
-    const nextView = viewFromPath(location.pathname);
+    const nextView =
+      role === "VOTER" && location.pathname === "/dashboard"
+        ? "voter-hub"
+        : viewFromPath(location.pathname);
     // Defensive: only update state when the derived view actually changes.
     // Add debug logs to help reproduce back-button navigation problems.
     if (isDev) {
@@ -613,24 +613,31 @@ export default function AppShell() {
       setViewState(nextView);
     }
 
+    if (role === "VOTER" && location.pathname === "/dashboard") {
+      navigate("/voter-hub", { replace: true });
+    }
+
     if (location.pathname === "/") {
       navigate(pathFromView(getHomeViewForRole(role)), { replace: true });
     }
   }, [authHydrated, location.pathname, navigate, role, view]);
 
   const setView = (nextView: string) => {
+    const normalizedNextView =
+      role === "VOTER" && nextView === "dashboard" ? "voter-hub" : nextView;
+
     if (isDev) {
       // eslint-disable-next-line no-console
       console.debug(
         "AppShell.setView ->",
-        nextView,
+        normalizedNextView,
         "path->",
-        pathFromView(nextView),
+        pathFromView(normalizedNextView),
       );
     }
 
-    setViewState(nextView);
-    navigate(pathFromView(nextView));
+    setViewState(normalizedNextView);
+    navigate(pathFromView(normalizedNextView));
     setMobileMenuOpen(false);
   };
 
@@ -970,7 +977,9 @@ export default function AppShell() {
                   token={token}
                   role={role}
                   setView={setView}
-                  currentElectionId={openElectionContext.id ?? currentElectionId}
+                  currentElectionId={
+                    openElectionContext.id ?? currentElectionId
+                  }
                 />
               )}
             {effectiveView === "voter-hub" && role === "VOTER" && (

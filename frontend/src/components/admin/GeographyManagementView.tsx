@@ -152,6 +152,32 @@ export function GeographyManagementView({ setView, token, user }: Props) {
   );
   const [stationEditingId, setStationEditingId] = useState<string | null>(null);
 
+  const filteredDistricts = useMemo(() => {
+    if (isDistrictAdmin) return districts;
+    if (!selectedRegionId) return districts;
+    return districts.filter(
+      (district) => district.regionId === selectedRegionId,
+    );
+  }, [districts, isDistrictAdmin, selectedRegionId]);
+
+  const filteredStations = useMemo(() => {
+    let nextStations = stations;
+
+    if (selectedRegionId) {
+      nextStations = nextStations.filter(
+        (station) => station.regionId === selectedRegionId,
+      );
+    }
+
+    if (selectedDistrictId) {
+      nextStations = nextStations.filter(
+        (station) => station.districtId === selectedDistrictId,
+      );
+    }
+
+    return nextStations;
+  }, [selectedDistrictId, selectedRegionId, stations]);
+
   useEffect(() => {
     if (isRegionalAdmin && tab === "regions") {
       setTab("districts");

@@ -36,11 +36,9 @@ export function RegistrationView({
     profileImage: "",
     email: "",
     phone: "",
-    regionId: "r1",
     isCitizen: false,
     gender: "",
   });
-  const [regionMismatch, setRegionMismatch] = useState(false);
   const [loading, setLoading] = useState(false);
   const [matchedCitizen, setMatchedCitizen] = useState<any>(null);
   const [faceCaptureState, setFaceCaptureState] = useState<
@@ -62,11 +60,6 @@ export function RegistrationView({
     null,
   );
 
-  const isUuid = (value: string) =>
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-      value,
-    );
-
   const buildRegistrationPayload = (faceEmbedding: string) => {
     const payload: Record<string, unknown> = {
       fullName: formData.fullName.trim(),
@@ -86,44 +79,9 @@ export function RegistrationView({
     if (formData.phone.trim()) payload.phone = formData.phone.trim();
     if (formData.email.trim()) payload.email = formData.email.trim();
     if (formData.address.trim()) payload.address = formData.address.trim();
-    if (isUuid(formData.regionId)) payload.regionId = formData.regionId;
 
     return payload;
   };
-
-  const REGION_KEYWORDS: { id: string; keywords: string[] }[] = [
-    { id: "r1", keywords: ["Addis Ababa", "Addis"] },
-    { id: "r2", keywords: ["Amhara", "Bahir Dar", "Gondar"] },
-    { id: "r3", keywords: ["Oromia", "Jimma", "Adama"] },
-    { id: "r4", keywords: ["Tigray", "Mekelle", "Axum"] },
-    { id: "r5", keywords: ["Somali", "Jijiga", "Gode"] },
-    { id: "r6", keywords: ["Sidama", "Hawassa"] },
-    { id: "r7", keywords: ["Afar", "Semera"] },
-    { id: "r8", keywords: ["Benishangul", "Assosa"] },
-    { id: "r9", keywords: ["Gambela"] },
-    { id: "r10", keywords: ["Harari", "Harar"] },
-    { id: "r11", keywords: ["Dire Dawa", "Dire"] },
-  ];
-
-  function inferRegionFromAddress(address: string) {
-    if (!address) return undefined;
-    const a = address.toLowerCase();
-    for (const r of REGION_KEYWORDS) {
-      for (const kw of r.keywords) {
-        if (a.includes(kw.toLowerCase())) return r.id;
-      }
-    }
-    return undefined;
-  }
-
-  function getRegionLabel(regionId: string) {
-    const region = REGION_KEYWORDS.find((item) => item.id === regionId);
-    return region ? t(region.id) : regionId;
-  }
-
-  const inferredRegionFromAddress = inferRegionFromAddress(formData.address);
-  const lockRegionSelection =
-    Boolean(formData.nationalId) && Boolean(inferredRegionFromAddress);
 
   // Client-side fallback for demo mode when the API mock server isn't running
   const clientSimulatedCitizens: Record<string, any> = {
@@ -170,13 +128,13 @@ export function RegistrationView({
         <AlertCircle size={48} className="text-red-500 mx-auto mb-4" />
         <h2 className="text-xl font-bold">{t("error")}</h2>
         <p className="text-slate-500 mb-6">
-          Unauthorized: your role does not have registration permissions.
+          This page is for voter registration only.
         </p>
         <button
-          onClick={() => setView("dashboard")}
+          onClick={() => setView("login")}
           className="w-full bg-election-dark text-white p-3 rounded-xl"
         >
-          Return to Dashboard
+          Return to Login
         </button>
       </div>
     );
@@ -248,8 +206,6 @@ export function RegistrationView({
         );
       }
 
-      const inferredRegion = inferRegionFromAddress(data.address);
-      const selectedRegion = inferredRegion || formData.regionId;
       setFormData({
         ...formData,
         fullName: data.fullName,
@@ -260,7 +216,6 @@ export function RegistrationView({
         phone: data.phone || "",
         isCitizen: data.citizenshipStatus === "Ethiopian",
         gender: data.gender || "",
-        regionId: selectedRegion,
       });
       setMatchedCitizen(data);
       // Move straight to face capture so the camera appears immediately after verification.
@@ -271,14 +226,6 @@ export function RegistrationView({
       setLoading(false);
     }
   };
-
-  // Recompute region/address mismatch whenever address or region changes
-  useEffect(() => {
-    const inferred = inferRegionFromAddress(formData.address || "");
-    setRegionMismatch(
-      Boolean(inferred && inferred !== (formData.regionId || "r1")),
-    );
-  }, [formData.address, formData.regionId]);
 
   // Handle camera access for the face-capture step
   useEffect(() => {
@@ -374,7 +321,7 @@ export function RegistrationView({
     try {
       setFaceCaptureState("captured");
       setFaceCaptureMessage(
-        "Face matched successfully. Confirm the citizen details to issue the voter ID.",
+        "Face matched successfully. Confirm the voter details to complete registration.",
       );
 
       const useProtectedPath = role !== "NONE" && Boolean(token);
@@ -429,7 +376,6 @@ export function RegistrationView({
             email: formData.email,
             phone: formData.phone,
             gender: formData.gender,
-            regionId: formData.regionId,
             profileImage: formData.profileImage,
             uniqueVoterId: result?.voterId || `DEMO-${Date.now()}`,
             registered: true,
@@ -467,7 +413,6 @@ export function RegistrationView({
             email: formData.email,
             phone: formData.phone,
             gender: formData.gender,
-            regionId: formData.regionId,
             profileImage: formData.profileImage,
             registered: true,
             hasVoted: false,
@@ -497,17 +442,10 @@ export function RegistrationView({
 
   if (successData) {
     const autoSignedIn = role !== "NONE" && Boolean(successData?.accessToken);
-    const isAdminAssistedRegistration = Boolean(token) && !autoSignedIn;
-    const primaryActionView = autoSignedIn
-      ? "voter-hub"
-      : isAdminAssistedRegistration
-        ? "dashboard"
-        : "login";
+    const primaryActionView = autoSignedIn ? "voter-hub" : "login";
     const primaryActionLabel = autoSignedIn
       ? "Continue to voter hub"
-      : isAdminAssistedRegistration
-        ? "Return to dashboard"
-        : "Go to login";
+      : "Go to login";
 
     return (
       <motion.div
@@ -535,7 +473,7 @@ export function RegistrationView({
               autoSignedIn ? "text-blue-700" : "text-amber-700",
             )}
           >
-            Session status
+            Registration status
           </p>
           <p
             className={cn(
@@ -545,13 +483,13 @@ export function RegistrationView({
           >
             {autoSignedIn
               ? "The voter is signed in and can continue to the voter hub."
-              : "Registration is complete. The voter must log in before casting a vote."}
+              : "Registration is complete. The voter can sign in to continue."}
           </p>
         </div>
 
         <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 mb-4 text-left">
           <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold mb-3">
-            Registration details
+            Voter details
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
             <div>
@@ -580,14 +518,6 @@ export function RegistrationView({
             </div>
             <div>
               <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">
-                Region
-              </p>
-              <p className="font-semibold text-slate-900">
-                {getRegionLabel(formData.regionId)}
-              </p>
-            </div>
-            <div>
-              <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">
                 Phone / Email
               </p>
               <p className="font-semibold text-slate-900 truncate">
@@ -604,7 +534,7 @@ export function RegistrationView({
                 {matchedCitizen.profileImage ? (
                   <img
                     src={matchedCitizen.profileImage}
-                    alt={matchedCitizen.fullName || "Matched citizen"}
+                    alt={matchedCitizen.fullName || "Verified voter"}
                     className="w-full h-full object-cover"
                     referrerPolicy="no-referrer"
                   />
@@ -614,7 +544,7 @@ export function RegistrationView({
               </div>
               <div>
                 <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">
-                  Matched citizen
+                  Verified voter record
                 </p>
                 <p className="font-semibold text-slate-900">
                   {matchedCitizen.fullName || formData.fullName}
@@ -641,12 +571,12 @@ export function RegistrationView({
         {successData?.votingToken && (
           <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-xl mb-8 text-left">
             <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-widest mb-1">
-              System-issued voting token
+              Voting token
             </p>
             <p className="text-xs text-emerald-800 mb-2">
               {autoSignedIn
                 ? "Use this token as the Unique Voting ID inside the voting booth."
-                : "This token can be used in the voting booth once the voter logs in."}
+                : "This token can be used in the voting booth after sign-in."}
             </p>
             <p className="text-sm font-mono font-bold text-emerald-900 break-all">
               {successData.votingToken}
@@ -666,361 +596,358 @@ export function RegistrationView({
 
   return (
     <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      className="max-w-2xl mx-auto"
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="max-w-5xl mx-auto pb-16"
     >
-      <div className="flex justify-between items-start mb-8">
-        <div>
+      <div className="mb-8 rounded-[2rem] bg-gradient-to-r from-slate-900 via-slate-800 to-election-dark text-white p-6 md:p-8 shadow-2xl overflow-hidden relative">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.12),transparent_36%),radial-gradient(circle_at_bottom_left,rgba(14,165,233,0.24),transparent_30%)]" />
+        <div className="relative flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div className="space-y-3 max-w-2xl">
+            <button
+              onClick={() => setView("login")}
+              className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.35em] text-white/60 hover:text-white transition-colors"
+            >
+              ← {t("cancel")}
+            </button>
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.3em]">
+              <ShieldCheck size={12} />
+              {t("reg_title")}
+            </div>
+            <h2 className="text-3xl md:text-5xl font-display font-black tracking-tighter uppercase leading-[0.95]">
+              {t("reg_desc")}
+            </h2>
+            <p className="text-white/70 text-sm md:text-base max-w-xl leading-relaxed">
+              Register as a voter, verify your identity, and continue to the
+              voter hub.
+            </p>
+          </div>
           <button
-            onClick={() => setView("login")}
-            className="text-xs text-slate-400 hover:text-slate-600 uppercase tracking-widest font-bold mb-4 flex items-center gap-1"
+            onClick={() => i18n.changeLanguage(lang === "en" ? "am" : "en")}
+            className="self-start md:self-auto px-4 py-2 rounded-full bg-white/10 border border-white/15 text-[10px] font-black uppercase tracking-widest text-white/85 hover:bg-white/15 transition-colors"
           >
-            ← {t("cancel")}
+            {lang === "en" ? "Amharic (አማርኛ)" : "English"}
           </button>
-          <h2 className="text-3xl font-bold">{t("reg_title")}</h2>
-          <p className="text-slate-500">{t("reg_desc")}</p>
         </div>
-        <button
-          onClick={() => i18n.changeLanguage(lang === "en" ? "am" : "en")}
-          className="px-4 py-2 bg-slate-100 rounded-xl font-bold text-slate-500 hover:bg-slate-200"
-        >
-          {lang === "en" ? "Amharic (አማርኛ)" : "English"}
-        </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        <div className="md:col-span-2 space-y-6 bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
-          <div className="mb-4">
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-2">
-              {t("region")}
-            </label>
-            <select
-              value={formData.regionId}
-              onChange={(e) => {
-                if (lockRegionSelection) return;
-                setFormData({ ...formData, regionId: e.target.value });
-              }}
-              disabled={lockRegionSelection}
-              className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-election-blue outline-none transition-all text-sm font-medium text-slate-900"
-            >
-              {[...Array(11)].map((_, i) => (
-                <option key={i} value={`r${i + 1}`}>
-                  {t(`r${i + 1}`)}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {step === 0 ? (
-            <div className="space-y-6">
-              <div className="text-center p-4 bg-blue-50 rounded-2xl border border-blue-100 mb-4">
-                <Search className="mx-auto text-election-blue mb-2" size={32} />
-                <h3 className="font-bold text-slate-900">
-                  {t("search_citizen")}
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.45fr)_minmax(280px,0.85fr)] gap-8 items-start">
+        <div className="space-y-8">
+          <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm p-6 md:p-8">
+            <div className="flex items-center justify-between gap-4 mb-6">
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.35em] text-slate-400 font-black mb-2">
+                  Step {step + 1} of 3
+                </p>
+                <h3 className="text-2xl font-bold text-slate-900">
+                  {step === 0
+                    ? t("verify_voter_identity")
+                    : step === 1
+                      ? t("step_personal")
+                      : t("step_biometric")}
                 </h3>
-                <p className="text-xs text-slate-500 mt-1">{t("nid_desc")}</p>
               </div>
+              <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                <span className="w-2 h-2 rounded-full bg-election-blue" />
+                Voter flow
+              </div>
+            </div>
 
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-400 uppercase block mb-1">
-                  {t("national_id")}
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={nidInput}
-                    onChange={(e) => setNidInput(e.target.value)}
-                    className="flex-1 p-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-election-blue outline-none transition-all font-mono text-slate-900"
-                    placeholder={t("nid_placeholder")}
-                    onKeyPress={(e) => e.key === "Enter" && handleVerifyNid()}
-                  />
+            <div className="h-2 rounded-full bg-slate-100 overflow-hidden mb-8">
+              <div
+                className="h-full rounded-full bg-election-blue transition-all duration-500"
+                style={{ width: `${((step + 1) / 3) * 100}%` }}
+              />
+            </div>
+
+            {step === 0 ? (
+              <div className="space-y-6">
+                <div className="rounded-[1.75rem] bg-slate-50 border border-slate-100 p-5 md:p-6">
+                  <div className="flex items-start gap-4">
+                    <div className="w-12 h-12 rounded-2xl bg-white shadow-sm border border-slate-100 flex items-center justify-center shrink-0">
+                      <Search size={22} className="text-election-blue" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-slate-900 text-lg">
+                        {t("verify_voter_identity")}
+                      </h4>
+                      <p className="text-sm text-slate-500 mt-1 leading-relaxed">
+                        Enter your National ID to load your voter details and
+                        continue the registration flow.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.35em] block">
+                    {t("national_id")}
+                  </label>
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <input
+                      type="text"
+                      value={nidInput}
+                      onChange={(e) => setNidInput(e.target.value)}
+                      className="flex-1 h-14 px-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-election-blue outline-none transition-all font-mono text-slate-900"
+                      placeholder={t("nid_placeholder")}
+                      onKeyDown={(e) => e.key === "Enter" && handleVerifyNid()}
+                    />
+                    <button
+                      onClick={handleVerifyNid}
+                      disabled={loading || !nidInput.trim()}
+                      className="h-14 px-6 rounded-2xl font-black uppercase tracking-widest text-sm bg-election-blue text-white hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {loading ? (
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      ) : (
+                        <ShieldCheck size={18} />
+                      )}
+                      {t("verify_nid")}
+                    </button>
+                  </div>
+                  {nidError && (
+                    <p className="text-xs text-red-500 font-medium ml-1">
+                      {nidError}
+                    </p>
+                  )}
+                  <p className="text-[10px] text-slate-400 font-mono italic mt-2">
+                    Demo voter IDs: NID-123456, NID-654321
+                  </p>
+                </div>
+
+                <div className="rounded-[1.5rem] border border-slate-100 bg-white p-5">
+                  <p className="text-[10px] uppercase tracking-[0.35em] text-slate-400 font-black mb-2">
+                    Notes
+                  </p>
+                  <p className="text-sm text-slate-500 leading-relaxed">
+                    Manual entry stays restricted. Use the biometric-linked
+                    National ID on your voter record.
+                  </p>
+                </div>
+              </div>
+            ) : step === 1 ? (
+              <div className="space-y-5">
+                <div className="rounded-[1.75rem] bg-slate-50 border border-slate-100 p-5">
+                  <div className="flex items-center justify-between gap-4 mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-2xl bg-white border border-slate-100 flex items-center justify-center">
+                        <CheckCircle2 size={18} className="text-emerald-500" />
+                      </div>
+                      <div>
+                        <p className="font-bold text-slate-900">
+                          {t("nid_verified")}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          Your voter details are ready for review.
+                        </p>
+                      </div>
+                    </div>
+                    <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full font-black uppercase tracking-widest">
+                      Verified
+                    </span>
+                  </div>
+                  <p className="text-sm text-slate-600 leading-relaxed">
+                    Identity verified for this NID. Continue to face capture to
+                    complete voter registration.
+                  </p>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-3">
                   <button
-                    onClick={handleVerifyNid}
-                    disabled={loading || !nidInput.trim()}
-                    className="bg-election-blue text-white px-6 rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 disabled:opacity-50 flex items-center gap-2"
+                    onClick={() => setStep(0)}
+                    className="flex-1 h-12 rounded-2xl bg-slate-100 text-slate-700 font-bold"
                   >
-                    {loading ? (
-                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    ) : (
-                      <ShieldCheck size={18} />
-                    )}
-                    {t("verify_nid")}
+                    {t("back")}
+                  </button>
+                  <button
+                    onClick={() => setStep(2)}
+                    className="flex-[2] h-12 rounded-2xl bg-slate-900 text-white font-bold"
+                  >
+                    {t("confirm")}
                   </button>
                 </div>
-                {nidError && (
-                  <p className="text-xs text-red-500 font-medium ml-1">
-                    {nidError}
-                  </p>
-                )}
-                <div className="p-3 bg-slate-50 rounded-lg text-[10px] text-slate-400 font-mono italic">
-                  Try simulated IDs: NID-123456, NID-654321
-                </div>
               </div>
-
-              <div className="pt-4 border-t border-slate-100">
-                <p className="text-[10px] text-slate-400 italic">
-                  * Manual entry is restricted for election integrity. Please
-                  use your biometric-linked National ID.
-                </p>
-              </div>
-            </div>
-          ) : step === 1 ? (
-            <div className="space-y-4">
-              <div className="flex justify-between items-center mb-4">
-                <div className="flex items-center gap-3">
-                  <h3 className="font-bold text-lg">{t("step_personal")}</h3>
-                </div>
-                <span className="text-[10px] bg-green-100 text-green-600 px-2 py-1 rounded font-bold uppercase tracking-widest flex items-center gap-1">
-                  <CheckCircle2 size={10} /> {t("nid_verified")}
-                </span>
-              </div>
-              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-5 space-y-3">
-                <p className="text-sm font-medium text-slate-700">
-                  Identity verified for this NID. Personal details stay hidden
-                  until the face capture is completed.
-                </p>
-                <p className="text-xs text-slate-500">
-                  Continue to face capture to unlock the registration summary.
-                </p>
-              </div>
-              <div className="flex gap-4 mt-6">
-                <button
-                  onClick={() => setStep(0)}
-                  className="flex-1 bg-slate-100 text-slate-600 p-4 rounded-xl font-medium"
-                >
-                  {t("back")}
-                </button>
-                <button
-                  onClick={() => setStep(2)}
-                  className="flex-[2] bg-election-dark text-white p-4 rounded-xl font-medium"
-                >
-                  {t("confirm")}
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-6">
-              {faceCaptureState === "captured" && matchedCitizen && (
-                <div className="bg-white rounded-2xl border border-emerald-100 shadow-sm p-5">
-                  <div className="flex items-start gap-4">
-                    <div className="w-16 h-16 rounded-2xl overflow-hidden bg-slate-100 flex items-center justify-center shrink-0 border border-slate-200">
-                      {matchedCitizen.profileImage ? (
-                        <img
-                          src={matchedCitizen.profileImage}
-                          alt={matchedCitizen.fullName || "Matched citizen"}
-                          className="w-full h-full object-cover"
-                          referrerPolicy="no-referrer"
-                        />
-                      ) : (
-                        <UserCheck size={24} className="text-slate-400" />
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <CheckCircle2 size={16} className="text-emerald-600" />
-                        <h3 className="font-bold text-lg text-slate-900">
-                          Matched citizen profile
-                        </h3>
+            ) : (
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 xl:grid-cols-[1.1fr_0.9fr] gap-6">
+                  <div className="space-y-4">
+                    <div className="rounded-[1.75rem] bg-slate-50 border border-slate-100 p-5">
+                      <div className="flex items-start gap-4">
+                        <div className="w-14 h-14 rounded-2xl overflow-hidden bg-white border border-slate-200 flex items-center justify-center shrink-0">
+                          {matchedCitizen?.profileImage ? (
+                            <img
+                              src={matchedCitizen.profileImage}
+                              alt={matchedCitizen.fullName || "Verified voter"}
+                              className="w-full h-full object-cover"
+                              referrerPolicy="no-referrer"
+                            />
+                          ) : (
+                            <UserCheck size={24} className="text-slate-400" />
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-[10px] uppercase tracking-[0.35em] text-slate-400 font-black mb-2">
+                            Verified voter profile
+                          </p>
+                          <h4 className="font-bold text-slate-900 text-xl truncate">
+                            {matchedCitizen?.fullName || formData.fullName}
+                          </h4>
+                          <p className="text-sm text-slate-500 font-mono mt-1 break-all">
+                            {matchedCitizen?.nationalId || formData.nationalId}
+                          </p>
+                        </div>
                       </div>
-                      <p className="text-sm text-slate-500">
-                        Face capture matched the seeded identity below. Confirm
-                        to create the voter record.
-                      </p>
                     </div>
-                  </div>
 
-                  <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                    <div className="rounded-xl bg-slate-50 p-3">
-                      <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">
-                        Full name
-                      </p>
-                      <p className="font-semibold text-slate-900 truncate">
-                        {matchedCitizen.fullName || formData.fullName}
-                      </p>
-                    </div>
-                    <div className="rounded-xl bg-slate-50 p-3">
-                      <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">
-                        National ID
-                      </p>
-                      <p className="font-semibold text-slate-900 font-mono">
-                        {matchedCitizen.nationalId || formData.nationalId}
-                      </p>
-                    </div>
-                    <div className="rounded-xl bg-slate-50 p-3">
-                      <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">
-                        Date of birth
-                      </p>
-                      <p className="font-semibold text-slate-900">
-                        {matchedCitizen.dob || formData.dob}
-                      </p>
-                    </div>
-                    <div className="rounded-xl bg-slate-50 p-3">
-                      <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">
-                        Address
-                      </p>
-                      <p className="font-semibold text-slate-900 line-clamp-2">
-                        {matchedCitizen.address || formData.address}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {faceCaptureState === "captured" && (
-                <div className="bg-slate-50 rounded-2xl border border-slate-100 p-5">
-                  <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold mb-3">
-                    Registration summary
-                  </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">
-                        Address
-                      </p>
-                      <p className="font-semibold text-slate-900">
-                        {formData.address || "Not provided"}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">
-                        Region
-                      </p>
-                      <p className="font-semibold text-slate-900">
-                        {getRegionLabel(formData.regionId)}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">
-                        Phone
-                      </p>
-                      <p className="font-semibold text-slate-900">
-                        {formData.phone || "Not provided"}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">
-                        Email
-                      </p>
-                      <p className="font-semibold text-slate-900 truncate">
-                        {formData.email || "Not provided"}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <div className="bg-election-dark/5 p-6 rounded-xl border border-dashed border-slate-300">
-                <div className="flex flex-col items-center text-center">
-                  <Camera
-                    size={64}
-                    className="text-election-blue mb-4 animate-pulse"
-                  />
-                  <h3 className="font-bold text-lg">{t("step_biometric")}</h3>
-                  <p className="text-sm text-slate-500 mt-2">
-                    {t("consent_text")}
-                  </p>
-                  <div className="mt-6 inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white">
-                    <span className="inline-flex h-3 w-3 rounded-full bg-green-500" />
-                    Face capture armed
-                  </div>
-                  <div
-                    className={cn(
-                      "mt-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border",
-                      faceCaptureState === "captured"
-                        ? "bg-emerald-50 text-emerald-700 border-emerald-100"
-                        : faceCaptureState === "capturing"
-                          ? "bg-amber-50 text-amber-700 border-amber-100"
-                          : faceCaptureState === "failed"
-                            ? "bg-rose-50 text-rose-700 border-rose-100"
-                            : "bg-slate-50 text-slate-500 border-slate-100",
+                    {faceCaptureState === "captured" && (
+                      <div className="rounded-[1.75rem] bg-white border border-slate-100 p-5 shadow-sm">
+                        <p className="text-[10px] uppercase tracking-[0.35em] text-slate-400 font-black mb-4">
+                          Voter registration summary
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                          <div className="rounded-2xl bg-slate-50 p-4">
+                            <p className="text-[10px] uppercase tracking-widest text-slate-400 font-black mb-1">
+                              Full name
+                            </p>
+                            <p className="font-semibold text-slate-900 truncate">
+                              {formData.fullName}
+                            </p>
+                          </div>
+                          <div className="rounded-2xl bg-slate-50 p-4">
+                            <p className="text-[10px] uppercase tracking-widest text-slate-400 font-black mb-1">
+                              National ID
+                            </p>
+                            <p className="font-semibold text-slate-900 font-mono break-all">
+                              {formData.nationalId}
+                            </p>
+                          </div>
+                          <div className="rounded-2xl bg-slate-50 p-4">
+                            <p className="text-[10px] uppercase tracking-widest text-slate-400 font-black mb-1">
+                              Phone
+                            </p>
+                            <p className="font-semibold text-slate-900 truncate">
+                              {formData.phone || "Not provided"}
+                            </p>
+                          </div>
+                          <div className="rounded-2xl bg-slate-50 p-4">
+                            <p className="text-[10px] uppercase tracking-widest text-slate-400 font-black mb-1">
+                              Email
+                            </p>
+                            <p className="font-semibold text-slate-900 truncate">
+                              {formData.email || "Not provided"}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
                     )}
-                  >
-                    <span
-                      className={cn(
-                        "w-2 h-2 rounded-full",
-                        faceCaptureState === "captured"
-                          ? "bg-emerald-500"
-                          : faceCaptureState === "capturing"
-                            ? "bg-amber-500 animate-pulse"
-                            : faceCaptureState === "failed"
-                              ? "bg-rose-500"
-                              : "bg-slate-400",
-                      )}
-                    />
-                    {faceCaptureState.replace("-", " ")}
                   </div>
-                  <p className="mt-3 text-xs text-slate-500 max-w-md">
-                    {faceCaptureMessage}
-                  </p>
-                </div>
-              </div>
-              <div className="bg-slate-900 rounded-2xl overflow-hidden aspect-video relative group border-4 border-election-blue/30 shadow-2xl">
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className="w-full h-full object-cover grayscale brightness-75 group-hover:grayscale-0 transition-all duration-500 scale-x-[-1]"
-                />
-                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                  <div className="w-48 h-64 border-2 border-dashed border-election-blue/50 rounded-[4rem] relative">
-                    <motion.div
-                      animate={{ top: ["10%", "90%", "10%"] }}
-                      transition={{
-                        repeat: Infinity,
-                        duration: 3,
-                        ease: "linear",
-                      }}
-                      className="absolute left-0 right-0 h-0.5 bg-election-blue shadow-[0_0_15px_#0ea5e9]"
-                    />
-                  </div>
-                  <p className="mt-4 text-[10px] font-mono text-white/70 uppercase tracking-widest bg-black/40 px-3 py-1 rounded-full backdrop-blur-md">
-                    {modelError
-                      ? "Face model fallback active"
-                      : modelReady
-                        ? t("placeholder_face")
-                        : "Loading face model..."}
-                  </p>
-                </div>
-              </div>
 
-              <div className="flex gap-4">
-                <button
-                  onClick={() => setStep(1)}
-                  className="flex-1 bg-slate-100 text-slate-600 p-4 rounded-xl font-medium"
-                >
-                  {t("cancel")}
-                </button>
-                <button
-                  onClick={handleSubmit}
-                  disabled={loading || faceCaptureState !== "captured"}
-                  className="flex-[2] bg-election-blue text-white p-4 rounded-xl font-medium shadow-lg shadow-election-blue/20 flex items-center justify-center gap-2"
-                >
-                  {loading ? (
-                    t("loading")
-                  ) : (
-                    <>
-                      <UserCheck size={20} />
-                      {t("complete_reg")}
-                    </>
-                  )}
-                </button>
+                  <div className="space-y-4">
+                    <div className="rounded-[1.75rem] bg-slate-900 text-white p-5 overflow-hidden relative">
+                      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.12),transparent_35%)]" />
+                      <div className="relative">
+                        <div className="flex items-center gap-3 mb-3">
+                          <Camera size={18} className="text-election-blue" />
+                          <p className="text-[10px] uppercase tracking-[0.35em] text-white/60 font-black">
+                            Live capture
+                          </p>
+                        </div>
+                        <p className="text-sm text-white/75 leading-relaxed mb-4">
+                          {faceCaptureMessage}
+                        </p>
+                        <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest">
+                          <span className="inline-flex h-2 w-2 rounded-full bg-green-400" />
+                          {faceCaptureState.replace("-", " ")}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-[1.75rem] bg-white border border-slate-100 p-5 shadow-sm">
+                      <div className="aspect-video rounded-[1.5rem] overflow-hidden bg-slate-900 relative border border-slate-200">
+                        <video
+                          ref={videoRef}
+                          autoPlay
+                          playsInline
+                          muted
+                          className="w-full h-full object-cover grayscale brightness-75 scale-x-[-1]"
+                        />
+                        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                          <div className="w-40 h-56 border-2 border-dashed border-election-blue/50 rounded-[3rem] relative">
+                            <motion.div
+                              animate={{ top: ["10%", "90%", "10%"] }}
+                              transition={{
+                                repeat: Infinity,
+                                duration: 3,
+                                ease: "linear",
+                              }}
+                              className="absolute left-0 right-0 h-0.5 bg-election-blue shadow-[0_0_15px_#0ea5e9]"
+                            />
+                          </div>
+                          <p className="mt-4 text-[10px] font-mono text-white/75 uppercase tracking-widest bg-black/40 px-3 py-1 rounded-full backdrop-blur-md">
+                            {modelError
+                              ? "Face model fallback active"
+                              : modelReady
+                                ? t("placeholder_face")
+                                : "Loading face model..."}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <button
+                    onClick={() => setStep(1)}
+                    className="flex-1 h-12 rounded-2xl bg-slate-100 text-slate-700 font-bold"
+                  >
+                    {t("cancel")}
+                  </button>
+                  <button
+                    onClick={handleSubmit}
+                    disabled={loading || faceCaptureState !== "captured"}
+                    className="flex-[2] h-12 rounded-2xl bg-election-blue text-white font-bold shadow-lg shadow-election-blue/20 flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    {loading ? (
+                      t("loading")
+                    ) : (
+                      <>
+                        <UserCheck size={18} />
+                        {t("complete_reg")}
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
-        <div className="space-y-4">
-          <div className="bg-slate-800 text-white p-6 rounded-2xl">
-            <h4 className="font-bold mb-4 flex items-center gap-2">
+        <div className="space-y-6 sticky top-6">
+          <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm p-6">
+            <h4 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
               <ShieldCheck size={18} className="text-election-blue" />
               {t("security_notice")}
             </h4>
-            <ul className="text-xs space-y-3 opacity-80 list-disc pl-4 font-mono">
+            <ul className="text-sm space-y-3 text-slate-500 list-disc pl-5 leading-relaxed">
               <li>{t("security_notice_1")}</li>
               <li>{t("security_notice_2")}</li>
               <li>{t("security_notice_3")}</li>
             </ul>
+          </div>
+
+          <div className="bg-slate-900 text-white rounded-[2rem] p-6 overflow-hidden relative">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.12),transparent_35%)]" />
+            <div className="relative">
+              <p className="text-[10px] uppercase tracking-[0.35em] text-white/50 font-black mb-3">
+                Quick note
+              </p>
+              <p className="text-sm text-white/75 leading-relaxed">
+                Keep your National ID handy. If you close this page before
+                completing the face step, you can return and continue where you
+                left off.
+              </p>
+            </div>
           </div>
         </div>
       </div>
