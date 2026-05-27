@@ -6,12 +6,16 @@ export const loginSchema = z.object({
 });
 
 export const biometricLoginSchema = z.object({
-  faceEmbedding: z.string().min(10),
+  faceEmbedding: z.string().trim().min(100).max(10000),
 });
 
 export const voterTokenLoginSchema = z.object({
   nationalId: z.string().min(5).max(50).trim(),
   votingToken: z.string().min(16).max(256).trim(),
+});
+
+export const verifyIdentitySchema = z.object({
+  nationalId: z.string().min(5).max(50).trim(),
 });
 
 export const refreshTokenSchema = z.object({
@@ -70,6 +74,7 @@ export const changePasswordSchema = z.object({
 export type LoginDto = z.infer<typeof loginSchema>;
 export type BiometricLoginDto = z.infer<typeof biometricLoginSchema>;
 export type VoterTokenLoginDto = z.infer<typeof voterTokenLoginSchema>;
+export type VerifyIdentityDto = z.infer<typeof verifyIdentitySchema>;
 export type RefreshTokenDto = z.infer<typeof refreshTokenSchema>;
 export type MfaChallengeDto = z.infer<typeof mfaChallengeSchema>;
 export type MfaEnrollmentVerifyDto = z.infer<typeof mfaEnrollmentVerifySchema>;

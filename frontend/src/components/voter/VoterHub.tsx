@@ -10,12 +10,7 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "../../utils/cn";
-import {
-  persistDemoVoteState,
-  readDemoUserState,
-  readDemoVoterAuth,
-  summarizeDemoVotes,
-} from "../../utils/demoVotingState";
+// demo voting state removed — voter flows require real backend
 import { getScopeAccessModel } from "../../utils/scope";
 import { fetchJson } from "../../services/api/client";
 
@@ -35,22 +30,6 @@ function hasJwtAccessToken(token: unknown) {
   return typeof token === "string" && token.split(".").length === 3;
 }
 
-function isDemoAccessToken(token: unknown) {
-  if (!hasJwtAccessToken(token)) return false;
-
-  try {
-    const payloadPart = String(token).split(".")[1];
-    if (!payloadPart) return false;
-
-    const normalized = payloadPart.replace(/-/g, "+").replace(/_/g, "/");
-    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
-    const payload = JSON.parse(atob(padded));
-    return Boolean(payload?.demo);
-  } catch {
-    return false;
-  }
-}
-
 function mapCandidate(candidate: any) {
   return {
     id: candidate.id,
@@ -64,6 +43,7 @@ function mapCandidate(candidate: any) {
 
 export function VoterHub({
   user,
+  setUser,
   setView,
   t,
   electionPhase,
@@ -96,7 +76,10 @@ export function VoterHub({
     string | null
   >(currentElectionStatus ?? null);
   const [votingCandidate, setVotingCandidate] = useState<any | null>(null);
-  const [votingKey, setVotingKey] = useState("");
+  const [uniqueVoterIdInput, setUniqueVoterIdInput] = useState("");
+  const [accessVerified, setAccessVerified] = useState(false);
+  const [accessLoading, setAccessLoading] = useState(false);
+  const [accessNotice, setAccessNotice] = useState<string | null>(null);
   const [castingVote, setCastingVote] = useState(false);
   const [voteError, setVoteError] = useState<string | null>(null);
   const [voteNotice, setVoteNotice] = useState<string | null>(null);
@@ -222,23 +205,7 @@ export function VoterHub({
       return;
     }
 
-    if (isDemoAccessToken(token)) {
-      const storedAuth = readDemoVoterAuth();
-      const storedUser = readDemoUserState();
-      setVotingStatus((prev) => ({
-        ...prev,
-        hasVoted: Boolean(
-          storedAuth?.hasVoted ?? storedUser?.hasVoted ?? user?.hasVoted,
-        ),
-        receiptHash:
-          storedAuth?.receiptToken ??
-          storedUser?.receiptToken ??
-          user?.receiptToken ??
-          prev.receiptHash,
-        castAt: prev.castAt ?? new Date().toISOString(),
-      }));
-      return;
-    }
+    // proceed with real backend voting status lookup
 
     try {
       const response = await fetchJson<{ data: any }>("/api/v1/voting/me", {
@@ -251,6 +218,10 @@ export function VoterHub({
         receiptHash: status.receiptHash ?? user?.receiptToken ?? null,
         castAt: status.castAt ?? null,
       });
+
+      if (status.hasVoted) {
+        setAccessVerified(true);
+      }
     } catch {
       setVotingStatus((prev) => ({
         ...prev,
@@ -260,12 +231,70 @@ export function VoterHub({
     }
   };
 
+  const verifyVoteAccess = async () => {
+    if (!hasJwtAccessToken(token)) {
+      setVoteError("Please log in again before verifying access.");
+      return;
+    }
+
+    const uniqueVoterId = uniqueVoterIdInput.trim();
+    if (!uniqueVoterId) {
+      setVoteError("Enter your unique voter ID before viewing candidates.");
+      return;
+    }
+
+    setAccessLoading(true);
+    setVoteError(null);
+    setAccessNotice(null);
+
+    try {
+      const response = await fetchJson<{ data: any }>(
+        "/api/v1/vote/verify-access",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ uniqueVoterId }),
+        },
+      );
+
+      const result = response?.data ?? {};
+      setAccessVerified(true);
+      setCandidateListVisible(true);
+      setAccessNotice(
+        result?.fullName
+          ? `Access verified for ${result.fullName}.`
+          : "Voting access verified.",
+      );
+      await loadCandidates();
+    } catch (error) {
+      const body = (error as any)?.body;
+      const message =
+        typeof body?.message === "string"
+          ? body.message
+          : typeof (error as any)?.message === "string"
+            ? (error as any).message
+            : "Unable to verify voting access";
+      setAccessVerified(false);
+      setCandidateListVisible(false);
+      setAccessNotice(null);
+      setVoteError(message);
+    } finally {
+      setAccessLoading(false);
+    }
+  };
+
   const loadCandidates = async () => {
+    if (!accessVerified && !votingStatus.hasVoted) {
+      return;
+    }
+
     try {
       let electionId = currentElectionId ?? resolvedElectionId;
       let electionTitle = currentElectionTitle ?? resolvedElectionTitle;
       let electionStatus = currentElectionStatus ?? resolvedElectionStatus;
-      const demoSession = isDemoAccessToken(token);
 
       if (!electionId) {
         const activeElection = await resolveActiveElection();
@@ -292,17 +321,7 @@ export function VoterHub({
           }))
         : [];
 
-      setCandidatePreview(
-        demoSession
-          ? summarizeDemoVotes(mappedCandidates, electionId).counts.map(
-              (candidate) => ({
-                ...candidate,
-                fullName: candidate.name,
-                voteCount: Number(candidate.votes ?? 0),
-              }),
-            )
-          : mappedCandidates,
-      );
+      setCandidatePreview(mappedCandidates);
       setResolvedElectionId(electionId);
       setResolvedElectionTitle(electionTitle);
       setResolvedElectionStatus(electionStatus);
@@ -313,7 +332,6 @@ export function VoterHub({
 
   const closeVoteModal = () => {
     setVotingCandidate(null);
-    setVotingKey("");
     setVoteError(null);
     setVoteNotice(null);
   };
@@ -323,8 +341,9 @@ export function VoterHub({
       return;
     }
 
-    if (!votingKey.trim()) {
-      setVoteError("Enter the voting key before submitting.");
+    const uniqueVoterId = uniqueVoterIdInput.trim();
+    if (!uniqueVoterId) {
+      setVoteError("Verify your unique voter ID before submitting.");
       return;
     }
 
@@ -339,58 +358,9 @@ export function VoterHub({
     setVoteError(null);
     setVoteNotice(null);
 
-    // Demo session: handle vote locally without hitting the backend.
-    // The global fetch interceptor in main.tsx strips demo tokens from
-    // Authorization headers, which would cause a 401 on the real endpoint.
-    if (isDemoAccessToken(token)) {
-      try {
-        const demoReceiptHash = `demo-receipt-${Date.now()}-${votingKey.trim()}`;
-        const castAt = new Date().toISOString();
-        sessionStorage.setItem("nehs_last_receipt_hash", demoReceiptHash);
-        try {
-          localStorage.removeItem("nehs_pending_voting_token");
-          persistDemoVoteState({
-            receiptHash: demoReceiptHash,
-            castAt,
-            candidateId: votingCandidate.id,
-            electionId: currentElectionId ?? resolvedElectionId,
-          });
-        } catch {
-          // ignore storage failures
-        }
-        setVotingStatus((prev) => ({
-          ...prev,
-          hasVoted: true,
-          receiptHash: demoReceiptHash,
-          castAt,
-        }));
-        setCandidatePreview((prev) =>
-          summarizeDemoVotes(
-            prev.map((candidate) => ({
-              ...candidate,
-              fullName: candidate.fullName ?? candidate.name,
-            })),
-            currentElectionId ?? resolvedElectionId,
-          ).counts.map((candidate) => ({
-            ...candidate,
-            fullName: candidate.name,
-            voteCount: Number(candidate.votes ?? 0),
-          })),
-        );
-        setVoteNotice("Vote recorded successfully.");
-        setVotingKey("");
-        setVotingCandidate(null);
-      } catch (demoErr: any) {
-        setVoteError("Failed to record demo vote.");
-      } finally {
-        setCastingVote(false);
-      }
-      return;
-    }
-
     try {
       const response = await fetchJson<{ data: { receiptHash: string } }>(
-        "/api/v1/voting/cast",
+        "/api/v1/vote/cast",
         {
           method: "POST",
           headers: {
@@ -400,7 +370,7 @@ export function VoterHub({
           body: JSON.stringify({
             electionId: currentElectionId ?? resolvedElectionId,
             candidateId: votingCandidate.id,
-            tokenHash: votingKey.trim(),
+            uniqueVoterId,
           }),
         },
       );
@@ -416,7 +386,7 @@ export function VoterHub({
         // ignore storage failures
       }
 
-      setUser((prev: any) => ({
+      setUser?.((prev: any) => ({
         ...prev,
         hasVoted: true,
         receiptToken: receiptHash,
@@ -429,7 +399,8 @@ export function VoterHub({
         castAt: new Date().toISOString(),
       }));
       setVoteNotice("Vote recorded successfully.");
-      setVotingKey("");
+      setAccessVerified(true);
+      setCandidateListVisible(false);
       await loadVotingStatus();
     } catch (error) {
       const body = (error as any)?.body;
@@ -450,8 +421,11 @@ export function VoterHub({
   }, [isVoter, token, user]);
 
   useEffect(() => {
-    void loadCandidates();
+    if (accessVerified) {
+      void loadCandidates();
+    }
   }, [
+    accessVerified,
     currentElectionId,
     token,
     resolvedElectionId,
@@ -550,7 +524,7 @@ export function VoterHub({
               </h2>
               <p className="text-sm text-slate-500 mt-2 max-w-2xl">
                 Open the candidate list, then choose a candidate and enter your
-                unique voting ID to cast the ballot.
+                unique voter ID to cast the ballot.
               </p>
             </div>
           </div>
@@ -590,7 +564,7 @@ export function VoterHub({
             </p>
           </div>
 
-          <div className="rounded-3xl border border-slate-100 bg-slate-50 p-5">
+          <div className="rounded-2xl border border-slate-100 bg-slate-50 p-5">
             <p className="text-[10px] uppercase tracking-[0.3em] text-slate-400 font-black">
               {t("registration_status")}
             </p>
@@ -601,6 +575,38 @@ export function VoterHub({
             </p>
           </div>
         </div>
+
+        {isVoter && !votingStatus.hasVoted && (
+          <div className="mb-8 rounded-[2rem] border border-slate-100 bg-white p-6 shadow-sm">
+            <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
+              <div>
+                <label className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400 block mb-2">
+                  Unique voter ID
+                </label>
+                <input
+                  value={uniqueVoterIdInput}
+                  onChange={(event) =>
+                    setUniqueVoterIdInput(event.target.value)
+                  }
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 font-mono text-sm outline-none focus:border-slate-900 focus:bg-white"
+                  placeholder="Enter your unique voter ID"
+                />
+              </div>
+              <button
+                onClick={verifyVoteAccess}
+                disabled={accessLoading}
+                className="rounded-2xl bg-slate-900 px-5 py-3 text-[10px] font-black uppercase tracking-[0.25em] text-white disabled:opacity-60"
+              >
+                {accessLoading ? "Verifying..." : "Verify access"}
+              </button>
+            </div>
+            {accessNotice && (
+              <div className="mt-4 rounded-2xl bg-emerald-50 border border-emerald-100 px-4 py-3 text-emerald-700 text-sm font-semibold">
+                {accessNotice}
+              </div>
+            )}
+          </div>
+        )}
 
         {!isVoter && (
           <div className="mb-8 rounded-2xl border border-slate-100 bg-white p-4">
@@ -628,7 +634,16 @@ export function VoterHub({
               </h3>
             </div>
             <button
-              onClick={() => setCandidateListVisible((prev) => !prev)}
+              onClick={() => {
+                if (!accessVerified && !votingStatus.hasVoted) {
+                  setVoteError(
+                    "Verify your unique voter ID before viewing candidates.",
+                  );
+                  return;
+                }
+                setCandidateListVisible((prev) => !prev);
+              }}
+              disabled={votingStatus.hasVoted}
               className="px-5 py-3 rounded-2xl bg-slate-900 text-white font-black uppercase tracking-[0.2em] text-[10px]"
             >
               <Vote className="inline-block mr-2" />
@@ -648,7 +663,7 @@ export function VoterHub({
                   {candidatePreview.map((candidate) => (
                     <div
                       key={candidate.id}
-                      className="rounded-3xl border border-slate-100 bg-white p-5 flex flex-col gap-4 shadow-sm"
+                      className="rounded-2xl border border-slate-100 bg-white p-5 flex flex-col gap-4 shadow-sm"
                     >
                       <div className="flex items-center gap-3">
                         <div className="w-12 h-12 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-xl shrink-0">
@@ -702,7 +717,7 @@ export function VoterHub({
                 exit={{ opacity: 0, y: 8 }}
                 className="mt-8 border-t border-slate-100 pt-6"
               >
-                <div className="rounded-3xl border border-dashed border-slate-200 bg-white px-6 py-8 text-center">
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-8 text-center">
                   <p className="text-sm font-black text-slate-900">
                     No candidates loaded yet.
                   </p>
@@ -725,13 +740,13 @@ export function VoterHub({
               <div className="flex items-start justify-between gap-4 mb-4">
                 <div>
                   <p className="text-[10px] uppercase tracking-[0.3em] text-slate-400 font-black">
-                    Unique voting ID
+                    Verified voter
                   </p>
                   <h4 className="text-2xl font-black text-slate-900 mt-1">
                     {votingCandidate.fullName}
                   </h4>
                   <p className="text-sm text-slate-500 mt-1">
-                    Enter the one-time ID issued by staff to unlock this ballot.
+                    Your unique voter ID is checked before the ballot is cast.
                   </p>
                 </div>
                 <button
@@ -754,17 +769,12 @@ export function VoterHub({
                 </div>
               </div>
 
-              <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">
-                Unique voting ID
-              </label>
-              <input
-                autoFocus
-                type="password"
-                value={votingKey}
-                onChange={(event) => setVotingKey(event.target.value)}
-                className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-slate-900 font-mono outline-none focus:border-slate-900"
-                placeholder="Enter your unique voting ID"
-              />
+              <div className="rounded-2xl border border-slate-100 bg-white px-4 py-3 text-sm font-mono text-slate-900">
+                {uniqueVoterIdInput ||
+                  user?.uniqueVoterId ||
+                  user?.voterId ||
+                  "Pending"}
+              </div>
 
               {voteError && (
                 <div className="mt-4 rounded-2xl bg-rose-50 border border-rose-100 px-4 py-3 text-rose-700 text-sm font-semibold">

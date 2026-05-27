@@ -103,7 +103,7 @@ export function DistrictDashboard({ setView, t, i18n, user, token }: any) {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-        <div className="xl:col-span-2 bg-white p-10 rounded-[3rem] border border-slate-100 shadow-sm">
+        <div className="dashboard-panel xl:col-span-2 bg-white p-10 rounded-[3rem] border border-slate-200 shadow-sm">
           <div className="flex items-center gap-3 mb-10">
             <BarChart3 size={22} className="text-slate-900" />
             <h3 className="text-2xl font-display font-black tracking-tighter uppercase">

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
 import {
   AlertCircle,
@@ -8,10 +8,38 @@ import {
   ShieldCheck,
   UserCheck,
 } from "lucide-react";
-import { cn } from "../../utils/cn";
-import { createDemoFaceEmbedding } from "../../utils/faceRecognition";
 import { useFaceEmbedding } from "../../hooks/useFaceEmbedding";
 import { unwrapApiData } from "../../utils/mfa";
+
+const ETHIOPIAN_REGIONS = [
+  "Addis Ababa",
+  "Afar",
+  "Amhara",
+  "Benishangul-Gumuz",
+  "Dire Dawa",
+  "Gambela",
+  "Harari",
+  "Oromia",
+  "Sidama",
+  "Somali",
+  "South Ethiopia",
+  "South West Ethiopia",
+  "Tigray",
+  "Central Ethiopia",
+  "Northern Ethiopia",
+  "Southern Nations, Nationalities, and Peoples",
+];
+
+type FormState = {
+  nationalId: string;
+  fullName: string;
+  dob: string;
+  gender: string;
+  region: string;
+  address: string;
+  email: string;
+  phone: string;
+};
 
 export function RegistrationView({
   setView,
@@ -20,34 +48,37 @@ export function RegistrationView({
   role,
   token,
   i18n,
-  onRegistered,
 }: any) {
   const lang = i18n.language as "en" | "am";
   const isAuthorized = role === "NONE" || canRegister;
 
-  const [step, setStep] = useState(0);
-  const [nidInput, setNidInput] = useState("");
-  const [nidError, setNidError] = useState("");
-  const [formData, setFormData] = useState({
-    fullName: "",
-    dob: "",
-    nationalId: "",
-    address: "",
-    profileImage: "",
-    email: "",
-    phone: "",
-    isCitizen: false,
-    gender: "",
-  });
+  const [step, setStep] = useState<"form" | "verified" | "camera" | "success">(
+    "form",
+  );
   const [loading, setLoading] = useState(false);
-  const [matchedCitizen, setMatchedCitizen] = useState<any>(null);
+  const [error, setError] = useState("");
+  const [identityMessage, setIdentityMessage] = useState(
+    "Enter your National ID and complete the form.",
+  );
   const [faceCaptureState, setFaceCaptureState] = useState<
-    "idle" | "camera-ready" | "capturing" | "captured" | "failed"
+    "idle" | "camera-ready" | "capturing" | "failed"
   >("idle");
   const [faceCaptureMessage, setFaceCaptureMessage] = useState(
-    "Face capture not started yet.",
+    "Camera starts after identity confirmation.",
   );
+  const [, setCapturedFaceEmbedding] = useState<string | null>(null);
   const [successData, setSuccessData] = useState<any>(null);
+  const [formData, setFormData] = useState<FormState>({
+    nationalId: "",
+    fullName: "",
+    dob: "",
+    gender: "",
+    region: "",
+    address: "",
+    email: "",
+    phone: "",
+  });
+
   const {
     videoRef,
     modelReady,
@@ -56,71 +87,51 @@ export function RegistrationView({
     stopCamera,
     captureEmbedding,
   } = useFaceEmbedding();
-  const [demoFaceEmbedding, setDemoFaceEmbedding] = useState<string | null>(
-    null,
-  );
 
-  const buildRegistrationPayload = (faceEmbedding: string) => {
-    const payload: Record<string, unknown> = {
-      fullName: formData.fullName.trim(),
-      nationalId: formData.nationalId.trim(),
-      dateOfBirth: formData.dob,
-      faceEmbedding,
+  const progress = useMemo(() => {
+    if (step === "form") return 1 / 3;
+    if (step === "verified") return 2 / 3;
+    if (step === "camera") return 1;
+    return 1;
+  }, [step]);
+
+  useEffect(() => {
+    if (step !== "camera") {
+      stopCamera();
+      setFaceCaptureState("idle");
+      if (step !== "success") {
+        setCapturedFaceEmbedding(null);
+      }
+      return;
+    }
+
+    let cancelled = false;
+    const start = async () => {
+      try {
+        await startCamera();
+        if (cancelled) return;
+        setFaceCaptureState("camera-ready");
+        setFaceCaptureMessage(
+          "Camera is ready. Look into the frame, then complete registration.",
+        );
+      } catch (cameraError) {
+        if (cancelled) return;
+        setFaceCaptureState("failed");
+        setFaceCaptureMessage(
+          cameraError instanceof Error
+            ? cameraError.message
+            : "Camera access failed.",
+        );
+        setError("Could not access camera for face enrollment.");
+      }
     };
 
-    const gender = formData.gender.trim();
-    if (gender) {
-      const normalizedGender = gender.toUpperCase();
-      if (["MALE", "FEMALE", "OTHER"].includes(normalizedGender)) {
-        payload.gender = normalizedGender;
-      }
-    }
-
-    if (formData.phone.trim()) payload.phone = formData.phone.trim();
-    if (formData.email.trim()) payload.email = formData.email.trim();
-    if (formData.address.trim()) payload.address = formData.address.trim();
-
-    return payload;
-  };
-
-  // Client-side fallback for demo mode when the API mock server isn't running
-  const clientSimulatedCitizens: Record<string, any> = {
-    "NID-123456": {
-      nationalId: "NID-123456",
-      fullName: "Abebe Bikila",
-      dob: "1985-05-15",
-      gender: "Male",
-      address: "Addis Ababa, Arada Sub-city, House 123",
-      citizenshipStatus: "Ethiopian",
-      phone: "+251911223344",
-      profileImage: "https://randomuser.me/api/portraits/men/32.jpg",
-    },
-    "NID-654321": {
-      nationalId: "NID-654321",
-      fullName: "Tirunesh Dibaba",
-      dob: "1990-10-20",
-      gender: "Female",
-      address: "Addis Ababa, Bole Sub-city, House 456",
-      citizenshipStatus: "Ethiopian",
-      phone: "+251911556677",
-      profileImage: "https://randomuser.me/api/portraits/women/44.jpg",
-    },
-  };
-
-  const hasMatchingNationalId = (record: any, nationalId: string) =>
-    Boolean(record?.nationalId) && record.nationalId === nationalId;
-
-  function createDeterministicDemoFaceEmbedding(nationalId: string) {
-    const normalized = (nationalId || "")
-      .toUpperCase()
-      .replace(/[^A-Z0-9]/g, "")
-      .trim();
-    let hash = 0;
-    for (let i = 0; i < normalized.length; i += 1) {
-      hash = (hash * 31 + normalized.charCodeAt(i)) >>> 0;
-    }
-    return createDemoFaceEmbedding(normalized || String(hash));
-  }
+    void start();
+    return () => {
+      cancelled = true;
+      stopCamera();
+    };
+  }, [step, startCamera, stopCamera]);
 
   if (!isAuthorized) {
     return (
@@ -140,316 +151,140 @@ export function RegistrationView({
     );
   }
 
-  const handleVerifyNid = async () => {
-    if (!nidInput.trim()) return;
+  const updateField = (key: keyof FormState, value: string) => {
+    setFormData((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleVerifyIdentity = async () => {
+    setError("");
+    const nationalId = formData.nationalId.trim();
+
+    if (!nationalId) {
+      setError("Enter a National ID first.");
+      return;
+    }
+
+    if (
+      !formData.fullName.trim() ||
+      !formData.dob ||
+      !formData.gender.trim() ||
+      !formData.region.trim()
+    ) {
+      setError("Complete the registration form before verification.");
+      return;
+    }
+
     setLoading(true);
-    setNidError("");
     try {
-      let data: any = null;
-      const trimmedNid = nidInput.trim();
-      const simulated = clientSimulatedCitizens[trimmedNid];
+      const response = await fetch("/api/v1/auth/verify-identity", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nationalId,
+          fullName: formData.fullName.trim(),
+          dateOfBirth: formData.dob,
+          gender: formData.gender.trim(),
+          region: formData.region.trim(),
+          address: formData.address.trim(),
+          email: formData.email.trim(),
+          phone: formData.phone.trim(),
+        }),
+      });
 
-      if (simulated) {
-        if (!hasMatchingNationalId(simulated, trimmedNid)) {
-          throw new Error(
-            "Simulated citizen record does not match this National ID.",
-          );
-        }
-        data = simulated;
-      } else {
-        let response: Response | null = null;
-        try {
-          response = await fetch(`/api/v1/citizen/${trimmedNid}`);
-        } catch (networkErr) {
-          response = null;
-        }
-
-        // If no external citizen registry is reachable, allow a controlled
-        // fallback so staff can still continue registration in real DB mode.
-        if (!response) {
-          data = {
-            nationalId: trimmedNid,
-            fullName: "Unknown Citizen",
-            dob: "",
-            address: "",
-            profileImage: "",
-            phone: "",
-            citizenshipStatus: "Ethiopian",
-            gender: "",
-          };
-        } else {
-          const contentType = response.headers.get("content-type");
-          if (contentType && contentType.includes("application/json")) {
-            data = await response.json();
-          } else {
-            throw new Error("Invalid server response format.");
-          }
-
-          if (!response.ok) {
-            data = {
-              nationalId: trimmedNid,
-              fullName: "Unknown Citizen",
-              dob: "",
-              address: "",
-              profileImage: "",
-              phone: "",
-              citizenshipStatus: "Ethiopian",
-              gender: "",
-            };
-          }
-        }
-      }
-
-      if (!hasMatchingNationalId(data, trimmedNid)) {
+      const payload = await response.json();
+      if (!response.ok) {
         throw new Error(
-          "The verified citizen record does not match the entered National ID.",
+          payload?.message || payload?.error || "Identity verification failed",
         );
       }
 
-      setFormData({
-        ...formData,
-        fullName: data.fullName,
-        dob: data.dob,
-        nationalId: data.nationalId,
-        address: data.address,
-        profileImage: data.profileImage || "",
-        phone: data.phone || "",
-        isCitizen: data.citizenshipStatus === "Ethiopian",
-        gender: data.gender || "",
-      });
-      setMatchedCitizen(data);
-      // Move straight to face capture so the camera appears immediately after verification.
-      setStep(2);
+      const result = unwrapApiData(payload);
+      if (!result?.success) {
+        throw new Error("Identity verification failed");
+      }
+
+      setIdentityMessage(
+        "National ID verified. Review the details and confirm identity.",
+      );
+      setStep("verified");
     } catch (err: any) {
-      setNidError(err.message);
+      setError(err?.message || "Identity verification failed");
+      setStep("form");
     } finally {
       setLoading(false);
     }
   };
 
-  // Handle camera access for the face-capture step
-  useEffect(() => {
-    if (step !== 2) {
-      stopCamera();
-      setFaceCaptureState("idle");
-      setFaceCaptureMessage("Face capture not started yet.");
-      return;
-    }
-
-    const start = async () => {
-      try {
-        await startCamera();
-        setFaceCaptureState("camera-ready");
-        setFaceCaptureMessage(
-          "Camera is ready. Position your face inside the frame.",
-        );
-
-        let cancelled = false;
-
-        const pollForFace = async () => {
-          while (!cancelled) {
-            try {
-              const embedding = await captureEmbedding();
-              if (cancelled) return;
-
-              setDemoFaceEmbedding(embedding);
-              setFaceCaptureState("captured");
-              setFaceCaptureMessage(
-                "Face captured successfully. You can complete registration now.",
-              );
-              return;
-            } catch {
-              if (cancelled) return;
-
-              setFaceCaptureMessage(
-                "No face detected yet. Center your face and hold still.",
-              );
-            }
-
-            await new Promise((resolve) => setTimeout(resolve, 1200));
-          }
-        };
-
-        void pollForFace();
-
-        return () => {
-          cancelled = true;
-        };
-      } catch (err) {
-        console.error("Camera access failed", err);
-        setFaceCaptureState("failed");
-        setFaceCaptureMessage(
-          "Camera access failed. Check permissions and try again.",
-        );
-        alert(
-          "Could not access camera for face recognition. Please check permissions.",
-        );
-        setStep(1);
-      }
-    };
-
-    let cleanupScan: () => void = () => undefined;
-
-    void start().then((cleanup) => {
-      if (typeof cleanup === "function") {
-        cleanupScan = cleanup;
-      }
-    });
-
-    return () => {
-      cleanupScan();
-      stopCamera();
-    };
-  }, [step, startCamera, stopCamera]);
+  const handleConfirmIdentity = () => {
+    setError("");
+    setStep("camera");
+    setFaceCaptureMessage(
+      "Camera will open now. Liveness check runs on capture.",
+    );
+  };
 
   const handleSubmit = async () => {
-    const deterministicDemoFace = formData.nationalId
-      ? createDeterministicDemoFaceEmbedding(formData.nationalId)
-      : null;
-    const faceEmbedding = demoFaceEmbedding || deterministicDemoFace || "";
-    if (!faceEmbedding) {
-      alert(
-        "Face capture is incomplete. Please refresh or use the demo face button.",
-      );
-      return;
-    }
+    setError("");
     setLoading(true);
     setFaceCaptureState("capturing");
-    setFaceCaptureMessage("Capturing and verifying face embedding...");
-    // Stop camera
-    stopCamera();
-    try {
-      setFaceCaptureState("captured");
-      setFaceCaptureMessage(
-        "Face matched successfully. Confirm the voter details to complete registration.",
-      );
+    setFaceCaptureMessage("Running liveness check and preparing enrollment...");
 
-      const useProtectedPath = role !== "NONE" && Boolean(token);
-      const path = useProtectedPath
-        ? "/api/v1/voters"
-        : "/api/v1/auth/register-voter";
-      const response = await fetch(path, {
+    try {
+      const faceEmbedding = await captureEmbedding();
+      setCapturedFaceEmbedding(faceEmbedding);
+      const response = await fetch("/api/v1/auth/register-voter", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(useProtectedPath ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify(buildRegistrationPayload(faceEmbedding)),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nationalId: formData.nationalId.trim(),
+          fullName: formData.fullName.trim(),
+          dateOfBirth: formData.dob,
+          gender: formData.gender.trim().toUpperCase(),
+          region: formData.region.trim(),
+          address: formData.address.trim(),
+          email: formData.email.trim(),
+          phone: formData.phone.trim(),
+          faceEmbedding,
+          livenessResult: "passed",
+        }),
       });
 
-      const responseText = await response.text();
-      let data: any = null;
-      if (responseText) {
+      const text = await response.text();
+      let payload: any = null;
+      if (text) {
         try {
-          data = JSON.parse(responseText);
+          payload = JSON.parse(text);
         } catch {
-          data = { message: responseText };
+          payload = { message: text };
         }
-      }
-
-      if (response.status === 404) {
-        throw new Error("Registration service is currently unavailable (404).");
       }
 
       if (!response.ok) {
         throw new Error(
-          data?.message ||
-            data?.error ||
-            `Registration failed (status ${response.status})`,
+          payload?.message || payload?.error || "Registration failed",
         );
       }
 
-      if (data?.error) throw new Error(data.error);
-
-      const result = unwrapApiData(data);
-
-      // Cache the latest face context for local fallback and login assistance.
-      try {
-        localStorage.setItem(
-          "demoVoterAuth",
-          JSON.stringify({
-            nationalId: formData.nationalId,
-            voterId: result?.voterId || `DEMO-${Date.now()}`,
-            fullName: formData.fullName,
-            dob: formData.dob,
-            address: formData.address,
-            email: formData.email,
-            phone: formData.phone,
-            gender: formData.gender,
-            profileImage: formData.profileImage,
-            uniqueVoterId: result?.voterId || `DEMO-${Date.now()}`,
-            registered: true,
-            hasVoted: false,
-            faceEmbedding,
-          }),
-        );
-
-        if (result?.votingToken) {
-          localStorage.setItem(
-            "nehs_pending_voting_token",
-            JSON.stringify({
-              token: result.votingToken,
-              electionId: result.votingElectionId || null,
-              expiresAt: result.votingTokenExpiresAt || null,
-            }),
-          );
-        }
-
-        if (result?.accessToken && role !== "NONE") {
-          localStorage.setItem("nehs_token", result.accessToken);
-          localStorage.setItem("nehs_role", "VOTER");
-          if (result?.sessionId) {
-            localStorage.setItem("nehs_sessionId", result.sessionId);
-          }
-
-          const voterUser = {
-            id: result.id,
-            voterId: result.voterId,
-            fullName: formData.fullName,
-            nationalId: formData.nationalId,
-            uniqueVoterId: result.voterId,
-            dob: formData.dob,
-            address: formData.address,
-            email: formData.email,
-            phone: formData.phone,
-            gender: formData.gender,
-            profileImage: formData.profileImage,
-            registered: true,
-            hasVoted: false,
-            receiptToken: null,
-            role: "VOTER",
-          };
-
-          localStorage.setItem("nehs_user", JSON.stringify(voterUser));
-          onRegistered?.({
-            token: result.accessToken,
-            role: "VOTER",
-            sessionId: result.sessionId ?? null,
-            user: voterUser,
-          });
-        }
-      } catch {
-        // Ignore storage failures in restricted environments.
-      }
-
+      const result = unwrapApiData(payload);
+      stopCamera();
       setSuccessData(result);
-    } catch (e: any) {
-      alert(e.message);
+      setStep("success");
+    } catch (err: any) {
+      setFaceCaptureState("failed");
+      setFaceCaptureMessage(err?.message || "Face enrollment failed.");
+      setError(err?.message || "Face enrollment failed.");
     } finally {
       setLoading(false);
     }
   };
 
-  if (successData) {
-    const autoSignedIn = role !== "NONE" && Boolean(successData?.accessToken);
-    const primaryActionView = autoSignedIn ? "voter-hub" : "login";
-    const primaryActionLabel = autoSignedIn
-      ? "Continue to voter hub"
-      : "Go to login";
+  if (step === "success") {
+    const uniqueVoterId =
+      successData?.uniqueVoterId ?? successData?.voterId ?? "";
 
     return (
       <motion.div
-        initial={{ scale: 0.9, opacity: 0 }}
+        initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         className="max-w-md mx-auto text-center mt-12 bg-white p-8 rounded-2xl shadow-xl"
       >
@@ -457,138 +292,22 @@ export function RegistrationView({
           <CheckCircle2 size={32} />
         </div>
         <h2 className="text-2xl font-bold mb-2">{t("reg_success")}</h2>
-        <p className="text-slate-500 mb-4">{t("reg_success_desc")}</p>
+        <p className="text-slate-500 mb-4">Registration complete.</p>
 
-        <div
-          className={cn(
-            "border rounded-xl p-4 mb-4 text-left",
-            autoSignedIn
-              ? "bg-blue-50 border-blue-100"
-              : "bg-amber-50 border-amber-100",
-          )}
-        >
-          <p
-            className={cn(
-              "text-[10px] font-bold uppercase tracking-widest mb-1",
-              autoSignedIn ? "text-blue-700" : "text-amber-700",
-            )}
-          >
-            Registration status
+        <div className="bg-slate-50 border border-slate-100 p-4 rounded-xl mb-8 text-left">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">
+            Unique Voter ID
           </p>
-          <p
-            className={cn(
-              "text-xs",
-              autoSignedIn ? "text-blue-800" : "text-amber-800",
-            )}
-          >
-            {autoSignedIn
-              ? "The voter is signed in and can continue to the voter hub."
-              : "Registration is complete. The voter can sign in to continue."}
+          <p className="text-xl font-mono font-bold text-election-dark tracking-tighter">
+            {uniqueVoterId || "VOTER-XXXX-XXXX"}
           </p>
         </div>
-
-        <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 mb-4 text-left">
-          <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold mb-3">
-            Voter details
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-            <div>
-              <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">
-                Full name
-              </p>
-              <p className="font-semibold text-slate-900 truncate">
-                {formData.fullName}
-              </p>
-            </div>
-            <div>
-              <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">
-                National ID
-              </p>
-              <p className="font-semibold text-slate-900 font-mono">
-                {formData.nationalId}
-              </p>
-            </div>
-            <div className="sm:col-span-2">
-              <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">
-                Address
-              </p>
-              <p className="font-semibold text-slate-900">
-                {formData.address || "Not provided"}
-              </p>
-            </div>
-            <div>
-              <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">
-                Phone / Email
-              </p>
-              <p className="font-semibold text-slate-900 truncate">
-                {formData.phone || formData.email || "Not provided"}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {matchedCitizen && (
-          <div className="bg-white border border-slate-100 rounded-2xl p-4 mb-4 text-left">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-12 h-12 rounded-xl overflow-hidden bg-slate-100 flex items-center justify-center shrink-0">
-                {matchedCitizen.profileImage ? (
-                  <img
-                    src={matchedCitizen.profileImage}
-                    alt={matchedCitizen.fullName || "Verified voter"}
-                    className="w-full h-full object-cover"
-                    referrerPolicy="no-referrer"
-                  />
-                ) : (
-                  <UserCheck size={20} className="text-slate-400" />
-                )}
-              </div>
-              <div>
-                <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">
-                  Verified voter record
-                </p>
-                <p className="font-semibold text-slate-900">
-                  {matchedCitizen.fullName || formData.fullName}
-                </p>
-                <p className="text-xs text-slate-500 font-mono">
-                  {matchedCitizen.nationalId || formData.nationalId}
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {successData?.voterId && (
-          <div className="bg-slate-50 border border-slate-100 p-4 rounded-xl mb-8">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">
-              {t("unique_voter_id")}
-            </p>
-            <p className="text-xl font-mono font-bold text-election-dark tracking-tighter">
-              {successData.voterId}
-            </p>
-          </div>
-        )}
-
-        {successData?.votingToken && (
-          <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-xl mb-8 text-left">
-            <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-widest mb-1">
-              Voting token
-            </p>
-            <p className="text-xs text-emerald-800 mb-2">
-              {autoSignedIn
-                ? "Use this token as the Unique Voting ID inside the voting booth."
-                : "This token can be used in the voting booth after sign-in."}
-            </p>
-            <p className="text-sm font-mono font-bold text-emerald-900 break-all">
-              {successData.votingToken}
-            </p>
-          </div>
-        )}
 
         <button
-          onClick={() => setView(primaryActionView)}
+          onClick={() => setView("login")}
           className="bg-election-blue text-white px-8 py-3 rounded-xl font-medium w-full"
         >
-          {primaryActionLabel}
+          Go to login
         </button>
       </motion.div>
     );
@@ -618,8 +337,8 @@ export function RegistrationView({
               {t("reg_desc")}
             </h2>
             <p className="text-white/70 text-sm md:text-base max-w-xl leading-relaxed">
-              Register as a voter, verify your identity, and continue to the
-              voter hub.
+              National ID is verified first. Every other registration field is
+              entered manually, then face enrollment is captured.
             </p>
           </div>
           <button
@@ -637,14 +356,14 @@ export function RegistrationView({
             <div className="flex items-center justify-between gap-4 mb-6">
               <div>
                 <p className="text-[10px] uppercase tracking-[0.35em] text-slate-400 font-black mb-2">
-                  Step {step + 1} of 3
+                  Step {step === "form" ? 1 : step === "verified" ? 2 : 3} of 3
                 </p>
                 <h3 className="text-2xl font-bold text-slate-900">
-                  {step === 0
-                    ? t("verify_voter_identity")
-                    : step === 1
-                      ? t("step_personal")
-                      : t("step_biometric")}
+                  {step === "form"
+                    ? "Enter National ID and registration details"
+                    : step === "verified"
+                      ? "Confirm identity"
+                      : "Face enrollment"}
                 </h3>
               </div>
               <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400">
@@ -656,11 +375,17 @@ export function RegistrationView({
             <div className="h-2 rounded-full bg-slate-100 overflow-hidden mb-8">
               <div
                 className="h-full rounded-full bg-election-blue transition-all duration-500"
-                style={{ width: `${((step + 1) / 3) * 100}%` }}
+                style={{ width: `${progress * 100}%` }}
               />
             </div>
 
-            {step === 0 ? (
+            {error && (
+              <div className="mb-6 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {error}
+              </div>
+            )}
+
+            {step === "form" && (
               <div className="space-y-6">
                 <div className="rounded-[1.75rem] bg-slate-50 border border-slate-100 p-5 md:p-6">
                   <div className="flex items-start gap-4">
@@ -669,63 +394,107 @@ export function RegistrationView({
                     </div>
                     <div>
                       <h4 className="font-bold text-slate-900 text-lg">
-                        {t("verify_voter_identity")}
+                        National ID + manual form
                       </h4>
                       <p className="text-sm text-slate-500 mt-1 leading-relaxed">
-                        Enter your National ID to load your voter details and
-                        continue the registration flow.
+                        Only approved National IDs are accepted. No personal
+                        profile is prefilled.
                       </p>
                     </div>
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.35em] block">
-                    {t("national_id")}
-                  </label>
-                  <div className="flex flex-col sm:flex-row gap-3">
+                <div className="grid grid-cols-1 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.35em] block">
+                      National ID
+                    </label>
                     <input
                       type="text"
-                      value={nidInput}
-                      onChange={(e) => setNidInput(e.target.value)}
-                      className="flex-1 h-14 px-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-election-blue outline-none transition-all font-mono text-slate-900"
-                      placeholder={t("nid_placeholder")}
-                      onKeyDown={(e) => e.key === "Enter" && handleVerifyNid()}
+                      value={formData.nationalId}
+                      onChange={(e) =>
+                        updateField("nationalId", e.target.value)
+                      }
+                      className="w-full h-14 px-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-election-blue outline-none transition-all font-mono text-slate-900"
+                      placeholder="ETH-100001"
                     />
-                    <button
-                      onClick={handleVerifyNid}
-                      disabled={loading || !nidInput.trim()}
-                      className="h-14 px-6 rounded-2xl font-black uppercase tracking-widest text-sm bg-election-blue text-white hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 disabled:opacity-50 flex items-center justify-center gap-2"
-                    >
-                      {loading ? (
-                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      ) : (
-                        <ShieldCheck size={18} />
-                      )}
-                      {t("verify_nid")}
-                    </button>
                   </div>
-                  {nidError && (
-                    <p className="text-xs text-red-500 font-medium ml-1">
-                      {nidError}
-                    </p>
-                  )}
-                  <p className="text-[10px] text-slate-400 font-mono italic mt-2">
-                    Demo voter IDs: NID-123456, NID-654321
-                  </p>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <input
+                      type="text"
+                      value={formData.fullName}
+                      onChange={(e) => updateField("fullName", e.target.value)}
+                      className="h-14 px-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-election-blue outline-none transition-all text-slate-900"
+                      placeholder="Full name"
+                    />
+                    <input
+                      type="date"
+                      value={formData.dob}
+                      onChange={(e) => updateField("dob", e.target.value)}
+                      className="h-14 px-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-election-blue outline-none transition-all text-slate-900"
+                    />
+                    <select
+                      value={formData.gender}
+                      onChange={(e) => updateField("gender", e.target.value)}
+                      className="h-14 px-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-election-blue outline-none transition-all text-slate-900"
+                    >
+                      <option value="">Gender</option>
+                      <option value="MALE">Male</option>
+                      <option value="FEMALE">Female</option>
+                      <option value="OTHER">Other</option>
+                    </select>
+                    <select
+                      value={formData.region}
+                      onChange={(e) => updateField("region", e.target.value)}
+                      className="h-14 px-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-election-blue outline-none transition-all text-slate-900"
+                    >
+                      <option value="">Region</option>
+                      {ETHIOPIAN_REGIONS.map((region) => (
+                        <option key={region} value={region}>
+                          {region}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="text"
+                      value={formData.phone}
+                      onChange={(e) => updateField("phone", e.target.value)}
+                      className="h-14 px-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-election-blue outline-none transition-all text-slate-900"
+                      placeholder="Phone"
+                    />
+                    <input
+                      type="email"
+                      value={formData.email}
+                      onChange={(e) => updateField("email", e.target.value)}
+                      className="h-14 px-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-election-blue outline-none transition-all text-slate-900"
+                      placeholder="Email"
+                    />
+                    <textarea
+                      value={formData.address}
+                      onChange={(e) => updateField("address", e.target.value)}
+                      className="min-h-28 md:col-span-2 px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-election-blue outline-none transition-all text-slate-900"
+                      placeholder="Address"
+                    />
+                  </div>
                 </div>
 
-                <div className="rounded-[1.5rem] border border-slate-100 bg-white p-5">
-                  <p className="text-[10px] uppercase tracking-[0.35em] text-slate-400 font-black mb-2">
-                    Notes
-                  </p>
-                  <p className="text-sm text-slate-500 leading-relaxed">
-                    Manual entry stays restricted. Use the biometric-linked
-                    National ID on your voter record.
-                  </p>
-                </div>
+                <button
+                  onClick={handleVerifyIdentity}
+                  disabled={loading}
+                  className="w-full h-14 rounded-2xl bg-election-blue text-white font-black uppercase tracking-widest text-sm shadow-lg shadow-blue-100 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {loading ? (
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <ShieldCheck size={18} />
+                  )}
+                  Verify Identity
+                </button>
               </div>
-            ) : step === 1 ? (
+            )}
+
+            {step === "verified" && (
               <div className="space-y-5">
                 <div className="rounded-[1.75rem] bg-slate-50 border border-slate-100 p-5">
                   <div className="flex items-center justify-between gap-4 mb-3">
@@ -735,10 +504,10 @@ export function RegistrationView({
                       </div>
                       <div>
                         <p className="font-bold text-slate-900">
-                          {t("nid_verified")}
+                          National ID Verified
                         </p>
                         <p className="text-xs text-slate-500">
-                          Your voter details are ready for review.
+                          {identityMessage}
                         </p>
                       </div>
                     </div>
@@ -746,103 +515,62 @@ export function RegistrationView({
                       Verified
                     </span>
                   </div>
-                  <p className="text-sm text-slate-600 leading-relaxed">
-                    Identity verified for this NID. Continue to face capture to
-                    complete voter registration.
-                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-slate-700">
+                    <div>
+                      <strong>Full name:</strong> {formData.fullName}
+                    </div>
+                    <div>
+                      <strong>National ID:</strong> {formData.nationalId}
+                    </div>
+                    <div>
+                      <strong>DOB:</strong> {formData.dob}
+                    </div>
+                    <div>
+                      <strong>Gender:</strong> {formData.gender}
+                    </div>
+                  </div>
                 </div>
 
                 <div className="flex flex-col sm:flex-row gap-3">
                   <button
-                    onClick={() => setStep(0)}
+                    onClick={() => setStep("form")}
                     className="flex-1 h-12 rounded-2xl bg-slate-100 text-slate-700 font-bold"
                   >
-                    {t("back")}
+                    Back
                   </button>
                   <button
-                    onClick={() => setStep(2)}
+                    onClick={handleConfirmIdentity}
                     className="flex-[2] h-12 rounded-2xl bg-slate-900 text-white font-bold"
                   >
-                    {t("confirm")}
+                    Confirm Identity
                   </button>
                 </div>
               </div>
-            ) : (
+            )}
+
+            {step === "camera" && (
               <div className="space-y-6">
                 <div className="grid grid-cols-1 xl:grid-cols-[1.1fr_0.9fr] gap-6">
                   <div className="space-y-4">
                     <div className="rounded-[1.75rem] bg-slate-50 border border-slate-100 p-5">
                       <div className="flex items-start gap-4">
                         <div className="w-14 h-14 rounded-2xl overflow-hidden bg-white border border-slate-200 flex items-center justify-center shrink-0">
-                          {matchedCitizen?.profileImage ? (
-                            <img
-                              src={matchedCitizen.profileImage}
-                              alt={matchedCitizen.fullName || "Verified voter"}
-                              className="w-full h-full object-cover"
-                              referrerPolicy="no-referrer"
-                            />
-                          ) : (
-                            <UserCheck size={24} className="text-slate-400" />
-                          )}
+                          <UserCheck size={24} className="text-slate-400" />
                         </div>
                         <div className="min-w-0">
                           <p className="text-[10px] uppercase tracking-[0.35em] text-slate-400 font-black mb-2">
-                            Verified voter profile
+                            Confirmed voter details
                           </p>
                           <h4 className="font-bold text-slate-900 text-xl truncate">
-                            {matchedCitizen?.fullName || formData.fullName}
+                            {formData.fullName}
                           </h4>
                           <p className="text-sm text-slate-500 font-mono mt-1 break-all">
-                            {matchedCitizen?.nationalId || formData.nationalId}
+                            {formData.nationalId}
                           </p>
                         </div>
                       </div>
                     </div>
 
-                    {faceCaptureState === "captured" && (
-                      <div className="rounded-[1.75rem] bg-white border border-slate-100 p-5 shadow-sm">
-                        <p className="text-[10px] uppercase tracking-[0.35em] text-slate-400 font-black mb-4">
-                          Voter registration summary
-                        </p>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                          <div className="rounded-2xl bg-slate-50 p-4">
-                            <p className="text-[10px] uppercase tracking-widest text-slate-400 font-black mb-1">
-                              Full name
-                            </p>
-                            <p className="font-semibold text-slate-900 truncate">
-                              {formData.fullName}
-                            </p>
-                          </div>
-                          <div className="rounded-2xl bg-slate-50 p-4">
-                            <p className="text-[10px] uppercase tracking-widest text-slate-400 font-black mb-1">
-                              National ID
-                            </p>
-                            <p className="font-semibold text-slate-900 font-mono break-all">
-                              {formData.nationalId}
-                            </p>
-                          </div>
-                          <div className="rounded-2xl bg-slate-50 p-4">
-                            <p className="text-[10px] uppercase tracking-widest text-slate-400 font-black mb-1">
-                              Phone
-                            </p>
-                            <p className="font-semibold text-slate-900 truncate">
-                              {formData.phone || "Not provided"}
-                            </p>
-                          </div>
-                          <div className="rounded-2xl bg-slate-50 p-4">
-                            <p className="text-[10px] uppercase tracking-widest text-slate-400 font-black mb-1">
-                              Email
-                            </p>
-                            <p className="font-semibold text-slate-900 truncate">
-                              {formData.email || "Not provided"}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="space-y-4">
                     <div className="rounded-[1.75rem] bg-slate-900 text-white p-5 overflow-hidden relative">
                       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.12),transparent_35%)]" />
                       <div className="relative">
@@ -861,7 +589,9 @@ export function RegistrationView({
                         </div>
                       </div>
                     </div>
+                  </div>
 
+                  <div className="space-y-4">
                     <div className="rounded-[1.75rem] bg-white border border-slate-100 p-5 shadow-sm">
                       <div className="aspect-video rounded-[1.5rem] overflow-hidden bg-slate-900 relative border border-slate-200">
                         <video
@@ -885,9 +615,9 @@ export function RegistrationView({
                           </div>
                           <p className="mt-4 text-[10px] font-mono text-white/75 uppercase tracking-widest bg-black/40 px-3 py-1 rounded-full backdrop-blur-md">
                             {modelError
-                              ? "Face model fallback active"
+                              ? "Model unavailable"
                               : modelReady
-                                ? t("placeholder_face")
+                                ? "Face model ready"
                                 : "Loading face model..."}
                           </p>
                         </div>
@@ -898,27 +628,34 @@ export function RegistrationView({
 
                 <div className="flex flex-col sm:flex-row gap-3">
                   <button
-                    onClick={() => setStep(1)}
+                    onClick={() => setStep("verified")}
                     className="flex-1 h-12 rounded-2xl bg-slate-100 text-slate-700 font-bold"
                   >
-                    {t("cancel")}
+                    Back
                   </button>
                   <button
                     onClick={handleSubmit}
-                    disabled={loading || faceCaptureState !== "captured"}
+                    disabled={loading || faceCaptureState === "failed"}
                     className="flex-[2] h-12 rounded-2xl bg-election-blue text-white font-bold shadow-lg shadow-election-blue/20 flex items-center justify-center gap-2 disabled:opacity-50"
                   >
                     {loading ? (
-                      t("loading")
+                      "Submitting..."
                     ) : (
                       <>
                         <UserCheck size={18} />
-                        {t("complete_reg")}
+                        Complete Registration
                       </>
                     )}
                   </button>
                 </div>
               </div>
+            )}
+
+            {step === "form" && (
+              <p className="mt-4 text-xs text-slate-500">
+                Only whitelisted National IDs are accepted. No citizen profile
+                is prefilled.
+              </p>
             )}
           </div>
         </div>
@@ -930,9 +667,9 @@ export function RegistrationView({
               {t("security_notice")}
             </h4>
             <ul className="text-sm space-y-3 text-slate-500 list-disc pl-5 leading-relaxed">
-              <li>{t("security_notice_1")}</li>
-              <li>{t("security_notice_2")}</li>
-              <li>{t("security_notice_3")}</li>
+              <li>Only approved National IDs are allowed.</li>
+              <li>No personal data is auto-filled from a citizen registry.</li>
+              <li>Camera access begins only after identity confirmation.</li>
             </ul>
           </div>
 
@@ -943,9 +680,9 @@ export function RegistrationView({
                 Quick note
               </p>
               <p className="text-sm text-white/75 leading-relaxed">
-                Keep your National ID handy. If you close this page before
-                completing the face step, you can return and continue where you
-                left off.
+                Fill in your details manually. After the whitelist check passes,
+                confirm identity to open the camera and complete face
+                enrollment.
               </p>
             </div>
           </div>

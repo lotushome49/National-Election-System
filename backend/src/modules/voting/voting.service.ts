@@ -3,6 +3,7 @@ import { votingRepository } from "./voting.repository";
 import { voterRepository } from "../voter/voter.repository";
 import { electionRepository } from "../election/election.repository";
 import { candidateRepository } from "../candidate/candidate.repository";
+import { prisma } from "../../configs/database";
 import { sha256, generateSecureToken, hmac } from "../../utils/crypto";
 import { env } from "../../configs/env";
 import {
@@ -13,7 +14,7 @@ import {
 } from "../../errors/AppError";
 import { auditService } from "../audit/audit.service";
 import { socketEmit } from "../../configs/socket";
-import type { CastVoteDto } from "./voting.schema";
+import type { CastVoteDto, VerifyAccessDto } from "./voting.schema";
 
 export const votingService = {
   async getActiveBallot() {
@@ -86,17 +87,74 @@ export const votingService = {
       (await voterRepository.findById(voterId));
     if (!voter) throw new NotFoundError("Voter");
 
-    const latestBallot =
-      await votingRepository.findLatestBallotByVoter(voterId);
+    const latestBallot = await votingRepository.findLatestBallotByVoter(
+      voter.id,
+    );
 
     return {
       voterId: voter.id,
       voterRegistrationId: voter.voterId,
       isVerified: Boolean((voter as any).isVerified),
-      hasVoted: Boolean(latestBallot),
+      hasVoted: Boolean((voter as any).hasVoted || latestBallot),
       electionId: latestBallot?.electionId ?? null,
       castAt: latestBallot?.castAt ?? null,
       receiptHash: latestBallot?.receiptHash ?? null,
+    };
+  },
+
+  async verifyAccess(dto: VerifyAccessDto, voterId: string) {
+    const voter =
+      (await voterRepository.findByUserId(voterId)) ??
+      (await voterRepository.findById(voterId));
+    if (!voter) throw new NotFoundError("Voter");
+
+    if (voter.voterId !== dto.uniqueVoterId.trim()) {
+      throw new ForbiddenError(
+        "Unique voter ID does not match the logged in voter",
+      );
+    }
+
+    if (!(voter as any).isVerified) {
+      throw new ForbiddenError(
+        "Voter registration is awaiting verification approval.",
+      );
+    }
+
+    if ((voter as any).hasVoted) {
+      throw new ConflictError("You have already cast your vote");
+    }
+
+    const election = await electionRepository.findCurrentVotingOpen();
+    if (!election) {
+      throw new BadRequestError("Voting is not currently open");
+    }
+
+    const existingToken = await votingRepository.findToken(
+      election.id,
+      voter.id,
+    );
+    if (existingToken && existingToken.status !== "UNUSED") {
+      throw new ConflictError("You have already cast your vote");
+    }
+
+    if (!existingToken) {
+      await votingRepository.createToken({
+        id: uuidv4(),
+        electionId: election.id,
+        voterId: voter.id,
+        issuedToUser: voterId,
+        tokenHash: sha256(generateSecureToken(48)),
+        expiresAt: new Date(Date.now() + 4 * 60 * 60 * 1000),
+        ipAddress: undefined,
+      });
+    }
+
+    return {
+      success: true,
+      fullName: voter.fullName,
+      uniqueVoterId: voter.voterId,
+      electionId: election.id,
+      electionTitle: election.title,
     };
   },
 
@@ -123,15 +181,19 @@ export const votingService = {
     if (!voter) throw new NotFoundError("Voter");
     const existingToken = await votingRepository.findToken(electionId, voterId);
     if (existingToken) {
-      throw new ConflictError('A voting token has already been issued to this voter');
+      throw new ConflictError(
+        "A voting token has already been issued to this voter",
+      );
     }
 
     // Prevent issuing a token if the voter has already cast a ballot in this election
-    const priorBallot = await votingRepository.findBallotByVoterAndElection(voterId, electionId);
+    const priorBallot = await votingRepository.findBallotByVoterAndElection(
+      voterId,
+      electionId,
+    );
     if (priorBallot) {
-      throw new ConflictError('Voter has already voted in this election');
+      throw new ConflictError("Voter has already voted in this election");
     }
-
 
     const rawToken = generateSecureToken(48);
     const tokenHash = sha256(rawToken);
@@ -184,21 +246,35 @@ export const votingService = {
       (await voterRepository.findById(voterId));
     if (!voter) throw new NotFoundError("Voter");
 
-    // 3. Validate token
-    const tokenHash = sha256(dto.tokenHash);
-    const token = await votingRepository.findTokenByHash(tokenHash);
-    if (!token) throw new BadRequestError("Invalid voting token");
-    if (token.voterId !== voter.id)
-      throw new ForbiddenError("Token does not belong to this voter");
-    if (token.status !== "UNUSED")
-      throw new ConflictError("Voting token has already been used");
-    if (token.expiresAt < new Date())
-      throw new BadRequestError("Voting token has expired");
+    if (voter.voterId !== dto.uniqueVoterId.trim()) {
+      throw new ForbiddenError("Unique voter ID does not belong to this voter");
+    }
+
+    if ((voter as any).hasVoted) {
+      throw new ConflictError("You have already cast your vote");
+    }
+
+    const token = await votingRepository.findToken(dto.electionId, voter.id);
+    if (!token) {
+      throw new BadRequestError("Verify access before voting");
+    }
+    if (token.status !== "UNUSED") {
+      throw new ConflictError("You have already cast your vote");
+    }
+    if (token.expiresAt < new Date()) {
+      throw new BadRequestError("Voting access has expired");
+    }
 
     // 4. Prevent double-voting (DB unique constraint is the final guard)
     // Additionally ensure the voter hasn't already cast a ballot.
-    const existingVoterBallot = await votingRepository.findBallotByVoterAndElection(voter.id, dto.electionId);
-    if (existingVoterBallot) throw new ConflictError("Voter has already voted in this election");
+    const existingVoterBallot =
+      await votingRepository.findBallotByVoterAndElection(
+        voter.id,
+        dto.electionId,
+      );
+    if (existingVoterBallot) {
+      throw new ConflictError("You have already cast your vote");
+    }
 
     // 6. Generate verifiable receipt hash (HMAC so only we can verify)
     const receiptHash = hmac(
@@ -206,8 +282,15 @@ export const votingService = {
       env.ENCRYPTION_KEY,
     );
 
-    // 7. Atomically mark token used + create ballot
-    await Promise.all([
+    let regionIdToUse = (voter as any).regionId;
+    if (!regionIdToUse) {
+      const defaultRegion = await prisma.region.findFirst();
+      if (!defaultRegion) throw new BadRequestError("System configuration error: No regions found");
+      regionIdToUse = defaultRegion.id;
+    }
+
+    // 7. Atomically mark token used + create ballot + mark voter as voted
+    await prisma.$transaction([
       votingRepository.markTokenUsed(token.id),
       votingRepository.castBallot({
         id: uuidv4(),
@@ -215,20 +298,22 @@ export const votingService = {
         candidateId: dto.candidateId,
         votingTokenId: token.id,
         voterId: voter.id,
-        regionId: (voter as any).regionId ?? "",
+        regionId: regionIdToUse,
         districtId: (voter as any).districtId ?? undefined,
         pollingStationId: (voter as any).pollingStationId ?? undefined,
         ipAddress: ip,
         receiptHash,
       }),
-      // Increment candidate's vote count atomically
       candidateRepository.incrementVotes(dto.candidateId),
+      votingRepository.markVoterHasVoted(voter.id),
     ]);
 
     // 8. Broadcast live results update with per‑candidate count
     const totalVotes = await votingRepository.countByElection(dto.electionId);
     // fetch updated candidate vote count
-    const updatedCandidate = await candidateRepository.findById(dto.candidateId);
+    const updatedCandidate = await candidateRepository.findById(
+      dto.candidateId,
+    );
     socketEmit.resultsUpdate({
       electionId: dto.electionId,
       totalVotes,

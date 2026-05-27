@@ -19,10 +19,6 @@ import {
 import { unwrapApiData } from "../../utils/mfa";
 import { cn } from "../../utils/cn";
 import type { Role } from "../../types/election";
-import {
-  computeFaceEmbeddingScore,
-  createDemoFaceEmbedding,
-} from "../../utils/faceRecognition";
 import { useFaceEmbedding } from "../../hooks/useFaceEmbedding";
 
 export function LoginView({
@@ -47,11 +43,6 @@ export function LoginView({
   const [useRecoveryCode, setUseRecoveryCode] = useState(false);
   const [pendingUser, setPendingUser] = useState<any>(null);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
-  const [showTokenLoginPanel, setShowTokenLoginPanel] = useState(false);
-  const [voterTokenAuth, setVoterTokenAuth] = useState({
-    nationalId: "",
-    votingToken: "",
-  });
   const lang = i18n.language as "en" | "am";
 
   const [biometricState, setBiometricState] = useState<
@@ -116,179 +107,7 @@ export function LoginView({
     }
   };
 
-  const createDeterministicDemoFaceEmbedding = (nationalId: string) => {
-    const normalized = (nationalId || "")
-      .toUpperCase()
-      .replace(/[^A-Z0-9]/g, "")
-      .trim();
-
-    if (!normalized) return "";
-
-    let hash = 0;
-    for (let i = 0; i < normalized.length; i += 1) {
-      hash = (hash * 31 + normalized.charCodeAt(i)) >>> 0;
-    }
-
-    return createDemoFaceEmbedding(normalized || String(hash));
-  };
-
-  const toBase64Url = (value: string) =>
-    btoa(value).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
-
-  const createDemoJwtAccessToken = (nationalId: string, voterId: string) => {
-    const header = toBase64Url(JSON.stringify({ alg: "none", typ: "JWT" }));
-    const payload = toBase64Url(
-      JSON.stringify({
-        sub: voterId,
-        nationalId,
-        role: "VOTER",
-        demo: true,
-        iat: Math.floor(Date.now() / 1000),
-      }),
-    );
-
-    return `${header}.${payload}.demo`;
-  };
-
-  const getDemoVoterProfile = () => {
-    try {
-      const raw = localStorage.getItem("demoVoterAuth");
-      if (!raw) return null;
-      return JSON.parse(raw) as {
-        nationalId?: string;
-        voterId?: string;
-        fullName?: string;
-        faceEmbedding?: string;
-        dob?: string;
-        address?: string;
-        email?: string;
-        phone?: string;
-        gender?: string;
-        regionId?: string;
-        profileImage?: string;
-        uniqueVoterId?: string;
-        registered?: boolean;
-        hasVoted?: boolean;
-      };
-    } catch {
-      return null;
-    }
-  };
-
-  const getStoredVotingToken = () => {
-    try {
-      const raw = localStorage.getItem("nehs_pending_voting_token");
-      if (!raw) return null;
-
-      return JSON.parse(raw) as {
-        token?: string;
-        electionId?: string | null;
-        expiresAt?: string | null;
-      };
-    } catch {
-      return null;
-    }
-  };
-
-  const tryLocalVotingTokenLogin = () => {
-    const profile = getDemoVoterProfile();
-    const storedToken = getStoredVotingToken();
-
-    if (!profile?.nationalId || !profile?.voterId) {
-      return null;
-    }
-
-    const enteredNationalId = voterTokenAuth.nationalId.trim();
-    const enteredVotingToken = voterTokenAuth.votingToken.trim();
-
-    if (profile.nationalId !== enteredNationalId) {
-      throw new Error("National ID does not match the registration record.");
-    }
-
-    if (
-      enteredVotingToken !== profile.voterId &&
-      storedToken?.token !== enteredVotingToken
-    ) {
-      throw new Error("Voting token does not match the registration record.");
-    }
-
-    return {
-      token: createDemoJwtAccessToken(profile.nationalId, profile.voterId),
-      accessToken: createDemoJwtAccessToken(
-        profile.nationalId,
-        profile.voterId,
-      ),
-      sessionId: `demo-session-${profile.voterId}`,
-      user: {
-        id: profile.voterId,
-        fullName: profile.fullName || "Demo Voter",
-        username: profile.nationalId,
-        nationalId: profile.nationalId,
-        uniqueVoterId: profile.voterId,
-        role: "VOTER",
-        sessionId: `demo-session-${profile.voterId}`,
-      },
-      voter: {
-        voterId: profile.voterId,
-        nationalId: profile.nationalId,
-      },
-    };
-  };
-
-  const tryDemoLogin = (capturedEmbedding: string) => {
-    const profile = getDemoVoterProfile();
-    if (!profile?.faceEmbedding) return null;
-
-    const score = computeFaceEmbeddingScore(
-      capturedEmbedding,
-      profile.faceEmbedding,
-    );
-
-    if (score < 85) return null;
-
-    const demoVoterId = profile.voterId || `DEMO-${Date.now()}`;
-    const accessToken = createDemoJwtAccessToken(
-      profile.nationalId || demoVoterId,
-      demoVoterId,
-    );
-    return {
-      token: accessToken,
-      accessToken,
-      sessionId: `demo-session-${demoVoterId}`,
-      matchScore: score,
-      user: {
-        id: demoVoterId,
-        fullName: profile.fullName || "Demo Voter",
-        username: profile.nationalId || demoVoterId,
-        nationalId: profile.nationalId || demoVoterId,
-        voterId: profile.voterId ?? demoVoterId,
-        uniqueVoterId: profile.uniqueVoterId ?? demoVoterId,
-        dob: profile.dob ?? null,
-        address: profile.address ?? null,
-        email: profile.email ?? null,
-        phone: profile.phone ?? null,
-        gender: profile.gender ?? null,
-        regionId: profile.regionId ?? null,
-        profileImage: profile.profileImage ?? null,
-        registered: Boolean(profile.registered ?? true),
-        hasVoted: Boolean(profile.hasVoted ?? false),
-        role: "VOTER",
-        sessionId: `demo-session-${demoVoterId}`,
-      },
-      voter: {
-        voterId: profile.voterId ?? demoVoterId,
-        nationalId: profile.nationalId || demoVoterId,
-        fullName: profile.fullName || "Demo Voter",
-        dob: profile.dob ?? null,
-        address: profile.address ?? null,
-        email: profile.email ?? null,
-        phone: profile.phone ?? null,
-        gender: profile.gender ?? null,
-        regionId: profile.regionId ?? null,
-        profileImage: profile.profileImage ?? null,
-      },
-    };
-  };
+  // demo local login removed; always use server-side token endpoints
 
   const startBiometricLogin = async () => {
     if (cooldown > 0) return;
@@ -325,20 +144,13 @@ export function LoginView({
         throw new Error("Face capture failed. Please try again.");
       }
 
-      const localDemoLogin = tryDemoLogin(faceEmbeddingForLogin);
-      if (localDemoLogin) {
-        const unwrappedDemo = unwrapApiData(localDemoLogin);
-        setBiometricState("success");
-        setBiometricScore(unwrappedDemo?.matchScore || 100);
-        stopCamera();
-
-        await new Promise((r) => setTimeout(r, 700));
-        finalizeLogin(unwrappedDemo, "VOTER");
-        return;
-      }
-
       const response = await postWithFallback(
-        ["/api/auth/login/biometric", "/api/v1/auth/login/biometric"],
+        [
+          "/api/v1/auth/biometric-login",
+          "/api/auth/biometric-login",
+          "/api/v1/auth/login/biometric",
+          "/api/auth/login/biometric",
+        ],
         { faceEmbedding: faceEmbeddingForLogin },
       );
 
@@ -393,36 +205,41 @@ export function LoginView({
   const finalizeLogin = (payload: any, fallbackRole: Role) => {
     const resolvedRole = (payload.user?.role ?? fallbackRole) as Role;
     const uniqueVoterId =
+      payload.uniqueVoterId ??
       payload.user?.uniqueVoterId ??
       payload.user?.voterId ??
       payload.voter?.voterId ??
       payload.user?.username ??
       payload.user?.id ??
       null;
+    const resolvedUser = payload.user ?? payload.voter ?? null;
     setRole(resolvedRole);
     setToken(payload.token ?? payload.accessToken ?? null);
     setSessionId(payload.sessionId ?? payload.user?.sessionId ?? null);
     setUser(
-      payload.user
+      resolvedUser
         ? {
-            ...payload.user,
+            ...resolvedUser,
             uniqueVoterId,
-            voterId: payload.user?.voterId ?? payload.voter?.voterId ?? null,
+            fullName:
+              payload.fullName ?? resolvedUser.fullName ?? resolvedUser.name,
+            voterId:
+              payload.voter?.voterId ?? resolvedUser.voterId ?? uniqueVoterId,
             nationalId:
-              payload.user?.nationalId ?? payload.voter?.nationalId ?? null,
-            dob: payload.user?.dob ?? payload.voter?.dob ?? null,
-            address: payload.user?.address ?? payload.voter?.address ?? null,
-            email: payload.user?.email ?? payload.voter?.email ?? null,
-            phone: payload.user?.phone ?? payload.voter?.phone ?? null,
-            gender: payload.user?.gender ?? payload.voter?.gender ?? null,
-            regionId: payload.user?.regionId ?? payload.voter?.regionId ?? null,
+              payload.voter?.nationalId ?? resolvedUser.nationalId ?? null,
+            dob: payload.voter?.dob ?? resolvedUser.dob ?? null,
+            address: payload.voter?.address ?? resolvedUser.address ?? null,
+            email: payload.voter?.email ?? resolvedUser.email ?? null,
+            phone: payload.voter?.phone ?? resolvedUser.phone ?? null,
+            gender: payload.voter?.gender ?? resolvedUser.gender ?? null,
+            regionId: payload.voter?.regionId ?? resolvedUser.regionId ?? null,
             profileImage:
-              payload.user?.profileImage ?? payload.voter?.profileImage ?? null,
-            sessionId: payload.sessionId ?? payload.user?.sessionId ?? null,
+              payload.voter?.profileImage ?? resolvedUser.profileImage ?? null,
+            sessionId: payload.sessionId ?? resolvedUser.sessionId ?? null,
           }
         : null,
     );
-    setView(resolvedRole === "VOTER" ? "voter-hub" : "dashboard");
+    setView(resolvedRole === "VOTER" ? "vote" : "dashboard");
     resetChallengeState();
   };
 
@@ -444,7 +261,12 @@ export function LoginView({
 
       const response = await postWithFallback(
         role === "VOTER"
-          ? ["/api/auth/login/biometric", "/api/v1/auth/login/biometric"]
+          ? [
+              "/api/v1/auth/biometric-login",
+              "/api/auth/biometric-login",
+              "/api/auth/login/biometric",
+              "/api/v1/auth/login/biometric",
+            ]
           : ["/api/v1/auth/login", "/api/auth/login"],
         requestBody,
       );
@@ -471,56 +293,6 @@ export function LoginView({
       }
 
       finalizeLogin(data, role);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loginWithVotingToken = async () => {
-    if (
-      !voterTokenAuth.nationalId.trim() ||
-      !voterTokenAuth.votingToken.trim()
-    ) {
-      return;
-    }
-
-    setLoading(true);
-    setError("");
-    try {
-      const hasLocalDemoRegistration = Boolean(
-        getDemoVoterProfile()?.nationalId,
-      );
-
-      if (hasLocalDemoRegistration) {
-        const localDemoLogin = tryLocalVotingTokenLogin();
-        if (localDemoLogin) {
-          finalizeLogin(unwrapApiData(localDemoLogin), "VOTER");
-          return;
-        }
-
-        return;
-      }
-
-      const response = await postWithFallback(
-        ["/api/v1/auth/login/voter-token", "/api/auth/login/voter-token"],
-        {
-          nationalId: voterTokenAuth.nationalId.trim(),
-          votingToken: voterTokenAuth.votingToken.trim(),
-        },
-      );
-
-      const data = unwrapApiData(await readResponseBody(response));
-      if (!response.ok) {
-        throw new Error(
-          data?.message ||
-            data?.error ||
-            `Authentication failed (status ${response.status})`,
-        );
-      }
-
-      finalizeLogin(data, "VOTER");
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -578,7 +350,7 @@ export function LoginView({
         <div className="absolute top-8 right-8">
           <button
             onClick={() => i18n.changeLanguage(lang === "en" ? "am" : "en")}
-            className="px-4 py-2 rounded-xl bg-slate-50 hover:bg-slate-100 transition-all text-[10px] font-black uppercase tracking-widest text-slate-400 border border-slate-100"
+            className="px-4 py-2 rounded-xl bg-slate-50 hover:bg-slate-100 transition-all text-xs font-bold text-slate-600 border border-slate-200/60 cursor-pointer"
           >
             {lang === "en" ? "አማርኛ" : "English"}
           </button>
@@ -587,20 +359,20 @@ export function LoginView({
         <div className="absolute top-8 left-8">
           <button
             onClick={() => setView("registration")}
-            className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 transition-all text-[10px] font-black uppercase tracking-widest text-white border border-slate-900"
+            className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 transition-all text-xs font-bold text-white border border-slate-800 shadow-sm cursor-pointer"
           >
-            Register
+            {lang === "en" ? "Register" : "ምዝገባ"}
           </button>
         </div>
 
         <div className="text-center mb-14 relative z-10">
-          <div className="bg-slate-900 w-24 h-24 rounded-[2rem] flex items-center justify-center mx-auto mb-8 shadow-2xl shadow-slate-200">
+          <div className="bg-slate-800 w-24 h-24 rounded-[2rem] flex items-center justify-center mx-auto mb-8 shadow-xl shadow-slate-200">
             <ShieldCheck className="text-white" size={44} />
           </div>
-          <h2 className="text-5xl font-display font-black mb-3 tracking-tighter text-slate-900">
+          <h2 className="text-4xl font-display font-black mb-3 tracking-tighter text-slate-900">
             {t("citizen_portal")}
           </h2>
-          <p className="text-slate-400 text-sm font-medium leading-relaxed max-w-sm mx-auto uppercase tracking-wide">
+          <p className="text-slate-500 text-xs font-medium leading-relaxed max-w-sm mx-auto tracking-wider">
             {t("secure_entry")}
           </p>
         </div>
@@ -755,7 +527,7 @@ export function LoginView({
                 <button
                   disabled={loading || cooldown > 0}
                   onClick={startBiometricLogin}
-                  className="w-full group bg-slate-900 text-white p-8 rounded-[2rem] font-bold flex items-center justify-between hover:bg-slate-800 transition-all duration-300 disabled:opacity-50 shadow-2xl shadow-slate-300"
+                  className="w-full group bg-slate-800 text-white p-8 rounded-[2rem] font-bold flex items-center justify-between hover:bg-slate-900 transition-all duration-300 disabled:opacity-50 shadow-xl shadow-slate-200 cursor-pointer"
                 >
                   <div className="flex items-center gap-6">
                     <div className="bg-white/10 p-4 rounded-2xl">
@@ -765,109 +537,46 @@ export function LoginView({
                       />
                     </div>
                     <div className="text-left">
-                      <span className="block text-2xl tracking-tight leading-none mb-1">
+                      <span className="block text-xl tracking-tight leading-none mb-1">
                         {t("voter_login_title")}
                       </span>
-                      <p className="text-[10px] opacity-40 uppercase font-black tracking-[0.2em]">
+                      <p className="text-[10px] opacity-55 font-bold tracking-wider">
                         {t("step_biometric")}
                       </p>
                     </div>
                   </div>
                   <ChevronRight
-                    size={28}
-                    className="opacity-30 group-hover:translate-x-1 transition-transform"
+                    size={24}
+                    className="opacity-40 group-hover:translate-x-1 transition-transform"
                   />
                 </button>
 
-                <div className="rounded-[2rem] border border-slate-200 bg-white px-6 py-5 shadow-sm">
-                  <button
-                    onClick={() => setShowTokenLoginPanel((prev) => !prev)}
-                    className="w-full flex items-center justify-between text-left"
-                  >
-                    <div>
-                      <p className="text-sm font-black text-slate-800 uppercase tracking-wider">
-                        Login With Voting ID
-                      </p>
-                      <p className="text-[10px] text-slate-400 uppercase tracking-widest mt-1">
-                        Use National ID + issued voting token
-                      </p>
-                    </div>
-                    <ChevronRight
-                      size={18}
-                      className={cn(
-                        "text-slate-300 transition-transform",
-                        showTokenLoginPanel && "rotate-90",
-                      )}
-                    />
-                  </button>
-
-                  {showTokenLoginPanel && (
-                    <div className="mt-4 space-y-3">
-                      <input
-                        type="text"
-                        value={voterTokenAuth.nationalId}
-                        onChange={(event) =>
-                          setVoterTokenAuth((prev) => ({
-                            ...prev,
-                            nationalId: event.target.value,
-                          }))
-                        }
-                        placeholder="National ID"
-                        className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:bg-white focus:ring-4 focus:ring-slate-900/5 focus:border-slate-900 transition-all font-mono"
-                      />
-                      <input
-                        type="text"
-                        value={voterTokenAuth.votingToken}
-                        onChange={(event) =>
-                          setVoterTokenAuth((prev) => ({
-                            ...prev,
-                            votingToken: event.target.value,
-                          }))
-                        }
-                        placeholder="Voting token"
-                        className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:bg-white focus:ring-4 focus:ring-slate-900/5 focus:border-slate-900 transition-all font-mono"
-                      />
-                      <button
-                        onClick={loginWithVotingToken}
-                        disabled={
-                          loading ||
-                          !voterTokenAuth.nationalId.trim() ||
-                          !voterTokenAuth.votingToken.trim()
-                        }
-                        className="w-full bg-slate-900 text-white py-3 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 transition-all disabled:opacity-50"
-                      >
-                        Continue
-                      </button>
-                    </div>
-                  )}
-                </div>
-
                 <button
                   onClick={() => setView("registration")}
-                  className="w-full flex items-center justify-center gap-3 rounded-[2rem] border border-slate-200 bg-white px-8 py-5 text-slate-700 font-bold uppercase tracking-widest text-xs hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm"
+                  className="w-full flex items-center justify-center gap-3 rounded-[2rem] border border-slate-200 bg-white px-8 py-5 text-slate-700 font-bold text-xs hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm cursor-pointer"
                 >
-                  <UserPlus size={18} />
-                  Register Voter
+                  <UserPlus size={16} className="text-slate-400" />
+                  <span>Register Voter</span>
                 </button>
 
                 <div className="pt-10">
                   {!showAdminPanel ? (
                     <button
                       onClick={() => setShowAdminPanel(true)}
-                      className="w-full flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-[0.3em] text-slate-300 hover:text-slate-900 transition-colors"
+                      className="w-full flex items-center justify-center gap-2 text-[10px] font-black tracking-[0.25em] text-slate-400 hover:text-slate-800 transition-colors cursor-pointer"
                     >
-                      <Lock size={12} />
+                      <Lock size={11} />
                       {t("admin_access")}
                     </button>
                   ) : (
                     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-300">
+                        <span className="text-[10px] font-black tracking-wider text-slate-400">
                           {t("gateway_status")}
                         </span>
                         <button
                           onClick={() => setShowAdminPanel(false)}
-                          className="text-[10px] font-black uppercase tracking-widest text-red-400 hover:underline"
+                          className="text-[10px] font-bold text-red-500 hover:underline cursor-pointer"
                         >
                           {t("cancel")}
                         </button>
@@ -903,7 +612,7 @@ export function LoginView({
                               setSelectedRole(r.id);
                               resetChallengeState();
                             }}
-                            className="bg-white border border-slate-100 p-5 rounded-2xl text-[10px] font-black uppercase tracking-widest text-slate-400 hover:border-slate-900 hover:text-slate-900 hover:bg-slate-50 transition-all disabled:opacity-50 flex flex-col items-center gap-3 text-center"
+                            className="bg-white border border-slate-200/60 p-5 rounded-2xl text-xs font-bold text-slate-500 hover:border-slate-800 hover:text-slate-800 hover:bg-slate-50 transition-all disabled:opacity-50 flex flex-col items-center gap-3 text-center cursor-pointer"
                           >
                             <r.icon size={22} />
                             {t(r.label)}
@@ -930,15 +639,15 @@ export function LoginView({
                       setSelectedRole(null);
                     }
                   }}
-                  className="p-3 bg-slate-50 hover:bg-slate-100 rounded-2xl transition-all text-slate-400"
+                  className="p-3 bg-slate-50 hover:bg-slate-100 rounded-2xl transition-all text-slate-500 border border-slate-200/50"
                 >
-                  <ArrowLeft size={18} />
+                  <ArrowLeft size={16} />
                 </button>
                 <div>
-                  <h3 className="font-display font-black text-2xl text-slate-900 uppercase tracking-tighter leading-none mb-1">
+                  <h3 className="font-display font-black text-xl text-slate-900 tracking-tight leading-none mb-1">
                     {t(`role_${selectedRole.toLowerCase()}`)}
                   </h3>
-                  <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest">
+                  <p className="text-[10px] text-slate-500 font-bold tracking-wider">
                     {mfaChallengeToken
                       ? "Second factor required"
                       : t("auth_required")}
@@ -949,13 +658,13 @@ export function LoginView({
               {!mfaChallengeToken ? (
                 <>
                   <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-300 uppercase tracking-[0.2em] ml-1">
+                    <label className="text-[10px] font-black text-slate-400 tracking-wider ml-1">
                       {t("username")}
                     </label>
                     <div className="relative">
                       <User
-                        size={18}
-                        className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300"
+                        size={16}
+                        className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400"
                       />
                       <input
                         type="text"
@@ -965,19 +674,19 @@ export function LoginView({
                           setAuthData({ ...authData, username: e.target.value })
                         }
                         placeholder={t("username")}
-                        className="w-full p-5 pl-14 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:bg-white focus:ring-4 focus:ring-slate-900/5 focus:border-slate-900 transition-all"
+                        className="w-full p-5 pl-14 bg-slate-50 border border-slate-200/60 rounded-2xl outline-none focus:bg-white focus:ring-4 focus:ring-slate-800/10 focus:border-slate-800 transition-all text-slate-800 placeholder-slate-400"
                       />
                     </div>
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-300 uppercase tracking-[0.2em] ml-1">
+                    <label className="text-[10px] font-black text-slate-400 tracking-wider ml-1">
                       {t("password")}
                     </label>
                     <div className="relative">
                       <Lock
-                        size={18}
-                        className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300"
+                        size={16}
+                        className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400"
                       />
                       <input
                         type="password"
@@ -986,7 +695,7 @@ export function LoginView({
                           setAuthData({ ...authData, password: e.target.value })
                         }
                         placeholder="••••••••"
-                        className="w-full p-5 pl-14 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:bg-white focus:ring-4 focus:ring-slate-900/5 focus:border-slate-900 transition-all font-mono"
+                        className="w-full p-5 pl-14 bg-slate-50 border border-slate-200/60 rounded-2xl outline-none focus:bg-white focus:ring-4 focus:ring-slate-800/10 focus:border-slate-800 transition-all text-slate-800 placeholder-slate-400 font-mono"
                       />
                     </div>
                   </div>
@@ -996,7 +705,7 @@ export function LoginView({
                     disabled={
                       loading || !authData.username || !authData.password
                     }
-                    className="w-full bg-slate-900 text-white p-6 rounded-[2rem] font-bold flex items-center justify-center gap-3 hover:bg-slate-800 transition-all shadow-2xl shadow-slate-200 disabled:opacity-50 mt-10 active:scale-[0.98]"
+                    className="w-full bg-slate-800 text-white p-6 rounded-[2rem] font-bold flex items-center justify-center gap-3 hover:bg-slate-900 transition-all shadow-xl shadow-slate-200 disabled:opacity-50 mt-10 active:scale-[0.98] cursor-pointer"
                   >
                     {loading ? (
                       <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -1097,28 +806,30 @@ export function LoginView({
           )}
         </div>
 
-        <div className="mt-8 pt-8 border-t border-slate-100 text-center">
-          <p className="text-xs text-slate-400 mb-4 tracking-wide uppercase">
+        <div className="mt-8 pt-8 border-t border-slate-200/60 text-center flex flex-col gap-2.5">
+          <p className="text-xs text-slate-400 font-medium">
             {t("voter_reg_info")}
           </p>
           <button
             onClick={() => setView("registration")}
-            className="text-election-blue font-medium text-sm flex items-center gap-1 mx-auto hover:underline"
+            className="text-slate-800 font-bold text-xs flex items-center gap-1 mx-auto hover:underline cursor-pointer"
           >
             {t("start_reg")}
           </button>
-          <button
-            onClick={() => setView("help")}
-            className="mt-2 text-slate-400 text-[10px] uppercase font-bold tracking-widest hover:text-slate-600 transition-colors"
-          >
-            {t("platform_faq")}
-          </button>
-          <button
-            onClick={() => setView("password-reset")}
-            className="mt-2 text-slate-400 text-[10px] uppercase font-bold tracking-widest hover:text-slate-600 transition-colors"
-          >
-            Forgot password?
-          </button>
+          <div className="flex justify-center gap-6 mt-1">
+            <button
+              onClick={() => setView("help")}
+              className="text-slate-400 text-[10px] font-bold tracking-wider hover:text-slate-600 transition-colors cursor-pointer"
+            >
+              {t("platform_faq")}
+            </button>
+            <button
+              onClick={() => setView("password-reset")}
+              className="text-slate-400 text-[10px] font-bold tracking-wider hover:text-slate-600 transition-colors cursor-pointer"
+            >
+              Forgot password?
+            </button>
+          </div>
         </div>
       </div>
     </motion.div>

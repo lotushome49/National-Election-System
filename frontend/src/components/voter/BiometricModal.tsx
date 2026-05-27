@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import { useFaceEmbedding } from "../../hooks/useFaceEmbedding";
 
 interface BiometricModalProps {
   open: boolean;
@@ -11,30 +12,41 @@ export default function BiometricModal({
   onClose,
   onSuccess,
 }: BiometricModalProps) {
-  const [nationalId, setNationalId] = useState("");
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { videoRef, startCamera, stopCamera, captureEmbedding } =
+    useFaceEmbedding();
 
-  const handleSubmit = async () => {
-    if (!nationalId.trim()) {
-      setError("Please enter the National ID");
+  useEffect(() => {
+    if (!open) {
+      stopCamera();
+      setScanning(false);
+      setError(null);
       return;
     }
+
+    void startCamera().catch((cameraError: unknown) => {
+      setError(
+        cameraError instanceof Error
+          ? cameraError.message
+          : "Camera access failed.",
+      );
+    });
+
+    return () => stopCamera();
+  }, [open, startCamera, stopCamera]);
+
+  const handleSubmit = async () => {
     setError(null);
     setScanning(true);
-    // simulate scan delay
-    await new Promise((r) => setTimeout(r, 1000));
     try {
+      const faceEmbedding = await captureEmbedding();
       const res = await fetch(
         `${import.meta.env.VITE_API_BASE}/api/v1/auth/biometric-login`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            // Dummy hash expected by backend
-            faceEmbedding: "DEMO_BIO_HASH_12345",
-            nationalId,
-          }),
+          body: JSON.stringify({ faceEmbedding }),
         },
       );
       const data = await res.json();
@@ -55,16 +67,17 @@ export default function BiometricModal({
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-black/50 z-50">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
-        <h2 className="text-xl font-bold mb-4">Face Login (Dummy)</h2>
+        <h2 className="text-xl font-bold mb-4">Face Login</h2>
         {error && <p className="text-red-600 mb-2">{error}</p>}
-        <input
-          type="text"
-          placeholder="Enter dummy National ID"
-          value={nationalId}
-          onChange={(e) => setNationalId(e.target.value)}
-          className="border rounded w-full p-2 mb-4"
-          disabled={scanning}
-        />
+        <div className="mb-4 overflow-hidden rounded-lg bg-black">
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            className="h-56 w-full object-cover"
+          />
+        </div>
         {scanning && (
           <div className="flex items-center mb-4">
             <svg

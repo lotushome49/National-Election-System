@@ -22,6 +22,7 @@ import {
   getUserRegionId,
   getUserDistrictId,
 } from "../../utils/scope";
+import { ActionModal } from "../common/ActionModal";
 
 type Candidate = {
   id: string;
@@ -156,6 +157,15 @@ export function CandidateManagementView({ setView, token, user }: Props) {
   const [showModal, setShowModal] = useState(false);
   const [modalMode, setModalMode] = useState<"create" | "edit">("create");
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{
+    type: "delete";
+    id: string;
+  } | null>(null);
+  const [feedback, setFeedback] = useState<{
+    title: string;
+    message: string;
+  } | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
 
   const [selectedCandidateForDocs, setSelectedCandidateForDocs] =
     useState<Candidate | null>(null);
@@ -230,21 +240,27 @@ export function CandidateManagementView({ setView, token, user }: Props) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.fullName.trim() || !form.party.trim() || !form.electionId) {
-      alert(
-        "Please fill in the election, full name, and party before registering a candidate.",
-      );
+      setFeedback({
+        title: "Missing candidate details",
+        message:
+          "Please fill in the election, full name, and party before registering a candidate.",
+      });
       return;
     }
 
     if (!selectedElection) {
-      alert("Please select a target election first.");
+      setFeedback({
+        title: "Election required",
+        message: "Please select a target election first.",
+      });
       return;
     }
 
     if (!isNominationReady(selectedElection.status)) {
-      alert(
-        `${selectedElection.title} is currently ${selectedElection.status.replace("_", " ")}. Open nomination before registering candidates.`,
-      );
+      setFeedback({
+        title: "Election not ready",
+        message: `${selectedElection.title} is currently ${selectedElection.status.replace("_", " ")}. Open nomination before registering candidates.`,
+      });
       return;
     }
 
@@ -277,7 +293,10 @@ export function CandidateManagementView({ setView, token, user }: Props) {
         setView("login");
         return;
       }
-      alert(getErrorMessage(err, "Failed to save candidate"));
+      setFeedback({
+        title: "Failed to save candidate",
+        message: getErrorMessage(err, "Failed to save candidate"),
+      });
     } finally {
       setSubmitting(false);
     }
@@ -298,22 +317,31 @@ export function CandidateManagementView({ setView, token, user }: Props) {
         setView("login");
         return;
       }
-      alert(getErrorMessage(err, "Failed to update status"));
+      setFeedback({
+        title: "Failed to update status",
+        message: getErrorMessage(err, "Failed to update status"),
+      });
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to disqualify/delete this candidate?"))
-      return;
+    if (!confirmAction || confirmAction.type !== "delete") return;
+    setActionBusy(true);
     try {
       await apiRequest(`/candidates/${id}`, token, { method: "DELETE" });
+      setConfirmAction(null);
       await loadData();
     } catch (err: any) {
       if (isUnauthorized(err)) {
         setView("login");
         return;
       }
-      alert(getErrorMessage(err, "Failed to delete candidate"));
+      setFeedback({
+        title: "Failed to delete candidate",
+        message: getErrorMessage(err, "Failed to delete candidate"),
+      });
+    } finally {
+      setActionBusy(false);
     }
   };
 
@@ -410,10 +438,10 @@ export function CandidateManagementView({ setView, token, user }: Props) {
             {candidates.map((cand) => (
               <div
                 key={cand.id}
-                className="px-10 py-8 flex flex-col lg:flex-row lg:items-center justify-between gap-6 hover:bg-slate-50/50 transition-all"
+                className="rounded-[3rem] border border-slate-100 bg-white px-10 py-10 lg:px-14 lg:py-14 flex flex-col lg:grid lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start gap-10 shadow-sm hover:shadow-lg hover:border-slate-200 transition-all"
               >
                 {/* Left Profile */}
-                <div className="flex gap-6 items-start">
+                <div className="flex gap-7 items-start min-w-0">
                   <img
                     src={
                       cand.photoUrl ||
@@ -424,9 +452,9 @@ export function CandidateManagementView({ setView, token, user }: Props) {
                       (e.target as HTMLImageElement).src =
                         "https://images.unsplash.com/photo-1540910419892-4a36d2c3266c?w=150";
                     }}
-                    className="w-16 h-16 rounded-2xl object-cover bg-slate-100 border border-slate-200 shadow-sm"
+                    className="w-20 h-20 rounded-3xl object-cover bg-slate-100 border border-slate-200 shadow-sm shrink-0"
                   />
-                  <div className="space-y-1">
+                  <div className="space-y-2 min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-mono text-[9px] bg-slate-900 text-white px-2 py-0.5 rounded uppercase font-black tracking-widest shadow-sm">
                         {cand.party}
@@ -448,17 +476,21 @@ export function CandidateManagementView({ setView, token, user }: Props) {
                         {cand.status}
                       </span>
                     </div>
-                    <h4 className="font-display font-black text-slate-900 text-xl uppercase tracking-tighter">
+
+                    <h4 className="font-display font-black text-slate-900 text-3xl md:text-4xl uppercase tracking-tighter leading-[0.95] break-words whitespace-normal max-w-4xl">
                       {cand.fullName}
                     </h4>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest flex items-center gap-1.5">
+
+                    <p className="text-sm text-slate-400 font-bold uppercase tracking-widest flex items-center gap-1.5">
                       <Globe size={12} />{" "}
                       {cand.election?.title || "National Ballot"}
                     </p>
-                    <p className="text-[9px] text-slate-300 font-black uppercase">
+
+                    <p className="text-[10px] text-slate-300 font-black uppercase break-words max-w-3xl leading-relaxed">
                       ID: {cand.id} · Region:{" "}
                       {cand.regionId || "National Scope"}
                     </p>
+
                     {parseCandidateDocuments(cand.documentsJson).length > 0 && (
                       <div className="flex flex-wrap gap-2 mt-2">
                         {parseCandidateDocuments(cand.documentsJson).map(
@@ -482,12 +514,12 @@ export function CandidateManagementView({ setView, token, user }: Props) {
                 </div>
 
                 {/* Right Actions */}
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-3 lg:justify-end">
                   {cand.status === "PENDING" && (
                     <>
                       <button
                         onClick={() => handleStatusChange(cand.id, "APPROVED")}
-                        className="px-4 py-2 bg-green-50 text-green-600 hover:bg-green-600 hover:text-white rounded-lg text-[9px] font-black uppercase tracking-widest transition-all"
+                        className="px-5 py-3 bg-green-50 text-green-600 hover:bg-green-600 hover:text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
                       >
                         Approve
                       </button>
@@ -495,7 +527,7 @@ export function CandidateManagementView({ setView, token, user }: Props) {
                         onClick={() =>
                           handleStatusChange(cand.id, "DISQUALIFIED")
                         }
-                        className="px-4 py-2 bg-rose-50 text-rose-600 hover:bg-rose-650 hover:text-white rounded-lg text-[9px] font-black uppercase tracking-widest transition-all"
+                        className="px-5 py-3 bg-rose-50 text-rose-600 hover:bg-rose-650 hover:text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
                       >
                         Disqualify
                       </button>
@@ -504,21 +536,23 @@ export function CandidateManagementView({ setView, token, user }: Props) {
 
                   <button
                     onClick={() => setSelectedCandidateForDocs(cand)}
-                    className="px-4 py-2 bg-slate-50 text-slate-600 hover:bg-slate-900 hover:text-white border border-slate-100 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-1"
+                    className="px-5 py-3 bg-slate-50 text-slate-600 hover:bg-slate-900 hover:text-white border border-slate-100 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-1"
                   >
                     <FileText size={10} /> Credentials
                   </button>
 
                   <button
                     onClick={() => openEdit(cand)}
-                    className="px-4 py-2 bg-slate-50 text-slate-600 hover:bg-slate-900 hover:text-white border border-slate-100 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all"
+                    className="px-5 py-3 bg-slate-50 text-slate-600 hover:bg-slate-900 hover:text-white border border-slate-100 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
                   >
                     Edit
                   </button>
 
                   <button
-                    onClick={() => handleDelete(cand.id)}
-                    className="p-2.5 bg-rose-50 text-rose-500 hover:bg-rose-500 hover:text-white rounded-lg transition-all"
+                    onClick={() =>
+                      setConfirmAction({ type: "delete", id: cand.id })
+                    }
+                    className="p-3 bg-rose-50 text-rose-500 hover:bg-rose-500 hover:text-white rounded-xl transition-all"
                   >
                     <Trash2 size={14} />
                   </button>
@@ -755,6 +789,31 @@ export function CandidateManagementView({ setView, token, user }: Props) {
           </motion.div>
         </div>
       )}
+
+      <ActionModal
+        open={confirmAction?.type === "delete"}
+        title="Delete candidate"
+        message="This will remove the candidate from the registry. This action cannot be undone."
+        tone="danger"
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        busy={actionBusy}
+        onClose={() => setConfirmAction(null)}
+        onConfirm={() => {
+          if (confirmAction?.type === "delete") {
+            void handleDelete(confirmAction.id);
+          }
+        }}
+      />
+
+      <ActionModal
+        open={Boolean(feedback)}
+        title={feedback?.title || "Notice"}
+        message={feedback?.message || ""}
+        tone="danger"
+        cancelLabel="Close"
+        onClose={() => setFeedback(null)}
+      />
 
       {/* Credentials Modal */}
       {selectedCandidateForDocs && (

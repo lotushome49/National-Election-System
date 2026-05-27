@@ -55,7 +55,7 @@
   "reg_success": "Identity Initialized",
   "reg_success_desc": "Your voter record has been created. Continue to the voter hub or sign in to proceed.",
   "registration_closed": "Registration Closed",
-  "registration_closed_desc": "Registration is closed. The election is currently in the {{phase}} phase, so voters should use their unique voting ID to cast a ballot.",
+  "registration_closed_desc": "Registration is closed. The election is currently in the {{phase}} phase, so voters should use their unique voter ID to cast a ballot.",
   "reg_not_active_desc": "Voter registration is not currently active. The election is in the {{phase}} phase.",
   "unauthorized_reg": "Unauthorized: your role does not have registration permissions.",
   "nid_hint": "Try simulated IDs: NID-123456, NID-654321",

@@ -1,8 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { authService } from "./auth.service";
 import { voterService } from "../voter/voter.service";
-import { votingService } from "../voting/voting.service";
-import { sendCreated, sendSuccess } from "../../utils/response";
+import { sendSuccess } from "../../utils/response";
 import type { AuthRequest } from "../../types";
 
 export const authController = {
@@ -43,27 +42,19 @@ export const authController = {
         { isVerified: true },
       );
 
-      const session = await authService.createVoterSession(
-        voter.id,
-        req.ip ?? "",
-      );
+      res.status(201).json({
+        success: true,
+        uniqueVoterId: voter.voterId,
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
 
-      const tokenIssue = await votingService.issueSystemToken(
-        voter.id,
-        req.ip ?? "",
-      );
-
-      sendCreated(
-        res,
-        {
-          ...voter,
-          ...session,
-          votingToken: tokenIssue?.token ?? null,
-          votingElectionId: tokenIssue?.electionId ?? null,
-          votingTokenExpiresAt: tokenIssue?.expiresAt ?? null,
-        },
-        "Voter registered successfully",
-      );
+  verifyIdentity: async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await voterService.verifyIdentity(req.body, req.ip ?? "");
+      sendSuccess(res, result, "National ID verified");
     } catch (err) {
       next(err);
     }

@@ -1,28 +1,64 @@
 @import "tailwindcss";
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+Ethiopic:wght@400;500;600;700&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700;800;900&family=Noto+Sans+Ethiopic:wght@400;500;600;700&display=swap");
 
 @theme {
-  --font-sans: "Inter", "Noto Sans Ethiopic", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Space Grotesk", "Noto Sans Ethiopic", sans-serif;
+  --font-sans:
+    "Lexend", "Noto Sans Ethiopic", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Lexend", "Noto Sans Ethiopic", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 
-  /* Refined Ethiopian Professional Palette */
-  --color-et-green: #007a4d;
-  --color-et-gold: #fccb05;
-  --color-et-red: #da121a;
+  /* Redesigned Ethiopian Professional Palette - Color Hunt 346739-79ae6f-9fcb98-f2edc2 */
+  --color-et-green: #346739;
+  --color-et-gold: #79ae6f;
+  --color-et-red: #9fcb98;
 
-  --color-election-blue: #0f172a;
-  --color-election-accent: #3b82f6;
-  --color-election-orange: #f97316;
+  --color-election-blue: #346739;
+  --color-election-accent: #79ae6f;
+  --color-election-orange: #9fcb98;
+
+  /* Custom Slate Palette mapping to Green/Cream theme */
+  --color-slate-50: #faf9f0; /* Soft Light Cream Background */
+  --color-slate-100: #f2edc2; /* Core Warm Cream Highlight */
+  --color-slate-200: #e3deb0; /* Border Cream */
+  --color-slate-300: #b9d8b3; /* Soft Mint Border */
+  --color-slate-400: #9fcb98; /* Soft Light Green */
+  --color-slate-500: #79ae6f; /* Sage Green */
+  --color-slate-600: #548b4b; /* Slate text-medium */
+  --color-slate-700: #3c6f34; /* Slate text-dark */
+  --color-slate-800: #346739; /* Deep Green */
+  --color-slate-900: #234927; /* High-contrast Green text */
+  --color-slate-950: #153018; /* Solid Green-Black Panels */
+
+  /* Global Dashboard Font Size Scale-Down (~10-15% reduction) */
+  --font-size-xs: 0.68rem;
+  --font-size-sm: 0.78rem;
+  --font-size-base: 0.88rem;
+  --font-size-lg: 0.98rem;
+  --font-size-xl: 1.12rem;
+  --font-size-2xl: 1.28rem;
+  --font-size-3xl: 1.55rem;
+  --font-size-4xl: 1.9rem;
+  --font-size-5xl: 2.3rem;
+  --font-size-6xl: 2.8rem;
 }
 
 @layer base {
   body {
     @apply bg-slate-50 text-slate-900 border-slate-200 antialiased;
   }
-  
-  h1, h2, h3, h4, h5, h6 {
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
     @apply font-display tracking-tight;
+  }
+
+  /* Universal Sentence/Mixed Case Casing Rule - Strictly disables uppercase transforms */
+  * {
+    text-transform: none !important;
   }
 }
 
@@ -36,11 +72,40 @@
   }
 
   .btn-primary {
-    @apply px-6 py-3 bg-slate-900 text-white rounded-2xl text-[10px] font-bold uppercase tracking-[0.2em] hover:bg-slate-800 active:scale-[0.98] transition-all focus:ring-2 focus:ring-slate-900 focus:ring-offset-2;
+    @apply px-6 py-3 bg-slate-900 text-white rounded-2xl text-[10px] font-bold tracking-wider hover:bg-slate-800 active:scale-[0.98] transition-all focus:ring-2 focus:ring-slate-900 focus:ring-offset-2;
   }
 
   .text-micro {
-    @apply text-[10px] uppercase font-black tracking-[0.2em] text-slate-400;
+    @apply text-[10px] font-black tracking-wider text-slate-400;
+  }
+
+  .admin-shell {
+    font-size: 15px;
+  }
+
+  .admin-shell .dashboard-card,
+  .admin-shell .dashboard-panel {
+    border-color: color-mix(in srgb, var(--color-slate-200) 88%, white 12%);
+  }
+
+  .admin-shell :is(.text-\[9px\]) {
+    font-size: 0.72rem;
+    line-height: 1rem;
+  }
+
+  .admin-shell :is(.text-\[10px\]) {
+    font-size: 0.8rem;
+    line-height: 1.15rem;
+  }
+
+  .admin-shell :is(.text-\[11px\]) {
+    font-size: 0.84rem;
+    line-height: 1.2rem;
+  }
+
+  .admin-shell :is(.text-\[12px\]) {
+    font-size: 0.9rem;
+    line-height: 1.3rem;
   }
 }
 

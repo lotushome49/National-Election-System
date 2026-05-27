@@ -7,11 +7,11 @@ import { registerVoterSchema } from "../voter/voter.schema";
 import {
   loginSchema,
   biometricLoginSchema,
-  voterTokenLoginSchema,
   refreshTokenSchema,
   mfaChallengeSchema,
   mfaEnrollmentVerifySchema,
   mfaDisableSchema,
+  verifyIdentitySchema,
 } from "./auth.schema";
 
 const router = Router();
@@ -27,12 +27,12 @@ router.post(
   authController.biometricLogin,
 );
 
-// POST /api/v1/auth/login/voter-token
+// POST /api/v1/auth/biometric-login
 router.post(
-  "/login/voter-token",
+  "/biometric-login",
   authLimiter,
-  validate(voterTokenLoginSchema),
-  authController.voterTokenLogin,
+  validate(biometricLoginSchema),
+  authController.biometricLogin,
 );
 
 // POST /api/v1/auth/register-voter
@@ -41,6 +41,14 @@ router.post(
   authLimiter,
   validate(registerVoterSchema),
   authController.registerVoter,
+);
+
+// POST /api/v1/auth/verify-identity
+router.post(
+  "/verify-identity",
+  authLimiter,
+  validate(verifyIdentitySchema),
+  authController.verifyIdentity,
 );
 
 // POST /api/v1/auth/refresh

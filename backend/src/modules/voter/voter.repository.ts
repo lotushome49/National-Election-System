@@ -102,6 +102,7 @@ export const voterRepository = {
         districtId: true,
         pollingStationId: true,
         isVerified: true,
+        hasVoted: true,
         registrationDate: true,
         createdBy: true,
       },

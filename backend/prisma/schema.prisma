@@ -396,6 +396,7 @@ model Voter {
   faceEmbedding      String?   @db.Text @map("biometric_template")
   faceEmbeddingHash  String    @unique @db.VarChar(255) @map("biometric_hash")
   isVerified         Boolean   @default(false) @map("is_verified")
+  hasVoted           Boolean   @default(false) @map("has_voted")
   registrationDate   DateTime  @default(now()) @map("registration_date")
   createdAt          DateTime  @default(now()) @map("created_at")
   updatedAt          DateTime  @updatedAt @map("updated_at")
@@ -413,6 +414,7 @@ model Voter {
   @@index([districtId])
   @@index([pollingStationId])
   @@index([isVerified])
+  @@index([hasVoted])
   @@index([deletedAt])
   @@map("voters")
 }
@@ -479,6 +481,7 @@ model Candidate {
   updatedAt    DateTime        @updatedAt @map("updated_at")
   createdBy    String?         @db.VarChar(36) @map("created_by")
   updatedBy    String?         @db.VarChar(36) @map("updated_by")
+  deletedAt    DateTime?       @map("deleted_at")
   voteCount   Int      @default(0)
   documentsJson String?        @db.Text @map("documents_json")
 

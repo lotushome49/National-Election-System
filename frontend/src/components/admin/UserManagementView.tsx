@@ -3,6 +3,7 @@ import { motion } from "motion/react";
 import { Edit2, ShieldCheck, Trash2, UserPlus } from "lucide-react";
 import { cn } from "../../utils/cn";
 import { unwrapApiData } from "../../utils/mfa";
+import { ActionModal } from "../common/ActionModal";
 
 type RoleOption = {
   id: string;
@@ -66,6 +67,8 @@ export function UserManagementView({ setView, token, t, i18n }: any) {
   const [formData, setFormData] = useState<UserFormState>(emptyCreateForm());
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [deletingUser, setDeletingUser] = useState<UserRecord | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const lang = i18n.language as "en" | "am";
 
   const roleById = useMemo(
@@ -238,8 +241,10 @@ export function UserManagementView({ setView, token, t, i18n }: any) {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm(t("confirm_delete_user"))) return;
+    const target = deletingUser;
+    if (!target || target.id !== id) return;
 
+    setDeleteBusy(true);
     try {
       const response = await fetch(`/api/v1/users/${id}`, {
         method: "DELETE",
@@ -252,8 +257,11 @@ export function UserManagementView({ setView, token, t, i18n }: any) {
       }
 
       await fetchUsers();
+      setDeletingUser(null);
     } catch (err: any) {
       setError(err?.message || "Failed to delete user");
+    } finally {
+      setDeleteBusy(false);
     }
   };
 
@@ -382,7 +390,7 @@ export function UserManagementView({ setView, token, t, i18n }: any) {
                       <Edit2 size={18} />
                     </button>
                     <button
-                      onClick={() => handleDelete(u.id)}
+                      onClick={() => setDeletingUser(u)}
                       className="p-3 bg-rose-50 text-rose-300 hover:text-white hover:bg-rose-500 rounded-xl transition-all shadow-sm"
                     >
                       <Trash2 size={18} />
@@ -591,6 +599,26 @@ export function UserManagementView({ setView, token, t, i18n }: any) {
           </motion.div>
         </div>
       )}
+
+      <ActionModal
+        open={Boolean(deletingUser)}
+        title={t("confirm_delete_user")}
+        message={
+          deletingUser
+            ? `${deletingUser.fullName} (@${deletingUser.username}) will be removed from the system.`
+            : t("confirm_delete_user")
+        }
+        tone="danger"
+        confirmLabel={t("delete")}
+        cancelLabel={t("cancel")}
+        busy={deleteBusy}
+        onClose={() => setDeletingUser(null)}
+        onConfirm={() => {
+          if (deletingUser) {
+            void handleDelete(deletingUser.id);
+          }
+        }}
+      />
     </motion.div>
   );
 }

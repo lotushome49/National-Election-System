@@ -42,6 +42,9 @@ import { voterRepository } from "../voter/voter.repository";
 import { votingRepository } from "../voting/voting.repository";
 import { generateSecureToken } from "../../utils/crypto";
 
+const BIOMETRIC_MATCH_THRESHOLD =
+  Number(process.env.BIOMETRIC_MATCH_THRESHOLD ?? 85) || 85;
+
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCK_DURATION_MS = 30 * 60 * 1000;
 const MFA_ELIGIBLE_ROLES = new Set([
@@ -93,7 +96,7 @@ function getStoredMfaState(user: any): StoredMfaState {
   return parseMfaStateCipher(user.mfaSecret);
 }
 
-async function ensureVoterUserRecord(voter: any) {
+async function ensureVoterUserRecord(voter: any): Promise<any> {
   const existingUser = voter.userId
     ? await prisma.user.findFirst({
         where: { id: voter.userId, deletedAt: null },
@@ -259,9 +262,13 @@ export const authService = {
   async biometricLogin(dto: BiometricLoginDto, ip: string) {
     const faceEmbedding = dto.faceEmbedding;
 
+    console.log("[BiometricLogin] Probe embedding length:", faceEmbedding.length, "chars");
+
     const allVoters = await prisma.voter.findMany({
       where: { deletedAt: null },
     });
+
+    console.log("[BiometricLogin] Total voters to match against:", allVoters.length);
 
     let bestVoter: any = null;
     let highestScore = 0;
@@ -271,17 +278,21 @@ export const authService = {
         try {
           const decrypted = decrypt(v.faceEmbedding);
           const score = computeFaceEmbeddingScore(faceEmbedding, decrypted);
+          console.log(`[BiometricLogin] Voter ${v.id} (${v.fullName}): score=${score}%`);
           if (score > highestScore) {
             highestScore = score;
             bestVoter = v;
           }
         } catch (e) {
+          console.log(`[BiometricLogin] Voter ${v.id}: decryption failed`, e);
           // Ignore decryption failures
         }
       }
     }
 
-    if (!bestVoter || highestScore < 85) {
+    console.log("[BiometricLogin] Best match:", bestVoter?.fullName, "score:", highestScore, "threshold:", BIOMETRIC_MATCH_THRESHOLD);
+
+    if (!bestVoter || highestScore < BIOMETRIC_MATCH_THRESHOLD) {
       throw new UnauthorizedError(
         `Face authentication failed${highestScore > 0 ? ` (highest match: ${highestScore}%)` : ""}`,
       );
@@ -329,6 +340,9 @@ export const authService = {
       accessToken,
       token: accessToken,
       sessionId: session.id,
+      success: true,
+      uniqueVoterId: voter.voterId,
+      fullName: voter.fullName,
       voter: { id: voter.id, voterId: voter.voterId },
       matchScore: highestScore,
     };

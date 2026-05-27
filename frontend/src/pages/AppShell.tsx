@@ -47,7 +47,6 @@ import { CandidateManagementView } from "../components/admin/CandidateManagement
 import { LoginView } from "../components/auth/LoginView";
 import { RegistrationView } from "../components/auth/RegistrationView";
 import { VoterHub } from "../components/voter/VoterHub";
-import { VotingBoothView } from "../components/voter/VotingBoothView";
 import { ReceiptVerificationView } from "../components/voter/ReceiptVerificationView";
 import { DashboardView } from "../components/admin/DashboardView";
 import { VoterRegistryView } from "../components/admin/VoterRegistryView";
@@ -55,10 +54,12 @@ import { AuditLogsView } from "../components/admin/AuditLogsView";
 import { HistoryView } from "../components/common/HistoryView";
 import { HelpView } from "../components/common/HelpView";
 import { UserManagementView } from "../components/admin/UserManagementView";
+import { LandingPageView } from "../components/common/LandingPageView";
 import { ResultsDashboardView } from "../components/admin/ResultsDashboardView";
 import { StaffDashboard } from "../components/dashboards/StaffDashboard";
 import { LogItem } from "../components/results/LogItem";
 import { StatCard } from "../components/results/StatCard";
+import { LanguageSwitcher } from "../components/common/LanguageSwitcher";
 import { checkPerm } from "../constants/permissions";
 import {
   mapStatusToPhase,
@@ -140,6 +141,7 @@ export default function AppShell() {
 
     switch (normalizedPath) {
       case "/":
+        return "landing";
       case "/login":
         return "login";
       case "/password-reset":
@@ -168,12 +170,14 @@ export default function AppShell() {
         return "observer-evidence";
       case "/voter-hub":
         return "voter-hub";
+      case "/vote":
+        return "vote";
       case "/voter-hub-admin":
         return "elections";
       case "/registration":
         return "registration";
       case "/voting-booth":
-        return "voting-booth";
+        return "vote";
       case "/receipt-verification":
         return "receipt-verification";
       case "/dashboard":
@@ -187,6 +191,8 @@ export default function AppShell() {
   const pathFromView = (nextView: string) => {
     const adminPrefix = getAdminPathPrefix();
     switch (nextView) {
+      case "landing":
+        return "/";
       case "login":
         return "/login";
       case "password-reset":
@@ -217,11 +223,13 @@ export default function AppShell() {
         return "/observer/observer-evidence";
       case "voter-hub":
         return "/voter-hub";
+      case "vote":
+        return "/vote";
       /* `voter-hub-admin` route removed; no direct path */
       case "registration":
         return adminPrefix ? `${adminPrefix}/registration` : "/registration";
       case "voting-booth":
-        return "/voting-booth";
+        return "/vote";
       case "receipt-verification":
         return "/receipt-verification";
       case "dashboard":
@@ -236,7 +244,9 @@ export default function AppShell() {
     viewFromPath(location.pathname),
   );
   const activeView =
-    role === "VOTER" && view === "dashboard" ? "voter-hub" : view;
+    role === "VOTER" && (view === "dashboard" || view === "vote")
+      ? "voter-hub"
+      : view;
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { t, i18n } = useTranslation();
   const lang = i18n.language as "en" | "am";
@@ -258,6 +268,7 @@ export default function AppShell() {
   } = useElectionRealtime(token, realtimeEnabled);
   const canManageObserverEvidence =
     role === "OBSERVER" || role === "ADMIN" || role === "SUPER_ADMIN";
+  const isAdminPath = location.pathname.startsWith("/admin");
 
   const getHomeViewForRole = (currentRole: Role | "NONE") =>
     currentRole === "VOTER"
@@ -267,6 +278,7 @@ export default function AppShell() {
         : "dashboard";
 
   const publicViews = new Set([
+    "landing",
     "login",
     "password-reset",
     "help",
@@ -277,6 +289,7 @@ export default function AppShell() {
 
   const canAccessView = (nextView: string) => {
     switch (nextView) {
+      case "landing":
       case "login":
       case "password-reset":
       case "help":
@@ -617,7 +630,7 @@ export default function AppShell() {
       navigate("/voter-hub", { replace: true });
     }
 
-    if (location.pathname === "/") {
+    if (location.pathname === "/" && role !== "NONE") {
       navigate(pathFromView(getHomeViewForRole(role)), { replace: true });
     }
   }, [authHydrated, location.pathname, navigate, role, view]);
@@ -684,7 +697,12 @@ export default function AppShell() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 flex font-sans">
+    <div
+      className={cn(
+        "min-h-screen bg-slate-50 text-slate-900 flex font-sans",
+        isAdminPath && "admin-shell",
+      )}
+    >
       {/* Sidebar for Desktop */}
       {token && (
         <aside className="hidden lg:flex flex-col w-72 border-r border-slate-200 bg-white p-8">
@@ -720,13 +738,7 @@ export default function AppShell() {
             ))}
 
             <div className="pt-6 border-t border-slate-100 mt-6 space-y-4">
-              <button
-                onClick={() => i18n.changeLanguage(lang === "en" ? "am" : "en")}
-                className="w-full flex items-center gap-3 px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest text-slate-400 hover:bg-slate-50 hover:text-slate-600 transition-all"
-              >
-                <Globe size={16} />
-                {lang === "en" ? "አማርኛ" : "English"}
-              </button>
+              <LanguageSwitcher variant="sidebar" />
 
               <div className="px-5 py-6 bg-slate-50 rounded-[2rem] border border-slate-100">
                 <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.2em] mb-3">
@@ -759,18 +771,13 @@ export default function AppShell() {
         </aside>
       )}
 
-      <div className="flex-1 flex flex-col h-screen overflow-hidden">
+      <div className="flex-1 flex min-h-0 flex-col h-screen overflow-hidden">
         {/* Mobile Header */}
         {token && (
           <nav className="lg:hidden bg-white border-b border-slate-200 p-4 flex justify-between items-center z-40">
             <div className="font-display font-bold text-lg">NEHS</div>
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => i18n.changeLanguage(lang === "en" ? "am" : "en")}
-                className="px-3 py-1 rounded-full bg-slate-100 text-[10px] font-black uppercase tracking-widest text-slate-500"
-              >
-                {lang === "en" ? "አማርኛ" : "English"}
-              </button>
+              <LanguageSwitcher variant="pill" />
               <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
                 <Menu />
               </button>
@@ -810,7 +817,7 @@ export default function AppShell() {
         )}
 
         {/* Main Content Area */}
-        <main className="flex-1 overflow-y-auto p-6 md:p-12 lg:p-16">
+        <main className="flex-1 min-h-0 overflow-y-auto p-6 md:p-12 lg:p-16 text-[15px] md:text-base">
           {/* Phase Banner */}
           {role !== "VOTER" && (
             <div
@@ -861,6 +868,16 @@ export default function AppShell() {
               </div>
             ) : null}
             {/* View Switching (keep existing render logic) */}
+            {effectiveView === "landing" && (
+              <LandingPageView
+                key="landing"
+                setView={setView}
+                token={token}
+                role={role}
+                t={t}
+                i18n={i18n}
+              />
+            )}
             {effectiveView === "login" && (
               <LoginView
                 key="login"
@@ -986,6 +1003,7 @@ export default function AppShell() {
               <VoterHub
                 key="voter"
                 user={user}
+                setUser={setUser}
                 token={token}
                 setView={setView}
                 t={t}
@@ -1049,16 +1067,25 @@ export default function AppShell() {
             {effectiveView === "voting-booth" &&
               (role === "VOTER" || checkPerm(role, "MANAGE_ELECTIONS")) &&
               (electionPhase === "VOTING" || role === "ADMIN" ? (
-                <VotingBoothView
+                <VoterHub
                   key="booth"
+                  user={user}
                   token={token}
                   setView={setView}
                   setUser={setUser}
                   role={role}
                   t={t}
+                  electionPhase={electionPhase}
                   currentElectionId={
                     openElectionContext.id ?? currentElectionId
                   }
+                  currentElectionTitle={
+                    openElectionContext.title ?? currentElectionTitle
+                  }
+                  currentElectionStatus={
+                    openElectionContext.status ?? currentElectionStatus
+                  }
+                  i18n={i18n}
                 />
               ) : (
                 <div className="max-w-md mx-auto text-center py-20">
@@ -1097,6 +1124,7 @@ export default function AppShell() {
               <VoterHub
                 key="voter-dashboard"
                 user={user}
+                setUser={setUser}
                 token={token}
                 setView={setView}
                 t={t}

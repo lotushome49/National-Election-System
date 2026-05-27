@@ -4,7 +4,11 @@ import { authenticate } from "../../middleware/authenticate";
 import { requirePermission, requireRole } from "../../middleware/rbac";
 import { validate } from "../../middleware/validate";
 import { voteLimiter } from "../../middleware/rateLimiter";
-import { castVoteSchema, verifyReceiptSchema } from "./voting.schema";
+import {
+  castVoteSchema,
+  verifyAccessSchema,
+  verifyReceiptSchema,
+} from "./voting.schema";
 import { z } from "zod";
 
 const router = Router();
@@ -22,6 +26,14 @@ router.get(
   "/active-ballot",
   requirePermission("CAST_VOTE"),
   votingController.activeBallot,
+);
+
+// Voter confirms their unique voter ID before ballot access.
+router.post(
+  "/verify-access",
+  requirePermission("CAST_VOTE"),
+  validate(verifyAccessSchema),
+  votingController.verifyAccess,
 );
 
 // Staff issues token to a verified voter at the polling station

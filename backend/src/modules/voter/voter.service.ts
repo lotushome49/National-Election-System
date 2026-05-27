@@ -1,12 +1,17 @@
 import { v4 as uuidv4 } from "uuid";
 import { voterRepository } from "./voter.repository";
 import { sha256, encrypt, decrypt } from "../../utils/crypto";
-import { ConflictError, NotFoundError } from "../../errors/AppError";
+import {
+  BadRequestError,
+  ConflictError,
+  NotFoundError,
+} from "../../errors/AppError";
 import { prisma } from "../../configs/database";
 import { computeFaceEmbeddingScore } from "../../utils/faceRecognition";
 import { buildPaginationMeta } from "../../utils/response";
 import { applyUserScope, assertUserScopeAccess } from "../../utils/scope";
 import { auditService } from "../audit/audit.service";
+import { isAllowedNationalId } from "../../data/dummyNationalIds";
 import type { JwtPayload } from "../../types";
 import type {
   RegisterVoterDto,
@@ -14,7 +19,32 @@ import type {
   VoterQuery,
 } from "./voter.schema";
 
+const BIOMETRIC_MATCH_THRESHOLD =
+  Number(process.env.BIOMETRIC_MATCH_THRESHOLD ?? 85) || 85;
+
 export const voterService = {
+  async verifyIdentity(dto: { nationalId: string }, ip: string) {
+    const nationalId = dto.nationalId.trim();
+
+    if (!isAllowedNationalId(nationalId)) {
+      throw new BadRequestError("Invalid or unrecognized National ID");
+    }
+
+    await auditService.log({
+      userId: "PUBLIC",
+      action: "READ",
+      entity: "Voter",
+      entityId: nationalId,
+      description: "National ID whitelist verification successful",
+      ipAddress: ip,
+    });
+
+    return {
+      success: true,
+      nationalId,
+    };
+  },
+
   async list(q: VoterQuery, requester?: JwtPayload) {
     const scopedQuery = applyUserScope(q, requester);
     const { data, total } = await voterRepository.findAll(scopedQuery);
@@ -42,14 +72,21 @@ export const voterService = {
     requester?: JwtPayload,
     options?: { isVerified?: boolean },
   ) {
+    const nationalId = dto.nationalId.trim();
+    if (!isAllowedNationalId(nationalId)) {
+      throw new BadRequestError("Invalid or unrecognized National ID");
+    }
+
     const faceEmbedding = dto.faceEmbedding;
     if (!faceEmbedding) {
       throw new ConflictError("Face embedding data required");
     }
 
     // Deduplication checks
-    const byNationalId = await voterRepository.findByNationalId(dto.nationalId);
-    const isUpdatingExistingVoter = Boolean(byNationalId);
+    const byNationalId = await voterRepository.findByNationalId(nationalId);
+    if (byNationalId) {
+      throw new ConflictError("Voter already registered");
+    }
 
     // 1:N fuzzy biometric check
     const allVoters = await prisma.voter.findMany({
@@ -58,15 +95,11 @@ export const voterService = {
     });
 
     for (const v of allVoters) {
-      if (isUpdatingExistingVoter && v.id === byNationalId?.id) {
-        continue;
-      }
-
       if (v.faceEmbedding) {
         try {
           const decrypted = decrypt(v.faceEmbedding);
           const score = computeFaceEmbeddingScore(faceEmbedding, decrypted);
-          if (score >= 85) {
+          if (score >= BIOMETRIC_MATCH_THRESHOLD) {
             throw new ConflictError(
               `Face duplicate detected: matches existing voter "${v.fullName}" with score of ${score}%`,
             );
@@ -82,11 +115,7 @@ export const voterService = {
     const byBiometric =
       await voterRepository.findByBiometricHash(faceEmbeddingHash);
     if (byBiometric) {
-      if (!requester || byBiometric.id === byNationalId?.id) {
-        return { id: byBiometric.id, voterId: byBiometric.voterId };
-      }
-
-      throw new ConflictError("Face embedding data already registered");
+      throw new ConflictError("Voter already registered");
     }
 
     assertUserScopeAccess(
@@ -97,7 +126,7 @@ export const voterService = {
 
     const voterBaseData = {
       fullName: dto.fullName,
-      nationalId: dto.nationalId,
+      nationalId,
       dateOfBirth: new Date(dto.dateOfBirth),
       gender: dto.gender,
       phone: dto.phone,
@@ -113,26 +142,27 @@ export const voterService = {
       createdBy: actorId,
     };
 
-    const voter = byNationalId
-      ? await voterRepository.update(byNationalId.id, voterBaseData)
-      : await voterRepository.create({
-          id: uuidv4(),
-          voterId: `ET-${Date.now()}`,
-          ...voterBaseData,
-        });
+    const voterCount = await prisma.voter.count({
+      where: { deletedAt: null },
+    });
+    const voterId = `VOTER-${new Date().getFullYear()}-${String(voterCount + 1).padStart(4, "0")}`;
+
+    const voter = await voterRepository.create({
+      id: uuidv4(),
+      voterId,
+      ...voterBaseData,
+    });
 
     await auditService.log({
       userId: actorId,
       action: "CREATE",
       entity: "Voter",
       entityId: voter.id,
-      description: byNationalId
-        ? "Voter face embedding updated"
-        : "Voter registered",
+      description: "Voter registered",
       ipAddress: ip,
     });
 
-    return { id: voter.id, voterId: voter.voterId };
+    return { id: voter.id, voterId: voter.voterId, success: true };
   },
 
   async update(

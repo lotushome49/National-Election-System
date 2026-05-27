@@ -43,6 +43,9 @@ export function VoterRegistryView({
   const [districts, setDistricts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [totalVoters, setTotalVoters] = useState(0);
   const [selectedVoter, setSelectedVoter] = useState<any | null>(null);
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
   const [verificationFilter, setVerificationFilter] = useState<
@@ -70,6 +73,19 @@ export function VoterRegistryView({
   const [issuedTokenExpiry, setIssuedTokenExpiry] = useState<string | null>(
     null,
   );
+  const pageSize = 25;
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSearch(search.trim());
+    }, 250);
+
+    return () => window.clearTimeout(timer);
+  }, [search]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, verificationFilter]);
 
   const handleExport = async () => {
     try {
@@ -102,22 +118,40 @@ export function VoterRegistryView({
   useEffect(() => {
     const fetchVoters = async () => {
       try {
-        const response = await fetch("/api/v1/voters?page=1&limit=100", {
+        const params = new URLSearchParams({
+          page: String(page),
+          limit: String(pageSize),
+        });
+
+        if (debouncedSearch) {
+          params.set("search", debouncedSearch);
+        }
+
+        if (verificationFilter === "pending") {
+          params.set("isVerified", "false");
+        } else if (verificationFilter === "verified") {
+          params.set("isVerified", "true");
+        }
+
+        const response = await fetch(`/api/v1/voters?${params.toString()}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!response.ok) {
           throw new Error(`Failed to fetch voters: ${response.status}`);
         }
         const data = await response.json();
-        setVoters(unwrapApiData(data));
+        const payload = unwrapApiData(data);
+        setVoters(Array.isArray(payload) ? payload : []);
+        setTotalVoters(Number(data?.meta?.total ?? 0));
       } catch (err) {
         console.error(err);
       } finally {
         setLoading(false);
       }
     };
+    setLoading(true);
     fetchVoters();
-  }, [token]);
+  }, [token, page, debouncedSearch, verificationFilter]);
 
   useEffect(() => {
     const fetchLookups = async () => {
@@ -161,20 +195,10 @@ export function VoterRegistryView({
   };
 
   const filteredVoters = voters.filter((v) => {
-    const matchesSearch =
-      v.fullName.toLowerCase().includes(search.toLowerCase()) ||
-      v.nationalId.toLowerCase().includes(search.toLowerCase());
-
-    if (!matchesSearch) return false;
-
-    if (verificationFilter === "pending") {
-      return !v.isVerified;
-    }
-    if (verificationFilter === "verified") {
-      return v.isVerified;
-    }
     return true;
   });
+
+  const totalPages = Math.max(1, Math.ceil(totalVoters / pageSize));
 
   const handleVerifyVoter = async (voterId: string, verified: boolean) => {
     setUpdatingVerificationId(voterId);
@@ -391,7 +415,6 @@ export function VoterRegistryView({
                   <th className="px-10 py-6">{t("full_name_label")}</th>
                   <th className="px-10 py-6">{t("national_id_label")}</th>
                   <th className="px-10 py-6">{t("region")}</th>
-                  <th className="px-10 py-6">{t("biometric_token_label")}</th>
                   <th className="px-10 py-6 text-center">
                     {lang === "en" ? "Verification" : "ማረጋገጫ"}
                   </th>
@@ -425,16 +448,6 @@ export function VoterRegistryView({
                     <td className="px-10 py-6">
                       <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
                         {getRegionName(voter.regionId)}
-                      </span>
-                    </td>
-                    <td className="px-10 py-6">
-                      <span
-                        className="text-[10px] text-slate-300 font-mono uppercase tracking-tighter truncate max-w-[120px] block group-hover:text-slate-900 transition-colors"
-                        title={voter.faceEmbeddingHash || "Not available"}
-                      >
-                        {voter.faceEmbeddingHash
-                          ? `${voter.faceEmbeddingHash.slice(0, 16)}...`
-                          : "N/A"}
                       </span>
                     </td>
                     {/* Verification Status Badge */}
@@ -527,6 +540,34 @@ export function VoterRegistryView({
             </table>
           </div>
         )}
+      </div>
+
+      <div className="flex items-center justify-between gap-4 bg-white border border-slate-100 rounded-[2rem] p-4 shadow-sm mb-12">
+        <div className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">
+          Showing {voters.length.toLocaleString()} of{" "}
+          {totalVoters.toLocaleString()}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setPage((current) => Math.max(1, current - 1))}
+            disabled={page <= 1 || loading}
+            className="px-4 py-2 rounded-xl border border-slate-200 text-[10px] font-black uppercase tracking-widest text-slate-500 disabled:opacity-40"
+          >
+            Previous
+          </button>
+          <div className="px-4 py-2 rounded-xl bg-slate-50 border border-slate-100 text-[10px] font-black uppercase tracking-widest text-slate-500">
+            Page {page} / {totalPages}
+          </div>
+          <button
+            onClick={() =>
+              setPage((current) => Math.min(totalPages, current + 1))
+            }
+            disabled={page >= totalPages || loading}
+            className="px-4 py-2 rounded-xl border border-slate-200 text-[10px] font-black uppercase tracking-widest text-slate-500 disabled:opacity-40"
+          >
+            Next
+          </button>
+        </div>
       </div>
 
       <div className="flex flex-col md:flex-row justify-between items-center bg-slate-900 p-12 rounded-[4rem] text-white shadow-2xl relative overflow-hidden group">

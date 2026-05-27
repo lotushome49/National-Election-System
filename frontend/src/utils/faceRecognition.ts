@@ -57,22 +57,6 @@ export function computeFaceEmbeddingScore(
   return Math.round(Math.max(0, Math.min(1, (similarity + 1) / 2)) * 100);
 }
 
-export function createDemoFaceEmbedding(seed: string): string {
-  const normalized = (seed || "demo").trim().toUpperCase();
-  let hash = 0;
-
-  for (let i = 0; i < normalized.length; i += 1) {
-    hash = (hash * 31 + normalized.charCodeAt(i)) >>> 0;
-  }
-
-  const embedding = Array.from({ length: 128 }, (_, index) => {
-    const value = (hash + index * 97) % 1000;
-    return Number(((value / 999) * 2 - 1).toFixed(6));
-  });
-
-  return serializeFaceEmbedding(embedding);
-}
-
 export async function loadFaceModels(): Promise<void> {
   if (!modelsPromise) {
     modelsPromise = Promise.all([
@@ -108,6 +92,15 @@ export async function captureFaceEmbedding(
 
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
+      // Perform a quick client-side liveness check before extracting a descriptor.
+      const alive = await performLivenessCheck(video);
+      if (!alive) {
+        lastError = new Error(
+          "Liveness check failed. Please blink or move your head and try again.",
+        );
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        continue;
+      }
       const detection = await faceapi
         .detectSingleFace(
           video,
@@ -140,4 +133,120 @@ export async function captureFaceEmbedding(
   throw new Error(
     "No face detected. Please center your face in the camera and try again.",
   );
+}
+
+function distance(a: { x: number; y: number }, b: { x: number; y: number }) {
+  const dx = a.x - b.x;
+  const dy = a.y - b.y;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+function eyeAspectRatio(eye: { x: number; y: number }[]) {
+  // eye is 6 points: p0..p5
+  // EAR = (||p1-p5|| + ||p2-p4||) / (2 * ||p0-p3||)
+  if (!Array.isArray(eye) || eye.length < 6) return 0;
+  const p0 = eye[0];
+  const p1 = eye[1];
+  const p2 = eye[2];
+  const p3 = eye[3];
+  const p4 = eye[4];
+  const p5 = eye[5];
+  const vert1 = distance(p1, p5);
+  const vert2 = distance(p2, p4);
+  const hor = distance(p0, p3) || 1;
+  return (vert1 + vert2) / (2 * hor);
+}
+
+async function performLivenessCheck(
+  video: HTMLVideoElement,
+  options?: { samples?: number; intervalMs?: number },
+): Promise<boolean> {
+  const samples = options?.samples ?? 6;
+  const intervalMs = options?.intervalMs ?? 180;
+
+  let blinkDetected = false;
+  const nosePositions: { x: number; y: number }[] = [];
+
+  for (let i = 0; i < samples; i += 1) {
+    try {
+      const det = await faceapi
+        .detectSingleFace(
+          video,
+          new faceapi.TinyFaceDetectorOptions({
+            inputSize: 512,
+            scoreThreshold: 0.35,
+          }),
+        )
+        .withFaceLandmarks();
+
+      if (det && det.landmarks) {
+        const leftEye = det.landmarks.getLeftEye();
+        const rightEye = det.landmarks.getRightEye();
+        const nose = det.landmarks.getNose();
+
+        const leftEar = eyeAspectRatio(leftEye as any);
+        const rightEar = eyeAspectRatio(rightEye as any);
+        const ear = (leftEar + rightEar) / 2;
+
+        // Typical blink EAR threshold ~0.18
+        if (ear > 0 && ear < 0.18) {
+          blinkDetected = true;
+        }
+
+        if (nose && nose.length > 0) {
+          const tip = nose[Math.floor(nose.length / 2)];
+          nosePositions.push(tip);
+        }
+      }
+    } catch {
+      // ignore transient detection failures
+    }
+
+    // small delay between samples
+    // eslint-disable-next-line no-await-in-loop
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+
+  // Movement check: compare nose position variance normalized by interocular distance
+  let movementDetected = false;
+  if (nosePositions.length >= 2) {
+    const first = nosePositions[0];
+    const last = nosePositions[nosePositions.length - 1];
+    // approximate interocular distance using positions from the last successful frame
+    try {
+      const lastDet = await faceapi
+        .detectSingleFace(
+          video,
+          new faceapi.TinyFaceDetectorOptions({
+            inputSize: 512,
+            scoreThreshold: 0.35,
+          }),
+        )
+        .withFaceLandmarks();
+      if (lastDet && lastDet.landmarks) {
+        const left = lastDet.landmarks.getLeftEye();
+        const right = lastDet.landmarks.getRightEye();
+        const leftCenter = left.reduce(
+          (acc: any, p: any) => ({ x: acc.x + p.x, y: acc.y + p.y }),
+          { x: 0, y: 0 },
+        );
+        const rightCenter = right.reduce(
+          (acc: any, p: any) => ({ x: acc.x + p.x, y: acc.y + p.y }),
+          { x: 0, y: 0 },
+        );
+        leftCenter.x /= left.length;
+        leftCenter.y /= left.length;
+        rightCenter.x /= right.length;
+        rightCenter.y /= right.length;
+        const iod = distance(leftCenter, rightCenter) || 1;
+        const moved = distance(first, last);
+        // require movement > ~3% of interocular distance
+        if (moved / iod > 0.03) movementDetected = true;
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return blinkDetected || movementDetected;
 }

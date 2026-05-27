@@ -67,4 +67,10 @@ export const votingRepository = {
 
   countByCandidate: (electionId: string, candidateId: string) =>
     prisma.ballot.count({ where: { electionId, candidateId } }),
+
+  markVoterHasVoted: (voterId: string) =>
+    prisma.voter.update({
+      where: { id: voterId },
+      data: { hasVoted: true },
+    }),
 };

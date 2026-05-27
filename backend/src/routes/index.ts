@@ -37,6 +37,7 @@ router.use("/voters", voterRoutes);
 router.use("/elections", electionRoutes);
 router.use("/candidates", candidateRoutes);
 router.use("/voting", votingRoutes);
+router.use("/vote", votingRoutes);
 router.use("/audit", auditRoutes);
 router.use("/observer", observerRoutes);
 router.use("/results", resultRoutes);

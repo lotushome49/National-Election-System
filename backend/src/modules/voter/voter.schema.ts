@@ -11,7 +11,11 @@ export const registerVoterSchema = z.object({
   regionId: z.string().uuid().optional(),
   districtId: z.string().uuid().optional(),
   pollingStationId: z.string().uuid().optional(),
-  faceEmbedding: z.string().min(10, "Face embedding data required"),
+  faceEmbedding: z
+    .string()
+    .trim()
+    .min(100, "Face embedding data required")
+    .max(10000),
 });
 
 export const updateVoterSchema = z.object({

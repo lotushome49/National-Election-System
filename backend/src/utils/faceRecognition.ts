@@ -41,18 +41,24 @@ export function computeFaceEmbeddingScore(
   const p = parseFaceEmbedding(probe);
   const r = parseFaceEmbedding(reference);
 
-  if (!p.length || !r.length || p.length !== r.length) return 0;
+  if (!p.length || !r.length) return 0;
 
-  let sumSquares = 0;
-  for (let i = 0; i < p.length; i += 1) {
-    const delta = p[i] - r[i];
-    sumSquares += delta * delta;
+  const length = Math.min(p.length, r.length);
+  let distance = 0;
+  for (let i = 0; i < length; i += 1) {
+    const diff = p[i] - r[i];
+    distance += diff * diff;
   }
+  distance = Math.sqrt(distance);
 
-  const distance = Math.sqrt(sumSquares);
-  const similarity = Math.max(0, Math.min(1, 1 - distance / 0.6));
-
-  return Math.round(similarity * 100);
+  // face-api.js euclidean distance:
+  // < 0.4: high confidence same person
+  // 0.4 - 0.5: good confidence same person
+  // > 0.6: different person
+  // Map to a 0-100 score where distance 0.45 = 85% (the strict threshold)
+  // 15 / 0.45 = 33.33 multiplier
+  const score = Math.max(0, 100 - (distance * 33.33));
+  return Math.round(score);
 }
 
 export function createDemoFaceEmbedding(seed: string): string {

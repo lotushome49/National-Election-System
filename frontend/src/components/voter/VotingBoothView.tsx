@@ -12,11 +12,7 @@ import { cn } from "../../utils/cn";
 import { CandidateDetailModal } from "../candidates/CandidateDetailModal";
 import { fetchJson } from "../../services/api/client";
 import type { Candidate } from "../../types/election";
-import {
-  persistDemoVoteState,
-  readDemoUserState,
-  readDemoVoterAuth,
-} from "../../utils/demoVotingState";
+// demo voting state removed — voter flows require real backend
 
 function getErrorMessage(error: unknown, fallback: string) {
   const body = (error as any)?.body;
@@ -72,15 +68,7 @@ export function VotingBoothView({
   t,
   currentElectionId,
 }: any) {
-  const isDemoSession = useMemo(() => {
-    if (isDemoAccessToken(token)) return true;
-
-    try {
-      return Boolean(readDemoVoterAuth() || readDemoUserState());
-    } catch {
-      return false;
-    }
-  }, [token]);
+  const isDemoSession = false;
 
   const [selected, setSelected] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -294,7 +282,7 @@ export function VotingBoothView({
     }
 
     if (!votingToken.trim()) {
-      alert("Enter your unique voting ID.");
+      alert("Enter your unique voter ID.");
       return;
     }
 
@@ -311,7 +299,6 @@ export function VotingBoothView({
           selected,
           electionId,
           tokenMasked: token ? `***${String(token).slice(-6)}` : null,
-          hasStoredDemoSession: Boolean(localStorage.getItem("demoVoterAuth")),
         });
       } catch {
         // ignore
@@ -324,12 +311,6 @@ export function VotingBoothView({
         sessionStorage.setItem("nehs_last_receipt_hash", nextReceiptHash);
         try {
           localStorage.removeItem("nehs_pending_voting_token");
-          persistDemoVoteState({
-            receiptHash: nextReceiptHash,
-            castAt,
-            candidateId: selected,
-            electionId: electionId,
-          });
         } catch {
           // ignore storage failures
         }
@@ -348,7 +329,7 @@ export function VotingBoothView({
     try {
       try {
         console.debug("[VotingBooth] casting vote", {
-          url: "/api/v1/voting/cast",
+          url: "/api/v1/vote/cast",
           tokenMasked: token ? `***${String(token).slice(-6)}` : null,
           isDemo: isDemoAccessToken(token),
           votingTokenPreview: votingToken
@@ -357,7 +338,7 @@ export function VotingBoothView({
         });
       } catch {}
       const resp = await fetchJson<{ data: { receiptHash: string } }>(
-        "/api/v1/voting/cast",
+        "/api/v1/vote/cast",
         {
           method: "POST",
           headers: {
@@ -367,7 +348,7 @@ export function VotingBoothView({
           body: JSON.stringify({
             electionId,
             candidateId: selected,
-            tokenHash: votingToken.trim(),
+            uniqueVoterId: votingToken.trim(),
           }),
         },
       );
@@ -649,12 +630,12 @@ export function VotingBoothView({
 
             <div className="space-y-1 mb-12 text-left">
               <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 px-2 block">
-                Unique Voting ID
+                Unique Voter ID
               </label>
               <input
                 value={votingToken}
                 onChange={(event) => setVotingToken(event.target.value)}
-                placeholder="Enter your unique voting ID"
+                placeholder="Enter your unique voter ID"
                 className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[1.5rem] font-mono text-slate-900 focus:outline-none"
               />
               <p className="text-[10px] text-slate-400 font-medium uppercase tracking-widest px-2">

@@ -10,6 +10,7 @@ import {
 import { motion } from "motion/react";
 import { fetchJson } from "../../services/api/client";
 import { cn } from "../../utils/cn";
+import { ActionModal } from "../common/ActionModal";
 
 type Election = {
   id: string;
@@ -99,6 +100,16 @@ export function ElectionManagementView({ setView, token }: Props) {
   const [showModal, setShowModal] = useState(false);
   const [modalMode, setModalMode] = useState<"create" | "edit">("create");
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [confirmAction, setConfirmAction] = useState<
+    | { type: "delete"; id: string }
+    | { type: "status"; id: string; newStatus: Election["status"] }
+    | null
+  >(null);
+  const [feedback, setFeedback] = useState<{
+    title: string;
+    message: string;
+  } | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
 
   const [form, setForm] = useState({
     title: "",
@@ -289,53 +300,64 @@ export function ElectionManagementView({ setView, token }: Props) {
         setView("login");
         return;
       }
-      alert(getErrorMessage(err, "Failed to save election"));
+      setFeedback({
+        title: "Failed to save election",
+        message: getErrorMessage(err, "Failed to save election"),
+      });
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleStatusTransition = async (
-    id: string,
-    newStatus: Election["status"],
-  ) => {
-    if (!confirm(`Transition election status to ${newStatus}?`)) return;
+  const handleStatusTransition = async () => {
+    if (!confirmAction || confirmAction.type !== "status") return;
+
+    setActionBusy(true);
     try {
-      await apiRequest(`/elections/${id}/status`, token, {
+      await apiRequest(`/elections/${confirmAction.id}/status`, token, {
         method: "PATCH",
         body: JSON.stringify({
-          status: newStatus,
+          status: confirmAction.newStatus,
           reason: "Admin UI phase transition",
         }),
       });
+      setConfirmAction(null);
       await loadElections();
     } catch (err: any) {
       if (isUnauthorized(err)) {
         setView("login");
         return;
       }
-      alert(getErrorMessage(err, "Failed to transition status"));
+      setFeedback({
+        title: "Failed to transition status",
+        message: getErrorMessage(err, "Failed to transition status"),
+      });
+    } finally {
+      setActionBusy(false);
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (
-      !confirm(
-        "Are you absolutely sure you want to delete this election? This will delete all candidates and results!",
-      )
-    )
-      return;
+  const handleDelete = async () => {
+    if (!confirmAction || confirmAction.type !== "delete") return;
+
+    setActionBusy(true);
     try {
-      await apiRequest(`/elections/${id}`, token, {
+      await apiRequest(`/elections/${confirmAction.id}`, token, {
         method: "DELETE",
       });
+      setConfirmAction(null);
       await loadElections();
     } catch (err: any) {
       if (isUnauthorized(err)) {
         setView("login");
         return;
       }
-      alert(getErrorMessage(err, "Failed to delete election"));
+      setFeedback({
+        title: "Failed to delete election",
+        message: getErrorMessage(err, "Failed to delete election"),
+      });
+    } finally {
+      setActionBusy(false);
     }
   };
 
@@ -500,10 +522,11 @@ export function ElectionManagementView({ setView, token }: Props) {
                   {statusActions[el.status] && (
                     <button
                       onClick={() =>
-                        handleStatusTransition(
-                          el.id,
-                          statusActions[el.status]!.nextStatus,
-                        )
+                        setConfirmAction({
+                          type: "status",
+                          id: el.id,
+                          newStatus: statusActions[el.status]!.nextStatus,
+                        })
                       }
                       className={cn(
                         "px-5 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5 border",
@@ -522,7 +545,9 @@ export function ElectionManagementView({ setView, token }: Props) {
                   </button>
 
                   <button
-                    onClick={() => handleDelete(el.id)}
+                    onClick={() =>
+                      setConfirmAction({ type: "delete", id: el.id })
+                    }
                     className="p-2.5 bg-rose-50 text-rose-500 hover:bg-rose-500 hover:text-white rounded-xl transition-all"
                   >
                     <Trash2 size={16} />
@@ -684,6 +709,47 @@ export function ElectionManagementView({ setView, token }: Props) {
           </motion.div>
         </div>
       )}
+
+      <ActionModal
+        open={confirmAction?.type === "status"}
+        title="Confirm status transition"
+        message={
+          confirmAction?.type === "status"
+            ? `Move this election to ${confirmAction.newStatus.replace("_", " ")} ?`
+            : ""
+        }
+        tone="warning"
+        confirmLabel="Confirm"
+        cancelLabel="Cancel"
+        busy={actionBusy}
+        onClose={() => setConfirmAction(null)}
+        onConfirm={() => {
+          void handleStatusTransition();
+        }}
+      />
+
+      <ActionModal
+        open={confirmAction?.type === "delete"}
+        title="Delete election"
+        message="This will remove the election, related candidates, and result data. This action cannot be undone."
+        tone="danger"
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        busy={actionBusy}
+        onClose={() => setConfirmAction(null)}
+        onConfirm={() => {
+          void handleDelete();
+        }}
+      />
+
+      <ActionModal
+        open={Boolean(feedback)}
+        title={feedback?.title || "Notice"}
+        message={feedback?.message || ""}
+        tone="danger"
+        cancelLabel="Close"
+        onClose={() => setFeedback(null)}
+      />
     </motion.div>
   );
 }

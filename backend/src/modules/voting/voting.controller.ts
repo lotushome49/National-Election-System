@@ -22,6 +22,15 @@ export const votingController = {
     }
   },
 
+  verifyAccess: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const result = await votingService.verifyAccess(req.body, req.user!.sub);
+      sendSuccess(res, result, "Voting access verified");
+    } catch (err) {
+      next(err);
+    }
+  },
+
   issueToken: async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       const { electionId, voterId } = req.body;
